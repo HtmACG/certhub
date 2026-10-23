@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+backend/data/
+!backend/data/.gitkeep
+
+# Node
+node_modules/
+frontend/dist/
+frontend/dist.bak-*/
+.pnpm-store/
+
+# 系统
+.DS_Store
+Thumbs.db
+*.log
+
+# 构建隔离目录
+_nm-*/
+_*-build-history/
+
+# 临时与隔离目录（含浏览器自动化 profile，禁止提交）
+_tmp/
+_quarantine/
+edge-profile/
+
+# 运行时数据与证书私钥（禁止提交）
+/data/
+*.db
+*.sqlite
+*.sqlite3
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# 本地环境覆盖（frontend/.env 为项目模板，保留提交）
+.env.local
+.env.*.local
+
+# Python 缓存 / 测试
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+coverage/
+
+# IDE / 编辑器
+.idea/
+*.swp
+
+# 前端杂项
+*.tsbuildinfo
+
+# 内部文档（不对外发布）：安全审计/渗透报告、插件对照清单
+docs/SECURITY.md
+docs/PLUGIN-COVERAGE.md

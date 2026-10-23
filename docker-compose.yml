@@ -1,0 +1,15 @@
+services:
+  certd-lite:
+    build: .
+    container_name: certd-lite
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 生产环境务必改成固定的随机字符串（用于 JWT 与敏感配置加密）
+      CERTD_SECRET_KEY: "please-change-me-to-a-random-string"
+      CERTD_ADMIN_USERNAME: "admin"
+      CERTD_ADMIN_PASSWORD: "123456"
+      CERTD_TZ: "Asia/Shanghai"
+    volumes:
+      - ./backend/data:/app/backend/data

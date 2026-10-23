@@ -1,0 +1,299 @@
+/**
+ * Google 风格 · 应用外壳（侧边栏 / 顶栏 / 标签条）
+ * =========================================================
+ * 页面内容用 .g-scope 局部生效；外壳全站只有一份，直接按结构类名覆盖即可。
+ *
+ * 选择器都带 .layout-sidebar / .g-header 前缀抬高权重：
+ * 侧边栏的 theme.scss 是「组件内非 scoped 样式」，打包顺序不受 index.scss 控制，
+ * 单靠类名同权重去抢会时好时坏，所以这里统一多挂一层。
+ *
+ * 配色全部走 --g-* 令牌，暗色模式自动跟随 .dark。
+ */
+
+/* ==================== 侧边栏 ==================== */
+.layout-sidebar {
+  border-right: 1px solid var(--g-line-2);
+
+  /* 品牌区：标题 17px，副标题是一行 11px 的小字（别跟着标题一起放大） */
+  .header .brand-name {
+    font-size: 17px !important;
+    font-weight: 500;
+    letter-spacing: -0.2px;
+    color: var(--g-text) !important;
+  }
+
+  .header .brand-subtitle {
+    margin-top: 1px;
+    font-size: 12px !important;
+    font-weight: 400;
+    line-height: 1.2 !important;
+    letter-spacing: 0;
+    color: var(--g-text-3) !important;
+  }
+
+  /* 滚动条 */
+  .el-scrollbar__thumb {
+    background-color: var(--g-sep) !important;
+  }
+
+  /**
+   * 菜单：Material 3 导航抽屉
+   * - 行高 40px（原来 42px 偏挤）
+   * - 选中态是整行胶囊 + 浅蓝底 + 蓝字，而不是左侧竖条
+   */
+  .el-menu-design {
+    padding: 6px 0;
+
+    .el-sub-menu__title,
+    .el-menu-item {
+      height: 40px !important;
+      margin: 0 8px 2px !important;
+      padding-left: 16px !important;
+      line-height: 40px !important;
+      color: var(--g-text-2) !important;
+      border-radius: var(--custom-radius) !important;
+      transition:
+        background-color 0.15s ease,
+        color 0.15s ease;
+    }
+
+    /**
+     * 层级缩进：16 / 36 / 56 …
+     * 之前只写了 `.el-menu--inline .el-menu-item { padding-left: 36px }`，
+     * 两个后果：① 二级「子菜单标题」（接入资源 / 系统管理）没被匹配，还是 16px，
+     * 看着跟「证书管理」平级；② 三级项也只拿到 36px，跟二级叶子项（工作台）同一条线，
+     * 完全看不出「用户管理」是挂在「系统管理」下面的。
+     * 这里用子选择器按真实嵌套深度逐级加 20px，避免后代选择器一网打尽。
+     */
+    .el-menu--inline {
+      > .el-menu-item,
+      > .el-sub-menu > .el-sub-menu__title {
+        padding-left: 36px !important;
+      }
+
+      .el-menu--inline {
+        > .el-menu-item,
+        > .el-sub-menu > .el-sub-menu__title {
+          padding-left: 56px !important;
+        }
+
+        .el-menu--inline {
+          > .el-menu-item,
+          > .el-sub-menu > .el-sub-menu__title {
+            padding-left: 76px !important;
+          }
+        }
+      }
+    }
+
+    /* 图标不要额外的负 margin，靠 padding-left 定位更可预期 */
+    .menu-icon {
+      margin-left: 0 !important;
+    }
+
+    .el-sub-menu__title span,
+    .el-menu-item span {
+      font-size: 14px !important;
+      font-weight: 400;
+      letter-spacing: 0.1px;
+    }
+
+    .menu-icon .art-svg-icon {
+      color: var(--g-text-3);
+      transition: color 0.15s ease;
+    }
+
+    .el-sub-menu__icon-arrow {
+      color: var(--g-text-3) !important;
+    }
+
+    /* 悬停：只给一层很浅的灰，别用蓝色（蓝色留给选中） */
+    .el-sub-menu__title:hover,
+    .el-menu-item:not(.is-active):hover {
+      color: var(--g-text) !important;
+      background: var(--g-fill-hover) !important;
+    }
+
+    .el-sub-menu__title:hover .menu-icon .art-svg-icon {
+      color: var(--g-text-2);
+    }
+
+    /* 选中：浅蓝胶囊 + 蓝字 + 蓝图标 */
+    .el-menu-item.is-active {
+      color: var(--g-blue) !important;
+      background: var(--g-blue-50) !important;
+
+      span {
+        font-weight: 500;
+      }
+
+      .menu-icon .art-svg-icon {
+        color: var(--g-blue) !important;
+      }
+    }
+
+    /* 折叠后只剩图标：胶囊收成 44px 的圆，图标居中 */
+    &.el-menu--collapse {
+      .el-sub-menu__title,
+      .el-menu-item {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 44px !important;
+        margin: 0 10px 2px !important;
+        padding: 0 !important;
+      }
+
+      .menu-icon {
+        margin: 0 !important;
+      }
+    }
+  }
+
+  /* 折叠后浮出的二级菜单 */
+  .el-menu--popup {
+    .el-menu-item {
+      border-radius: var(--custom-radius) !important;
+    }
+  }
+}
+
+/* 暗色：theme.scss 里有一批 !important 的图标/文字颜色，这里按更高权重压回去 */
+.dark {
+  .layout-sidebar {
+    border-right-color: var(--g-line);
+
+    .el-menu-design {
+      .menu-icon .art-svg-icon,
+      .el-sub-menu__title span,
+      .el-menu-item span {
+        color: var(--g-text-2) !important;
+      }
+
+      .el-sub-menu__title:hover span,
+      .el-menu-item:not(.is-active):hover span {
+        color: var(--g-text) !important;
+      }
+
+      .el-menu-item.is-active span,
+      .el-menu-item.is-active .menu-icon .art-svg-icon {
+        color: var(--g-blue) !important;
+      }
+    }
+  }
+}
+
+/* ==================== 顶栏 ==================== */
+.g-header {
+  border-bottom-color: var(--g-line-2) !important;
+
+  /* 右侧图标按钮：40px 方块，圆角跟设置抽屉里的「自定义圆角」走（0 = 直角） */
+  div[class~='size-8.5'] {
+    width: 40px;
+    height: 40px;
+    color: var(--g-text-2);
+    border-radius: var(--custom-radius);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  div[class~='size-8.5']:hover {
+    color: var(--g-text);
+    background: var(--g-fill-hover) !important;
+  }
+
+  /* 搜索框：跟页面里的输入框一个观感（白底 + 1px 描边），
+     不再用 Google 的"无边框灰胶囊"——那样看着就是个没有描边的假输入框。 */
+  .g-search {
+    height: 40px;
+    padding: 0 10px 0 14px;
+    cursor: pointer;
+    background: var(--el-fill-color-blank);
+    border: 1px solid var(--el-border-color);
+    border-radius: var(--custom-radius);
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .g-search:hover {
+    background: var(--el-fill-color-blank);
+    border-color: var(--el-border-color-hover);
+  }
+
+  .g-search:hover .g-search-text,
+  .g-search:hover .art-svg-icon {
+    color: var(--g-text-2) !important;
+  }
+
+  .g-search-text {
+    margin-left: 6px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--g-text-2) !important;
+  }
+
+  /* ⌘K 提示块 */
+  .g-kbd {
+    height: 22px;
+    padding: 0 6px;
+    color: var(--g-text-3);
+    background: var(--g-surface);
+    border: 1px solid var(--g-line);
+    border-radius: 6px;
+  }
+
+  .g-kbd .art-svg-icon,
+  .g-kbd span {
+    font-size: 11px !important;
+    color: var(--g-text-3) !important;
+  }
+  /* 面包屑：路径灰、当前页黑且加粗（组件是自定义 nav，不是 el-breadcrumb） */
+  .g-crumbs {
+    span {
+      padding: 0 4px;
+      font-size: 14px;
+      color: var(--g-text-2) !important;
+    }
+
+    /* 分隔符「/」 */
+    li > div:last-child:not(:first-child) {
+      margin: 0 2px;
+      font-size: 13px;
+      color: var(--g-sep) !important;
+    }
+
+    li:last-child span {
+      font-weight: 500;
+      color: var(--g-text) !important;
+    }
+
+    /* 可点的父级：悬停变蓝 */
+    li > div.c-p:hover span {
+      color: var(--g-blue) !important;
+    }
+  }
+}
+
+/* ==================== 标签条 ==================== */
+.g-tabbar {
+  border-bottom-color: var(--g-line-2) !important;
+}
+
+.g-tabbar .google-tab {
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.g-tabbar .google-tab.activ-tab {
+  font-weight: 500;
+}
+
+/* 小屏：图标按钮收到 36px，否则 7~8 个 40px 圆在 414 宽下挤成一排 */
+@media only screen and (width <= 640px) {
+  .g-header div[class~='size-8.5'] {
+    width: 36px;
+    height: 36px;
+  }
+}

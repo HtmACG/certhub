@@ -1,0 +1,303 @@
+/**
+ * Google 风格（Material 3 / Google Cloud Console 观感）
+ * =========================================================
+ * 三层：
+ *   1. 设计令牌 --g-*：挂在 :root，暗色模式在 .dark 里重定义；
+ *   2. mixin g-el-tokens / g-el-components：把「覆盖 Element Plus」的规则抽出来，
+ *      供下面两个作用域各 include 一次，避免两处手写同一套规则导致漂移；
+ *   3. 两个落点：
+ *      - .g-scope：挂在「按 Google 风格渲染」的页面根节点上；
+ *      - .el-overlay：ElDialog / ElDrawer / ElMessageBox 都会 teleport 到 body，
+ *        页面根节点上的 .g-scope 继承不过去，只能在 overlay 这层再套一遍。
+ *
+ * 为什么令牌要放 :root：弹层不继承页面容器上的变量，只能挂根节点。
+ */
+
+:root {
+  --g-blue: #1a73e8;
+  --g-blue-700: #1765cc;
+  --g-blue-50: #e8f0fe;
+  --g-green: #1e8e3e;
+  --g-green-50: #e6f4ea;
+  --g-amber: #e37400;
+  --g-amber-50: #fef7e0;
+  --g-red: #d93025;
+  --g-red-50: #fce8e6;
+
+  --g-text: #202124;
+  --g-text-2: #5f6368;
+  --g-text-3: #80868b;
+  --g-sep: #bdc1c6;
+
+  --g-line: #dadce0;
+  --g-line-2: #e8eaed;
+  --g-surface: #ffffff;
+  --g-fill: #f8f9fa;
+  --g-fill-hover: #f1f3f4;
+
+  /* 输入框描边：比 --g-line 再深一档，白底卡片上才看得见（用户反馈"没有外围描边"） */
+  --g-input-line: #bdc1c6;
+  --g-input-line-hover: #9aa0a6;
+
+  /* 字体栈只放「系统一定有的字体」：
+     模板原本写的是 'Google Sans', Roboto —— 这两个既没有本地字体文件、也没引 Google Fonts，
+     浏览器只能各自回退（Windows→Segoe UI，macOS→苹方），同一页出现两种回退结果，
+     看起来就是"字体加载异常"。这里换成跨平台一致的系统栈。 */
+  --g-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC',
+    'Microsoft YaHei', 'Noto Sans SC', 'Helvetica Neue', Arial, sans-serif;
+
+  /* Material 的高度层级 */
+  --g-elev-1: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+  --g-elev-2: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+}
+
+/* 暗色模式取 Google 深色主题的对应色（浅蓝 / 浅绿 / 浅黄 / 浅红） */
+.dark {
+  --g-blue: #8ab4f8;
+  --g-blue-700: #aecbfa;
+  --g-blue-50: rgba(138, 180, 248, 0.16);
+  --g-green: #81c995;
+  --g-green-50: rgba(129, 201, 149, 0.16);
+  --g-amber: #fdd663;
+  --g-amber-50: rgba(253, 214, 99, 0.16);
+  --g-red: #f28b82;
+  --g-red-50: rgba(242, 139, 130, 0.16);
+
+  --g-text: #e8eaed;
+  --g-text-2: #9aa0a6;
+  --g-text-3: #80868b;
+  --g-sep: #5f6368;
+
+  --g-line: #3c4043;
+  --g-line-2: #303134;
+  --g-surface: #202124;
+  --g-fill: #2a2b2e;
+  --g-fill-hover: #35363a;
+
+  /* 暗色下输入框描边要更亮，否则跟深色底糊成一片 */
+  --g-input-line: #5f6368;
+  --g-input-line-hover: #80868b;
+
+  --g-elev-1: 0 1px 2px 0 rgba(0, 0, 0, 0.6), 0 1px 3px 1px rgba(0, 0, 0, 0.4);
+  --g-elev-2: 0 1px 3px 0 rgba(0, 0, 0, 0.6), 0 4px 8px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* ---------------- Element Plus 变量重映射 ---------------- */
+@mixin g-el-tokens {
+  --el-color-primary: var(--g-blue);
+  --el-color-primary-light-3: #4d90fe;
+  --el-color-primary-light-5: #8ab4f8;
+  --el-color-primary-light-7: #aecbfa;
+  --el-color-primary-light-8: #c6dafc;
+  --el-color-primary-light-9: var(--g-blue-50);
+  --el-color-primary-dark-2: var(--g-blue-700);
+  --el-color-success: var(--g-green);
+  --el-color-success-light-9: var(--g-green-50);
+  --el-color-warning: var(--g-amber);
+  --el-color-warning-light-9: var(--g-amber-50);
+  --el-color-danger: var(--g-red);
+  --el-color-danger-light-9: var(--g-red-50);
+  --el-color-info: var(--g-text-2);
+  --el-color-info-light-9: var(--g-fill);
+  --el-border-color: var(--g-line);
+  --el-border-color-light: var(--g-line-2);
+  --el-border-color-lighter: var(--g-line-2);
+  --el-text-color-primary: var(--g-text);
+  --el-text-color-regular: var(--g-text-2);
+  --el-text-color-secondary: var(--g-text-3);
+  --el-fill-color-blank: var(--g-surface);
+  --el-border-radius-base: 8px !important;
+  --el-font-family: var(--g-font);
+}
+
+/* ---------------- 组件级覆盖（选择器相对，由外层作用域决定前缀） ---------------- */
+@mixin g-el-components {
+  /* 按钮：胶囊 */
+  /**
+   * 按钮圆角：只有主按钮（以及显式 is-round）才用胶囊。
+   * 之前给所有 .el-button 都写了 100px，灰底的默认 / 朴素按钮被撑成椭圆，
+   * 「取消」「测试」这种两三个字的按钮尤其明显，看着像一颗药丸。
+   */
+  .el-button {
+    font-weight: 500;
+    border-radius: 8px;
+    transition:
+      background 0.15s,
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+
+  /* 按钮圆角统一交给 --custom-radius（设置抽屉里可调，0 = 直角） */
+  .el-button--primary:not(.is-plain):not(.is-link):not(.is-text),
+  .el-button.is-round {
+    border-radius: var(--custom-radius);
+  }
+
+  .el-button.is-circle {
+    border-radius: var(--custom-radius);
+  }
+
+  /**
+   * 禁用态统一走中性灰。
+   * Element 对 danger / plain 的禁用态只把文字调浅、底色仍是浅红，
+   * 「批量删除」在没勾选时是一块粉底 + 粉字（对比度 1.5:1），像坏掉的色块。
+   * 注意：Element 的 `.el-button--danger.is-plain.is-disabled` 是三层类选择器，
+   * 这里必须 !important 才盖得住。
+   */
+  .el-button.is-disabled,
+  .el-button.is-disabled:hover,
+  .el-button.is-disabled:focus {
+    background: var(--el-fill-color-light) !important;
+    border-color: var(--el-border-color-lighter) !important;
+    color: #909399 !important;
+    box-shadow: none !important;
+  }
+
+  .el-button--primary {
+    box-shadow: none;
+  }
+
+  .el-button--primary:hover,
+  .el-button--primary:focus {
+    background: var(--g-blue-700);
+    border-color: var(--g-blue-700);
+  }
+
+  /* 文字按钮（表格里的「删除 / 日志」）保持无底 */
+  .el-button.is-link,
+  .el-button.is-text {
+    border-radius: 6px;
+  }
+
+  /* 输入框：不再用 Google 的"填充式无边框"，统一走 Element Plus 原生样式
+     （白底 + 1px 描边 + 聚焦变主色），见 el-ui.scss 的「输入框（标准样式）」。
+     这里只保留占位符颜色，避免跟 --g-text-3 的灰阶出现两种灰。 */
+  .el-input__inner::placeholder {
+    color: var(--el-text-color-placeholder, var(--g-text-3));
+  }
+
+  /* 栅格换行时列之间要有上下间距：
+     ElRow 的 gutter 只管左右，窄屏上两张卡片会直接贴在一起（"上下没间距"）。 */
+  .el-row {
+    row-gap: 12px;
+  }
+
+  .el-input-tag .el-tag {
+    background: var(--g-surface);
+    border: 1px solid var(--g-line);
+  }
+
+  .el-form-item__label {
+    font-weight: 500;
+    color: var(--g-text-2);
+  }
+
+  /* 标签 / 卡片 / 弹层 */
+  .el-tag {
+    font-weight: 500;
+    border-radius: var(--custom-radius);
+  }
+
+  .el-card {
+    border-radius: calc(var(--custom-radius) + 2px);
+  }
+
+  .el-dialog {
+    overflow: hidden;
+    border-radius: 20px;
+  }
+
+  .el-drawer {
+    border-radius: 20px 0 0 20px;
+  }
+
+  .el-dialog__title,
+  .el-drawer__header {
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--g-text);
+  }
+
+  .el-message-box {
+    border-radius: 20px;
+  }
+
+  /* 表格：去掉重描边，表头做小字标签 */
+  .el-table {
+    --el-table-border-color: var(--g-line-2);
+    --el-table-header-bg-color: transparent;
+    --el-table-row-hover-bg-color: var(--g-fill);
+    --el-table-text-color: var(--g-text);
+    --el-table-header-text-color: var(--g-text-2);
+
+    font-family: var(--g-font);
+  }
+
+  .el-table th.el-table__cell {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    background: transparent;
+  }
+
+  .el-table td.el-table__cell {
+    font-size: 13px;
+  }
+
+  /* 分页 */
+  .el-pagination.is-background .el-pager li,
+  .el-pagination.is-background .btn-prev,
+  .el-pagination.is-background .btn-next {
+    border-radius: var(--custom-radius);
+  }
+
+  .el-pagination .el-select__wrapper {
+    background: transparent;
+  }
+
+  /* 开关 / 步骤条 */
+  .el-switch.is-checked .el-switch__core {
+    background: var(--g-blue);
+    border-color: var(--g-blue);
+  }
+}
+
+/* ---------------- 落点 1：页面内容 ---------------- */
+.g-scope {
+  @include g-el-tokens;
+  @include g-el-components;
+
+  font-family: var(--g-font);
+  color: var(--g-text);
+}
+
+/* ---------------- 落点 2：弹层（teleport 到 body） ---------------- */
+.el-overlay {
+  @include g-el-tokens;
+  @include g-el-components;
+
+  font-family: var(--g-font);
+}
+
+/* ElMessage / ElNotification 不包在 .el-overlay 里，单独收口 */
+.el-message,
+.el-notification {
+  font-family: var(--g-font);
+  border-radius: 12px;
+}
+
+/* 群晖「测试」这类结果文案会长到一百多字，不封顶会拉成横贯全屏的一条 */
+.el-message {
+  max-width: min(640px, calc(100vw - 32px));
+
+  .el-message__content {
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+}
+
+.el-message-box__message {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}

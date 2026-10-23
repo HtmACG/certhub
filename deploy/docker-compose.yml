@@ -1,0 +1,22 @@
+# 生产部署：对外 80 端口，数据落在 ./data（备份这个目录就够）
+services:
+  certhub:
+    build: .
+    image: certhub:1.0.0
+    container_name: certhub
+    restart: unless-stopped
+    ports:
+      - "80:8000"
+    environment:
+      # 固定的随机串：签 JWT + 加密库里的凭据都用它。
+      # 换掉 = 所有人重新登录 + 库里已存的授权凭据解不开，务必连同 data/ 一起备份。
+      CERTD_SECRET_KEY: "CHANGE_ME_random_string"
+      CERTD_ADMIN_USERNAME: "admin"
+      # 只在首次初始化时生效；上线后请到「账号与安全」改密码
+      CERTD_ADMIN_PASSWORD: "CHANGE_ME_strong_password"
+      CERTD_TZ: "Asia/Shanghai"
+      # 同源部署（前端由后端直接托管），留空 = 不注册 CORS 中间件
+      CERTD_CORS_ORIGINS: ""
+      CERTD_PIPELINE_CONCURRENCY: "3"
+    volumes:
+      - ./data:/app/backend/data
