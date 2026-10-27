@@ -210,6 +210,24 @@ export interface RingChartProps extends BaseChartProps, InteractionProps {
   showLabel?: boolean
 }
 
+// 仪表盘（车速表）Props 接口
+export interface GaugeChartProps extends BaseChartProps {
+  /** 当前值 */
+  value: number
+  /** 最大值，默认 100 */
+  max?: number
+  /** 数值单位，默认 % */
+  unit?: string
+  /** 表盘下方的名称（如「CPU 使用率」） */
+  name?: string
+  /** 刻度分段数，默认 5 */
+  splitNumber?: number
+  /** 数值保留小数位，默认 0 */
+  decimals?: number
+  /** 指针 / 进度弧颜色；不传时按阈值自动取色（绿 / 黄 / 红） */
+  color?: string
+}
+
 // K线图数据项接口
 export interface KLineDataItem {
   /** 时间标签 */

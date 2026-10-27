@@ -166,6 +166,40 @@ PIPELINE_TEMPLATES: list[dict] = [
         },
     },
     {
+        "id": "trustasia-dv-wildcard",
+        "name": "TrustAsia 泛域名证书 + Nginx（本机）",
+        "desc": "用 TrustAsia（亚洲诚信）申请泛域名 DV 证书，DNS 验证后写入本机目录",
+        "tags": ["泛域名", "TrustAsia", "商业 CA"],
+        "content": {
+            "stages": [
+                _stage("stage-cert", "申请证书", [
+                    _task("task-cert", "CertApplyTrustAsia", "申请 TrustAsia 证书", {
+                        "domains": [],
+                        "accessId": None,
+                        "productId": "trustasia_ssl_dv_wildcard_v2",
+                        "dcvMethod": "dns",
+                        "dnsAccessId": None,
+                        "keyType": "rsa2048",
+                        "validityMonths": 3,
+                        "email": "",
+                        "pollInterval": 10,
+                        "timeout": 1800,
+                    }),
+                ]),
+                _stage("stage-deploy", "部署证书", [
+                    _task("task-deploy", "DeployToLocal", "复制到本机目录", {
+                        "dir": "/etc/nginx/ssl",
+                        "certName": "{domain}.crt",
+                        "keyName": "{domain}.key",
+                        "pfxName": "",
+                        "pfxPassword": "",
+                    }, continue_on_error=True),
+                ]),
+            ],
+            "triggers": [{"id": "trigger-timer", "type": "timer", "cron": "0 3 * * *", "enabled": True}],
+        },
+    },
+    {
         "id": "apply-only",
         "name": "仅申请证书（不下发）",
         "desc": "只把证书存进证书库，需要时手动下载，适合先跑通签发流程",

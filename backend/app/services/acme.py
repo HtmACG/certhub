@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import time
 from typing import Callable
 
@@ -82,6 +83,22 @@ def friendly_problem(problem: dict) -> tuple[str, str]:
             "更新这条 EAB 凭据（流水线不用改），再运行一次",
             raw or err_type,
         )
+    # FreeSSL（LiteSSL / TrustAsia）在 EAB 的 Key ID 对不上时回这句英文
+    if "bound account does not exist" in low or "account does not exist" in low and "bound" in low:
+        return (
+            "EAB 凭据对不上：Key ID / HMAC Key 填错了，或这条凭据已在 FreeSSL 控制台被删除。"
+            "请到 FreeSSL「证书自动化 → ACME 账户管理」重新取一份 EAB，"
+            "然后在「授权管理 → 证书签发」里更新这条凭据",
+            raw or err_type,
+        )
+    # FreeSSL / LiteSSL 的一次性 EAB：注册过一次就作废
+    if "already been used" in low or "already used" in low and "binding" in low:
+        return (
+            "这条 EAB 已经用过了：这个 CA 的 EAB 只能注册一个 ACME 账户。"
+            "请到 CA 控制台「轮换 EAB / 新增凭证」拿一份新的，在「授权管理 → 证书签发」里更新后再运行。"
+            "（本系统首次注册成功时会把账户私钥写回任务，之后续期直接复用，不会再消耗 EAB）",
+            raw or err_type,
+        )
     if short == "externalaccountrequired" or "external account binding is required" in low:
         return (
             "该 CA 要求外部账户绑定（EAB）：请到「授权管理 → 证书签发」新建一条 EAB 凭据，"
@@ -119,6 +136,83 @@ def friendly_problem(problem: dict) -> tuple[str, str]:
         return ("ACME 账户在 CA 侧不存在（可能被删除）：把任务里的「账户 URL / 账号私钥」清空后重试", raw or err_type)
     return (raw or "ACME 请求失败", raw or err_type)
 
+
+#: EAB 凭据允许的字符：base64 / base64url 字母表 + 填充
+_EAB_B64_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_=")
+#: 从粘贴内容里捞 base64 片段时的最短长度（Google 的 b64MacKey 都是 40+ 位，取 16 足够）
+_EAB_MIN_SEGMENT = 16
+
+
+#: 两个字段的标签写法：Key ID / kid / HMAC Key
+_EAB_KID_LABEL = r'(?:eab\s*)?(?:key[\s_-]*id|kid)'
+_EAB_HMAC_LABEL = r'(?:eab\s*)?hmac[\s_-]*key'
+
+
+def _eab_field_value(text: str, want: str) -> str:
+    """从「Key ID: xxx，HMAC Key: yyy」这种整段粘贴里抠出指定字段的值。
+
+    找不到标签就返回空串（调用方会把整段当值处理）。切到下一个标签 /
+    逗号 / 分号 / 换行为止，避免把另一个字段的值当成本字段的。
+    """
+    label = _EAB_KID_LABEL if want == 'kid' else _EAB_HMAC_LABEL
+    matched = re.search(r"(?is)" + label + r"\s*[:：=]\s*", text)
+    if not matched:
+        return ''
+    rest = text[matched.end():]
+    stop = re.search(r"(?is)(?:" + _EAB_KID_LABEL + r"|" + _EAB_HMAC_LABEL + r")\s*[:：=]|[,;，；\n]", rest)
+    if stop:
+        rest = rest[:stop.start()]
+    return rest.strip()
+
+
+def _looks_base64(text: str) -> bool:
+    return bool(text) and all(ch in _EAB_B64_CHARS for ch in text)
+
+
+def normalize_eab_value(value: str, label: str = 'EAB 凭据') -> str:
+    """把用户填的 EAB 值规整成能直接用的串，脏了就抛一句中文。
+
+    踩过的坑：从 CA 控制台复制时把「HMAC Key：」甚至整段中文说明一起粘进来，
+    一路传到 base64 解码才炸，报错是 `string argument should contain only ASCII characters`，
+    完全看不出是哪个字段、该怎么改。这里统一清洗 + 给出明确指引。
+    """
+    want = 'kid' if 'KEY ID' in label.upper() else 'hmac'
+    text = str(value or '')
+    if not text.strip():
+        return ''
+    # 整段粘贴时按标签各取各的（「Key ID: xxx，HMAC Key: yyy」），没标签就整段当值
+    text = _eab_field_value(text, want) or text.strip()
+    # 换行 / 空格 / 全角空格 / 零宽字符都去掉：base64 串里混进这些同样解码失败
+    text = re.sub(r"[\s\u200b-\u200f\ufeff]+", "", text).replace("＝", "=")
+    if _looks_base64(text):
+        return text
+
+    # 里面混了解释文字：尝试从中捞一段 base64（长度够就用它，省得让用户手抠）
+    segments = re.findall(r"[A-Za-z0-9+/_\-]{%d,}={0,2}" % _EAB_MIN_SEGMENT, text)
+    if segments:
+        return max(segments, key=len)
+
+    bad = [ch for ch in text if ord(ch) > 127]
+    if bad:
+        # 按原顺序取前几个，用户一眼就能认出自己粘的是哪段文字
+        sample = ''.join(bad[:6])
+        raise AcmeError(
+            f'{label} 里有中文 / 全角字符（例如「{sample}」），不是 CA 给的那串字符：'
+            f'请回到 CA 控制台只复制「{label}」后面的值（A-Z a-z 0-9 + / =），不要连同说明文字一起粘贴')
+    raise AcmeError(
+        f'{label} 格式不对：只接受 base64 字符（A-Z a-z 0-9 + / =），当前值里有其它符号。'
+        '请重新复制一次；如果是从网页截图手抄的，注意别把 O/0、l/1 抄错')
+
+
+def normalize_eab_pair(kid: str, hmac_key: str) -> tuple[str, str]:
+    """Key ID 与 HMAC Key 一起清洗（Key ID 不要求是 base64，只要求是 ASCII）。"""
+    kid_clean = normalize_eab_value(kid, 'EAB Key ID')
+    if kid_clean and any(ord(ch) > 127 for ch in kid_clean):
+        raise AcmeError(
+            'EAB Key ID 里有中文 / 全角字符，不是 CA 给的那串字符：'
+            '请回到 CA 控制台只复制 Key ID 后面的值')
+    hmac_clean = normalize_eab_value(hmac_key, 'EAB HMAC Key')
+    return kid_clean, hmac_clean
 
 def b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
@@ -342,11 +436,19 @@ class AcmeClient:
     def _eab(self, kid: str, hmac_key_b64: str) -> dict:
         import hmac as _hmac
 
+        # 清洗用户粘进来的值：带标签、带换行、夹中文说明都在这挡住，
+        # 不让它一路走到 base64 解码抛 UnicodeEncodeError（那个报错完全看不懂）
+        kid, hmac_key_b64 = normalize_eab_pair(kid, hmac_key_b64)
         url = self.directory["newAccount"]
         protected = {"alg": "HS256", "kid": kid, "url": url}
         protected_b64 = b64u(json.dumps(protected, separators=(",", ":")).encode())
         payload_b64 = b64u(json.dumps(self._jwk(), separators=(",", ":")).encode())
-        key = b64u_decode(hmac_key_b64)
+        try:
+            key = b64u_decode(hmac_key_b64)
+        except Exception as exc:  # noqa: BLE001 - 兜底：base64 报错不能裸奔给用户
+            raise AcmeError(
+                "EAB HMAC Key 无法按 Base64 解码：请只填 CA 控制台给的那串字符"
+                "（A-Z a-z 0-9 + / =），不要带中文说明或整段文字") from exc
         sig = _hmac.new(key, f"{protected_b64}.{payload_b64}".encode(), hashlib.sha256).digest()
         return {"protected": protected_b64, "payload": payload_b64, "signature": b64u(sig)}
 
@@ -455,6 +557,46 @@ class AcmeClient:
 
 # ---------------------------------------------------------------- 高层封装
 
+def register_eab_account(kid: str, hmac_key: str, directory: str, email: str = '',
+                         account_key_pem: str = '',
+                         log: Callable[[str], None] | None = None) -> dict:
+    """用 EAB 注册 ACME 账户；已经注册过就复用，不再消耗（可能一次性的）EAB。
+
+    为什么要拆出来：FreeSSL / LiteSSL 的 EAB 是**一次性**的，注册成功一次就作废
+    （CA 回 External account binding has already been used）。所以：
+      · 首次注册成功后，账户私钥与账户 URL 必须存下来（存进 EAB 授权里）；
+      · 之后再「测试」或跑流水线，直接用存下来的账户，不再发 EAB；
+      · 否则点一次「测试」就把用户的 EAB 烧掉了，流水线必然失败。
+
+    返回 {message, accountKeyPem, accountUrl, reused}。
+    """
+    kid, hmac_key = normalize_eab_pair(kid, hmac_key)
+    if not kid or not hmac_key:
+        raise AcmeError('EAB 凭据不完整：请填写 Key ID 与 HMAC Key')
+    log = log or (lambda msg: None)
+    reused = bool(account_key_pem)
+    client = AcmeClient(directory, account_key_pem or None, log=log)
+    try:
+        reachable, reason = client.test_direct()
+        if not reachable:
+            host = net.host_of(directory)
+            mapped = net.reverse_proxy_for(directory)
+            if not mapped:
+                raise AcmeError(
+                    f'连不上 {host}（{reason}）：请先在「系统设置 → 网络代理」里配置代理后重试')
+            client.enable_reverse_proxy({host: mapped})
+        contact = (email or '').strip() or 'eab-test@certhub.local'
+        if reused:
+            client.register(contact)
+            message = 'EAB 对应账户可用（复用已注册账户，未再次消耗 EAB）'
+        else:
+            client.register(contact, kid, hmac_key)
+            message = 'EAB 凭据可用（已在 CA 侧注册账户，账户私钥已保存，后续复用不再消耗 EAB）'
+        return {'message': message, 'accountKeyPem': client.account_key_pem,
+                'accountUrl': client.kid or '', 'reused': reused}
+    finally:
+        client.close()
+
 def verify_eab(kid: str, hmac_key: str, directory: str, email: str = "",
                log: Callable[[str], None] | None = None) -> str:
     """用一条 EAB 凭据去 CA 注册一个临时账户，验证凭据是否还有效。
@@ -463,29 +605,7 @@ def verify_eab(kid: str, hmac_key: str, directory: str, email: str = "",
     「授权管理」里的「测试」按钮调的就是这里，点一下就知道要不要换 Key。
     注册出的临时账户不落库、不影响正式账户。
     """
-    log = log or (lambda msg: None)
-    kid = (kid or "").strip()
-    hmac_key = (hmac_key or "").strip()
-    if not kid or not hmac_key:
-        raise AcmeError("EAB 凭据不完整：请填写 Key ID 与 HMAC Key")
-
-    client = AcmeClient(directory, log=log)
-    try:
-        reachable, reason = client.test_direct()
-        if not reachable:
-            host = net.host_of(directory)
-            mapped = net.reverse_proxy_for(directory)
-            if not mapped:
-                raise AcmeError(
-                    f"连不上 {host}（{reason}）：请先在「系统设置 → 网络代理」里配置代理后重试")
-            client.enable_reverse_proxy({host: mapped})
-        # 有些 CA（Google）要求账户至少有一个联系人，这里用调用方给的邮箱，
-        # 没有就用一个通用占位地址：测试账户不保存，不影响正式账号
-        contact = (email or "").strip() or "eab-test@certhub.local"
-        client.register(contact, kid, hmac_key)
-        return "EAB 凭据可用（已在 CA 侧成功注册测试账户）"
-    finally:
-        client.close()
+    return register_eab_account(kid, hmac_key, directory, email=email, log=log)["message"]
 
 
 def get_zerossl_eab(email: str) -> tuple[str, str]:

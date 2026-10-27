@@ -14,3 +14,4 @@ python-multipart>=0.0.9
 email-validator>=2.1
 dnspython>=2.6
 asn1crypto>=1.5
+psutil>=6.0

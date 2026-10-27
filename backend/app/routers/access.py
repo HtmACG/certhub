@@ -256,6 +256,60 @@ def access_domains(access_id: int, user: User = Depends(get_current_user),
     return ok({"type": row.type, "domains": domains, "patterns": expanded})
 
 
+class SynologyDeviceIdParams(BaseModel):
+    """获取群晖设备ID 的入参。
+
+    config 收前端表单里的当前值（地址 / 账号 / 密码 / 设备名 / 忽略证书校验），
+    这样「还没保存的新授权」也能先取设备ID；accessId 非空时用库里的配置兜底
+    （编辑已有授权时密码框是空的，那次从库里补），成功后写回该授权。
+    """
+
+    config: dict = {}
+    otpCode: str = ""
+    accessId: int = 0
+
+
+@router.post("/synology/device-id")
+def synology_device_id(params: SynologyDeviceIdParams,
+                       user: User = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
+    """群晖「获取设备ID」：输一次 6 位双重认证验证码，换一个长期免验证码的受信设备令牌。
+
+    对应 certd 授权里的 deviceId；前置条件是 DSM 勾选了
+    「允许网页浏览器的用户通过信任设备来跳过双重验证」。
+    """
+    from ..services import deploy as deploy_service
+
+    cfg = _clean_config(params.config)
+    if params.accessId:
+        row = db.get(Access, int(params.accessId))
+        if row and row.user_id == user.id and row.type == "synology":
+            stored = decrypt_json(row.config) or {}
+            # 表单里留空 / 打码的项（尤其是密码）用库里的值兜底
+            for key, value in stored.items():
+                if cfg.get(key) in (None, "", MASK):
+                    cfg[key] = value
+
+    if not str(cfg.get("url") or "").strip():
+        return fail("请先填写 DSM 地址（例如 https://192.168.1.10:5001）")
+    if not str(cfg.get("username") or "").strip():
+        return fail("请先填写群晖账号")
+
+    try:
+        result = deploy_service.synology_fetch_device_id(cfg, params.otpCode)
+    except Exception as exc:  # noqa: BLE001 - 业务异常统一转成一句中文
+        return fail(str(exc))
+
+    device_id = str(result.get("deviceId") or "").strip()
+    if params.accessId:
+        # 顺手写回授权，免得用户还要手动粘贴一遍
+        deploy_service._persist_access_field(params.accessId, "deviceId", device_id)
+        deploy_service._persist_access_field(params.accessId, "deviceName",
+                                             result.get("deviceName") or "")
+    audit(db, user, "获取群晖设备ID", f"授权 {params.accessId or '-'}")
+    return ok({"deviceId": device_id, "deviceName": result.get("deviceName") or ""})
+
+
 @router.post("/{access_id}/test")
 def test_access(access_id: int, user: User = Depends(get_current_user),
                 db: Session = Depends(get_db)):
@@ -268,7 +322,18 @@ def test_access(access_id: int, user: User = Depends(get_current_user),
         # 没有它就只在跑流水线时才回填，点「测试」等于白测。
         cfg = dict(cfg or {})
         cfg["accessId"] = row.id
-        # 传当前账号的邮箱：EAB 校验要在 CA 侧注册临时账户，部分 CA 要求有联系人
+        # 传当前账号的邮箱：EAB 校验要在 CA 侧注册账户，部分 CA 要求有联系人
+        if row.type == "eab":
+            # EAB（尤其 FreeSSL / LiteSSL 的一次性 EAB）：把注册出来的账户写回授权，
+            # 之后流水线与再次「测试」都复用，不再消耗 EAB
+            account = _test_eab(cfg, (user.email or "").strip())
+            if account.get("accountKeyPem"):
+                merged = dict(cfg)
+                merged["acmeAccountKey"] = account["accountKeyPem"]
+                merged["accountUrl"] = account.get("accountUrl") or ""
+                row.config = encrypt_json(merged)
+                db.commit()
+            return ok({"success": True, "message": account.get("message") or "EAB 凭据可用"})
         message = _do_test(row.type, cfg, (user.email or "").strip())
         return ok({"success": True, "message": message})
     except Exception as exc:
@@ -360,24 +425,33 @@ def _test_cdn_provider(atype: str, cfg: dict) -> str:
 _EAB_DIRECTORIES = {
     "google": "https://dv.acme-v02.api.pki.goog/directory",
     "sslcom": "https://acme.ssl.com/sslcom-dv-rsa",
+    # FreeSSL.cn 的 ACME v2（LiteSSL，TrustAsia 签发），目录地址是 acme.litessl.com
+    "litessl": "https://acme.litessl.com/acme/v2/directory",
 }
 
 
-def _test_eab(cfg: dict, email: str = "") -> str:
-    """EAB 凭据：去 CA 真注册一个临时账户，能过说明 Key 还没过期。
+def _test_eab(cfg: dict, email: str = "") -> dict:
+    """EAB 凭据：去 CA 真注册（或复用）一个账户，能过说明 Key 还没过期。
 
     Google 的 EAB key 创建后 7 天失效，这是「申请失败」最常见的原因，
     所以这里不做本地格式校验，直接问 CA。
+
+    **FreeSSL / LiteSSL 的 EAB 是一次性的**：注册成功一次就作废，所以：
+      · 授权里已经存了账户私钥 → 只确认账户还在，不再提交 EAB；
+      · 首次注册成功后，把账户私钥 / 账户 URL 返回给调用方，由它写回授权，
+        之后流水线与「测试」都复用这个账户。
     """
-    from ..services.acme import verify_eab
+    from ..services.acme import register_eab_account
 
     provider = str(cfg.get("provider") or "google").strip()
     directory = _EAB_DIRECTORIES.get(provider, "")
     if not directory:
         raise RuntimeError(
-            "请先把「所属 CA」选成 Google Trust Services / SSL.com 再测试："
-            "只有这两家能在线校验 EAB 凭据")
-    return verify_eab(cfg.get("kid"), cfg.get("hmacKey"), directory, email=email)
+            "请先把「所属 CA」选成 Google Trust Services / SSL.com / FreeSSL（LiteSSL）再测试："
+            "只有这几家能在线校验 EAB 凭据")
+    return register_eab_account(cfg.get("kid"), cfg.get("hmacKey"), directory,
+                                email=email,
+                                account_key_pem=str(cfg.get("acmeAccountKey") or "").strip())
 
 
 def _do_test(atype: str, cfg: dict, email: str = "") -> str:
@@ -437,6 +511,11 @@ def _do_test(atype: str, cfg: dict, email: str = "") -> str:
         from ..services import baiducloud
 
         return baiducloud.test_connection(cfg)
+
+    if atype == "trustasia":
+        from ..services import trustasia
+
+        return trustasia.test_connection(cfg)
 
     if atype in ("baota", "1panel"):
         url = (cfg.get("url") or "").rstrip("/")

@@ -58,3 +58,4 @@ coverage/
 # 内部文档（不对外发布）：安全审计/渗透报告、插件对照清单
 docs/SECURITY.md
 docs/PLUGIN-COVERAGE.md
+*.log.*

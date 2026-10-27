@@ -71,6 +71,40 @@ class History(Base, TimestampMixin):
     end_time: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class PipelineGroup(Base, TimestampMixin):
+    """流水线分组：一组按顺序执行的流水线，某个失败时可以转去执行指定的另一条。
+
+    典型用法：同一张证书配「主 CA + 备用 CA」两条流水线，
+    主的那条失败（比如 CA 限流 / 域名验证失败）就自动去跑备用那条。
+    """
+    __tablename__ = "pi_pipeline_group"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    remark: Mapped[str | None] = mapped_column(String(255), default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # JSON: [{"pipelineId": 1, "onFailurePipelineId": 2}]，数组顺序就是执行顺序
+    items: Mapped[str] = mapped_column(Text, default="[]")
+
+
+class PipelineGroupRun(Base, TimestampMixin):
+    """分组执行记录：steps 里是每一次尝试（哪条流水线 / 结果 / 对应的执行历史）。"""
+    __tablename__ = "pi_pipeline_group_run"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    group_id: Mapped[int] = mapped_column(Integer, index=True)
+    group_name: Mapped[str] = mapped_column(String(128), default="")
+    # running / success / failed
+    status: Mapped[str] = mapped_column(String(20), default="running")
+    # JSON: [{"pipelineId","pipelineTitle","historyId","status","message","startTime","endTime"}]
+    steps: Mapped[str] = mapped_column(Text, default="[]")
+    log: Mapped[str] = mapped_column(Text, default="")
+    start_time: Mapped[dt.datetime | None] = mapped_column(DateTime, default=now)
+    end_time: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Access(Base, TimestampMixin):
     __tablename__ = "sys_access"
 
@@ -112,10 +146,15 @@ class Domain(Base, TimestampMixin):
 
 
 class CnameRecord(Base, TimestampMixin):
-    """CNAME 记录（域名 → 记录值 → 所在 DNS 授权）。
+    """DNS 记录登记簿（域名 → 记录值 → 所在 DNS 授权）。
 
-    记录本身可以只做本地登记（不绑定授权），也可以绑定 DNS 授权后
-    一键写入 / 删除对端解析，并随时校验 CNAME 是否真的生效。
+    两类行共存，用 source 区分：
+
+    * manual —— 手动登记的 CNAME：域名固定指到自家代理域名，可以绑定授权
+      一键写入 / 删除对端解析，并随时校验是否真的生效；
+    * acme / cloud —— 证书申请自动写入的验证记录（_acme-challenge 的 TXT）：
+      引擎每次写记录 / 清理记录都会更新它，用户由此能看出「这个域名到底走没走过 DNS 记录」。
+      这类行只读，不参与同步与校验。
     """
     __tablename__ = "cert_cname_record"
 
@@ -131,7 +170,18 @@ class CnameRecord(Base, TimestampMixin):
     record_value: Mapped[str] = mapped_column(String(255), default="")
     # 写入用的 DNS 授权，0 表示只做本地登记
     access_id: Mapped[int | None] = mapped_column(Integer, default=0)
-    # pending / valid / error / synced
+    # CNAME（手动登记）/ TXT（证书申请自动写入的验证记录）
+    record_type: Mapped[str] = mapped_column(String(10), default="CNAME")
+    # 来源：manual 手动登记 / acme 证书申请 / cloud 云厂商免费证书
+    source: Mapped[str] = mapped_column(String(20), default="manual")
+    # 自动登记时来自哪条流水线（手动登记为 0 / 空）
+    pipeline_id: Mapped[int] = mapped_column(Integer, default=0)
+    pipeline_title: Mapped[str | None] = mapped_column(String(255), default="")
+    # 同一条记录反复写入只累加次数，不新增行
+    write_count: Mapped[int] = mapped_column(Integer, default=0)
+    # 验证记录被清理的时间（手动 CNAME 为空）
+    cleaned_time: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    # pending / valid / error / synced / written（已写入）/ cleaned（已清理）
     status: Mapped[str] = mapped_column(String(20), default="pending")
     error: Mapped[str | None] = mapped_column(Text, default="")
     # 是否已写入对端 DNS

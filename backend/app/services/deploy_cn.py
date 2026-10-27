@@ -23,6 +23,7 @@ import json
 import string
 import time
 import urllib.parse
+import re
 import uuid
 from typing import Callable
 
@@ -468,6 +469,36 @@ def _jd_canonical_query(query: dict | None) -> str:
     return "&".join(items)
 
 
+def _jdcloud_friendly(message: str) -> str:
+    """把京东云的 401 翻成用户能照着做的一句中文。
+
+    踩过的坑：`[401] account xxx didn't open cdn service.（HTTP UNAUTHENTICATED）`
+    看着像密钥错，其实是**这个账号根本没开通 CDN 服务**；
+    照原样甩给用户只会让人去反复改 AK/SK。所以这里分两种情况给结论：
+    「没开通 CDN」→ 去控制台开通，或改用只传证书中心的插件；
+    其它 UNAUTHENTICATED → 才是 AK/SK 不对或没有 CDN 权限。
+    """
+    text = (message or "").strip()
+    lower = text.lower()
+    if "open cdn service" in lower:
+        match = re.search(r"account\s+([A-Za-z0-9_.@-]+)\s+didn", text, re.IGNORECASE)
+        who = f"「{match.group(1)}」" if match else ""
+        return (
+            f"京东云账号{who}还没有开通 CDN 服务，接口直接拒绝了这次调用"
+            f"（原始返回：{text}）。两种解决方式："
+            "① 登录京东云控制台 → 域名与网站 → CDN → 开通服务，开通后重跑流水线即可；"
+            "② 不想开通 CDN，就把部署方式换成「上传到京东云证书中心」，"
+            "证书进证书中心后再到控制台手动绑定（这条不需要 CDN）。"
+        )
+    if "unauthenticated" in lower:
+        return (
+            f"京东云鉴权失败（原始返回：{text}）。"
+            "先确认授权里的 AccessKeyId / SecretAccessKey 没填错、没带多余空格；"
+            "再去京东云访问控制（IAM）确认这个 AK 有 CDN 相关权限。"
+        )
+    return text
+
+
 def _jd_error(resp: httpx.Response) -> str:
     try:
         data = resp.json() or {}
@@ -542,12 +573,12 @@ def jdcloud_request(config: dict, method: str, host: str, path: str,
     resp = _cloud_request(method.upper(), url, params=query or None,
                           content=payload or None, headers=headers)
     if resp.status_code >= 400:
-        raise DeployError(f"京东云 {service} 接口失败：{_jd_error(resp)}")
+        raise DeployError(f"京东云 {service} 接口失败：{_jdcloud_friendly(_jd_error(resp))}")
     data = resp.json() if resp.content else {}
     if not isinstance(data, dict):
         raise DeployError(f"京东云返回格式异常：{resp.text[:200]}")
     if data.get("error"):
-        raise DeployError(f"京东云 {service} 接口失败：{_jd_error(resp)}")
+        raise DeployError(f"京东云 {service} 接口失败：{_jdcloud_friendly(_jd_error(resp))}")
     return data.get("result") or {}
 
 
@@ -613,12 +644,9 @@ def deploy_to_jdcloud_cdn(ctx: CertContext, config: dict, log: Callable) -> None
                             })
         except DeployError as exc:
             message = str(exc)
-            if "open cdn service" in message.lower() or "UNAUTHENTICATED" in message.upper():
-                raise DeployError(
-                    "京东云账号还没有开通 CDN 服务（[401] account ... didn't open cdn service）。"
-                    "两条路：① 到京东云控制台开通 CDN 后再运行；"
-                    "② 改用「上传到京东云证书中心」插件（不需要 CDN，证书进证书中心后手动绑定）。"
-                    f" 证书已经上传成功，certId={cert_id}") from exc
+            # jdcloud_request 已经把「没开通 CDN」翻译成中文结论了，这里只补一句证书状态
+            if "open cdn service" in message.lower() or "开通 CDN" in message:
+                raise DeployError(f"{message}（证书已经上传成功，certId={cert_id}）") from exc
             raise
         log(f"京东云域名 {domain} 证书部署成功")
 

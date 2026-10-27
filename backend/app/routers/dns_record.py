@@ -74,10 +74,20 @@ def _serialize_cname(row: CnameRecord) -> dict:
     return {
         "id": row.id, "domain": row.domain, "mainDomain": row.main_domain,
         "hostRecord": row.host_record, "recordValue": row.record_value,
+        # CNAME（手动登记）/ TXT（证书申请自动写入的验证记录）
+        "recordType": (row.record_type or "CNAME").upper(),
+        # manual / acme / cloud：来源不同，操作按钮也不同（自动的只读）
+        "source": row.source or "manual",
+        "pipelineId": row.pipeline_id or 0,
+        "pipelineTitle": row.pipeline_title or "",
+        "writeCount": int(row.write_count or 0),
+        "cleanedTime": _fmt(row.cleaned_time),
         "accessId": row.access_id or 0, "status": row.status,
         "error": row.error or "", "synced": bool(row.synced),
         "verifyTime": _fmt(row.verify_time), "remark": row.remark or "",
         "createTime": _fmt(row.create_time),
+        # updateTime 是最近一次写入 / 清理的时间，页面上显示成「最近写入」
+        "updateTime": _fmt(row.update_time),
     }
 
 
@@ -120,17 +130,26 @@ def _write_to_dns(db: Session, user: User, row: CnameRecord) -> None:
 
 @router.get("/cname/list")
 def list_cname(page: int = Depends(page_no), size: int = Query(20), keyword: str = "",
-               status: str = "",
+               status: str = "", source: str = "", record_type: str = "",
                user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """DNS 记录列表：手动登记的 CNAME + 证书申请自动写入的验证记录。
+
+    两类行靠 source 区分（manual / acme / cloud），自动的只读，页面上不给同步 / 校验按钮。
+    """
     query = db.query(CnameRecord).filter(CnameRecord.user_id == user.id)
     keyword = (keyword or "").strip()
     if keyword:
         like = f"%{keyword}%"
         query = query.filter(or_(CnameRecord.domain.like(like),
                                  CnameRecord.record_value.like(like),
-                                 CnameRecord.remark.like(like)))
+                                 CnameRecord.remark.like(like),
+                                 CnameRecord.pipeline_title.like(like)))
     if status:
         query = query.filter(CnameRecord.status == status)
+    if source:
+        query = query.filter(CnameRecord.source == source)
+    if record_type:
+        query = query.filter(CnameRecord.record_type == record_type.upper())
     total = query.count()
     rows = query.order_by(CnameRecord.id.desc()).offset((page - 1) * size).limit(size).all()
     return ok({"records": [_serialize_cname(row) for row in rows], "total": total,
@@ -156,14 +175,17 @@ def create_cname(params: CnameParams, user: User = Depends(get_current_user),
         return fail("请填写正确的 CNAME 记录值，例如 abc123.cname.example.net")
     if value == domain:
         return fail("记录值不能与域名相同")
-    if db.query(CnameRecord).filter(CnameRecord.user_id == user.id,
-                                    CnameRecord.domain == domain).first():
+    if (db.query(CnameRecord)
+            .filter(CnameRecord.user_id == user.id,
+                    CnameRecord.domain == domain,
+                    CnameRecord.record_type == "CNAME").first()):
         return fail(f"{domain} 的 CNAME 记录已存在")
 
     main = _main_domain(db, user, domain)
     row = CnameRecord(user_id=user.id, domain=domain, main_domain=main,
                       host_record=_host_record(main, domain), record_value=value,
                       access_id=params.accessId or 0, status="pending",
+                      record_type="CNAME", source="manual",
                       remark=params.remark)
     db.add(row)
     db.commit()
@@ -180,6 +202,8 @@ def update_cname(record_id: int, params: CnameParams,
     row = db.get(CnameRecord, record_id)
     if not row or row.user_id != user.id:
         return fail("CNAME 记录不存在")
+    if (row.source or "manual") != "manual" or (row.record_type or "CNAME").upper() != "CNAME":
+        return fail("这是证书申请自动登记的验证记录，只读；需要修改请在对应的流水线里改")
     domain = _norm(params.domain)
     value = _norm(params.recordValue)
     if not domain or not _valid_domain(domain):
@@ -220,7 +244,9 @@ def delete_cname(record_id: int, remote: bool = Query(False),
     if not row or row.user_id != user.id:
         return fail("CNAME 记录不存在")
     domain, value = row.domain, row.record_value
-    if remote and row.synced:
+    # 自动登记的验证记录对端已经清理过，remote 只对手动 CNAME 生效
+    if remote and row.synced and (row.source or "manual") == "manual" and \
+            (row.record_type or "CNAME").upper() == "CNAME":
         access_row, cfg, error = _dns_access(db, user, row.access_id)
         if access_row:
             try:
@@ -242,6 +268,8 @@ def sync_cname(record_id: int, user: User = Depends(get_current_user),
     row = db.get(CnameRecord, record_id)
     if not row or row.user_id != user.id:
         return fail("CNAME 记录不存在")
+    if (row.source or "manual") != "manual":
+        return fail("这是证书申请自动登记的验证记录，由流水线写入 / 清理，不需要手动同步")
     if not row.access_id:
         return fail("请先为该记录绑定 DNS 授权")
     _write_to_dns(db, user, row)
@@ -257,6 +285,8 @@ def verify_cname(record_id: int, user: User = Depends(get_current_user),
     row = db.get(CnameRecord, record_id)
     if not row or row.user_id != user.id:
         return fail("CNAME 记录不存在")
+    if (row.record_type or "CNAME").upper() != "CNAME":
+        return fail("TXT 验证记录是临时记录，验证完就清理，不做 CNAME 校验")
     passed, actual, error = dns_service.check_cname(row.domain, row.record_value)
     row.verify_time = now()
     row.status = "valid" if passed else "error"

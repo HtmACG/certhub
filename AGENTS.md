@@ -42,6 +42,18 @@
 - **面板类授权要能长期跑**：两步验证别只留「验证码」字段（30 秒就过期），要留 Base32 密钥，
   部署时用 `pyotp` 现算（见 `deploy._totp_code()`）；
   「测试」按钮必须真登录一次（`deploy.synology_probe()`），把 2FA / 权限 / 端口问题当场暴露出来。
+- **字段可以声明动作按钮（`action`）**：元数据里写 `action={"type": ..., "label": ...}`，
+  前端 `plugin-field.vue` 会在该字段下方渲染按钮，点开做一件事并把结果写回这个字段。
+  目前唯一实现的是群晖「获取设备ID」（`synology-device-id`），流程和 certd 对齐：
+  填好地址 / 账号 / 密码 → 输一次双重认证 APP 上的 6 位码 → 调
+  `POST /api/access/synology/device-id` 换 DSM 的受信设备令牌（certd 的 `deviceId` / did）→
+  之后登录只带 `device_id`，不再需要验证码。
+  - 前置条件（DSM 侧）：控制面板 → 安全性 → 勾选「允许网页浏览器的用户通过信任设备来跳过双重验证」；
+    信任设备列表里会多一条记录，删了设备 ID 立刻失效。
+  - 设备 ID 约 30 天过期：部署时若带设备 ID 登录失败、且授权里配了「验证密钥」，
+    会自动回退成验证码登录并把新的 did 写回授权（`deploy._synology_login`），别删这段兜底。
+  - 加新的动作按钮：后端声明 `action` + 前端在 `plugin-field.vue` 加一个分支；
+    不要为某个插件写死表单。
 - 插件元数据里可以带展示信息：`logo`（Iconify 图标名）、`favicon`（官网 ico 地址）、
   `color`（品牌色）、`domainFrom`（域名嗅探来源字段）。
 - **厂商 logo 必须本地化，不许前端直连 CDN。** 授权类型的图标由
@@ -101,6 +113,40 @@
   - 授权类型 `eab` 的字段是 `provider`（标识用）+ `kid` + `hmacKey`（password）。
   - 引擎 `_eab_credentials()` 负责解析：优先 `eabAccessId`，
     兼容老流水线里直接写的 `eabKid` / `eabHmacKey`（别删这段兼容，老数据还在）。
+- **FreeSSL.cn（LiteSSL）走 ACME v2 + EAB，已经内置成一个 CA 选项**（`litessl`）：
+  - 老地址 `https://acme.freessl.cn/directory` **已下线**（`acme.freessl.cn` 域名不再解析），
+    现行目录是 `https://acme.litessl.com/acme/v2/directory`，别照着旧博客填旧地址。
+  - 该目录的 `meta.externalAccountRequired` 是 `true`：**必须带 EAB**。
+    EAB 在 FreeSSL「证书自动化 → ACME 账户管理 → 新增凭证」里建，拿到 Key ID + HMAC Key 后
+    填到「授权管理 → 证书签发」（`eab` 类型，所属 CA 选 FreeSSL / LiteSSL），任务里选它即可。
+  - **EAB 值必须先清洗再用**：`acme.normalize_eab_pair()` 会去掉标签前缀（「HMAC Key：」）、
+    换行 / 空格 / 零宽字符，整段粘贴时按标签各取各的值；实在抠不出 base64 就给一句中文结论
+    （「EAB HMAC Key 里有中文 / 全角字符…只复制标签后面的值」）。
+    引擎在 `_eab_credentials()` 里调它（清理过会写一行日志），`_eab()` 里还有最后一道兜底，
+    **别让 `base64.b64decode` 的 `UnicodeEncodeError` 直接冒到日志里**：
+    真实踩过，用户看到的是一串 `string argument should contain only ASCII characters` + 堆栈。
+  - **EAB 可能是一次性的，注册成功一次就作废**（FreeSSL / LiteSSL 实测：再注册回
+    `externalAccountRequired: External account binding has already been used`）。所以：
+    - `acme.register_eab_account()` 是「注册或复用」：传了 `account_key_pem` 就只确认账户还在，
+      **不再提交 EAB**；
+    - 首次注册成功后，账户私钥 + 账户 URL 要**同时**写回**任务**（`acmeAccountKey` / `accountUrl`）
+      和 **EAB 授权**（`engine._store_eab_account()`）：其它流水线复用同一份 EAB 时不会再注册；
+    - 「授权管理」里的「测试」按钮也走同一条路，注册出来的账户写回授权（`routers/access.py`），
+      **点测试不会把用户的 EAB 烧掉**；
+    - 存的账户地址在 CA 侧没了（换 CA / 账户被删）时，引擎会改用 EAB 重新注册一次。
+  - 报错文案：`External account binding has already been used` → 中文「这条 EAB 已经用过了…去轮换 EAB」，
+    别只甩英文。
+  - CAA 身份是 `trustasia.com`：域名有严格 CAA 记录时要把 `trustasia.com` 放进去。
+  - EAB 填错时 LiteSSL 回的是英文 `The bound account does not exist`，
+    已经在 `acme.friendly_problem()` 里翻成「EAB 凭据对不上…重新取一份 EAB」；
+    新增 CA 时同样要补一条中文映射，别把英文原样甩给用户。
+  - **CA 的名字 / 目录地址 / 是否要 EAB 只有 `plugins.ACME_PROVIDERS` 一份**：
+    引擎里以前手抄过 `_CA_NAMES` + 目录字典，新增 FreeSSL 时漏改，
+    表现就是「选了 FreeSSL 却报『自定义 ACME 需要填写 ACME 目录地址』」。
+    现在引擎统一走 `_ca_name()` / `_ca_directory()` / `_ca_needs_eab()`，
+    冒烟里有一条「每个内置 CA 的目录地址，引擎都能解析到」的回归断言，别再另抄一份。
+  - 老版 FreeSSL 的脚本（`freessl.cn/api/get.acme.sh?token=…`）依赖他们改造过的 acme 客户端，
+    **不要照它做**：我们按标准 ACME v2 走，dns-01 / http-01 都是通用实现。
 - **ACME 账户（邮箱 + 账号私钥）仍然不建授权**：邮箱填在任务上，
   账号私钥首次申请时由引擎自动生成，并用 `_persist_task_input()` 写回该任务的
   `acmeAccountKey`，续期直接复用；**授权管理里没有 acmeAccount 类型**。
@@ -131,6 +177,62 @@
   任务级 `reverseProxy` 优先于系统配置，再往下才是内置默认。
 - 新增海外接口时，把端点域名补进 `services/net.py` 的 `DEFAULT_REVERSE_PROXIES`（有公共反代才行）。
 - 凭据（代理账号密码）同样**明文存、明文回显**，前端用小眼睛控制显示。
+
+## 四·补四、亚洲诚信（TrustAsia CertCloud）证书申请
+
+- 走的是 **CertCloud OpenAPI v3**（https://docs.trustasia.com/certcloud/openapi/v3/），
+  不是 ACME：CertCloud 的 ACME EAB 是「先下单再换 EAB」的二次流程，
+  直接用 OpenAPI 一条龙更省事。客户端在 `services/trustasia.py`。
+- **鉴权只有两个头**：`X-CC-Key-ID` / `X-CC-Auth-Key`，明文传，
+  **不需要自己算 HMAC**（官方明确说 HTTPS 已加密，服务端只做 SHA256 比对）。
+  正式 `https://api.certcloud.cn/openapi/v3`，测试 `https://api-uat.certcloud.cn/openapi/v3`。
+  授权里留了 `apiBase` 可选字段：只有走自建代理 / 联调本地 mock 时才填（冒烟就是靠它命中本地 mock）。
+- **申请顺序不能颠倒**：下单 → 拿 `dcv_val[]` → 写验证记录 → 
+  `PUT /orders/{id}/dcv-completed` 通知 CA → 轮询 `GET /orders/{id}` 到 `issued` → 
+  `GET /certs/{id}` 取 `pem` + `ica_pem`。
+  写完记录要**先等一下再通知 CA**，立刻通知它去查会拿到空记录（和 ACME 的传播问题是同一个坑）。
+- **私钥只在本机**：CSR 本地生成（`certutil.build_csr`），提交给 CA 的只有 CSR，
+  拿回来的证书和本地私钥拼成链入库。别改成让 CA 生成私钥。
+- 验证方式四种，记录类型由 CA 决定：`dns` → TXT、`cname` → CNAME、
+  `file` → 写网站根目录（和 ACME http-01 共用 `engine._write_http_file()`）、`email` → 只能人工点邮件。
+  所以引擎里用的是 `_make_dcv_writer()`（TXT + CNAME 都支持），
+  **不要拿只支持 TXT 的 `_make_dns_writer()` 去接 CNAME**。
+- **产品能力要先本地拦一道**（`trustasia.PRODUCTS`）：单域名产品不能填泛域名、不能填多个域名、
+  OV / EV 必须把组织与联系人填全，验证方式要与产品支持列表匹配。
+  这些在本地直接给一句中文（「还缺：组织电话、联系人邮箱」），比等 CA 回 `invalid_organization_info` 好懂。
+- **错误统一一行中文**：`_error_text()` 拼「HTTP 码 + 错误码 + 说明 + X-CC-Request-ID」，
+  再按 `ERROR_HINTS` 补一句该干什么（`unauthenticated_request` → Key ID / API Key 不对…）；
+  `TrustAsiaError` 已登记到 `engine._EXPECTED_NAMES`，执行日志里不会出现堆栈。
+  缺密钥这类**配置错误不要被「连接失败」包起来**：鉴权头在 try 之前就取好。
+- 订单状态到人话的映射在 `trustasia.STATUS_TEXT`（issued / domain_verifing / auditing / failed …），
+  `auditing` 是 OV / EV 的人工审核，别当失败；`FAILED_STATUS` 里的才算失败。
+- logo：官方只有宽幅字标，这里存的是从官方 SVG 里裁出来的方形 mark
+  `frontend/public/logos/access/trustasia.svg`，并在 `fetch_access_logos.py` 的 `KEEP_LOCAL` 里登记，
+  免得脚本按 Iconify 找不到图标时把它清掉。
+- 冒烟 `section_trustasia()` 用本地 mock（`_trustasia_mock()`）核对：鉴权头、
+  订单体（CSR / CN / SAN / dcv_method / validity_months / alternative_order_id）、
+  TXT 与 CNAME 两种验证记录、dcv-completed、CA 拒签文案，以及**一条完整流水线**
+  （用文件验证，这样不依赖真实 DNS 账号）。
+
+## 四·补五、证书未到期 / 已存在 / 刚申请过 → 只跳过这一步，不中断流水线
+
+- 申请类任务（`CertApply` / 云厂商 / CertificateTrustAsia / 自签）在真正下单前统一走
+  `PipelineRunner._precheck_apply()`，三条判据命中任意一条就跳过：
+  1. 本流水线已有证书，剩余天数 > 「提前续期天数」（`renewDays`，默认 20）；
+  2. 证书库里已有**同域名集合**且未过期的证书（`skipIfCertificateExists`，默认开）；
+  3. 同一套域名在 `skipRecentMinutes` 分钟内刚签出过（默认 10，防止重复运行 / 多环境同时触发）。
+  证书本身有效期比续期阈值还短时（90 天 LE 配 100 天阈值），阈值自动减半（最少 2 天），
+  否则会变成「每次运行都续期」。`forceUpdate`（强制续期）一律跳过这些判断。
+- **跳过的语义是「这一步不干，后面继续干」**：抛 `TaskSkipped`，任务循环里记
+  `status=skipped` 后 `continue`；以前抛 `SkipPipeline` 会把整条流水线中止，
+  部署和通知也跟着不跑了 —— 用户要的是「未到期就跳过申请，但证书该下发还要下发」。
+  流水线整体状态仍是 `success`（跳过不是失败）。
+- **跳过时必须把证书交给后续步骤**：`_cert_ctx_from_row()` 把证书库里那张证书塞进
+  `_cert_ctx`，否则后面的部署任务会报「没有可部署的证书」。日志写一句
+  「后续步骤将使用证书库里这张证书（到期 …）」。
+- 前端：任务状态新增 `skipped`（「已跳过」）/ `disabled`（「已停用」）两种，
+  在 `utils/certd.ts` 的 `runStatusMeta` 里映射；跳过的卡片用蓝色虚线描边（`.is-skipped`），
+  **阶段成败判断要排除 skipped / disabled**，否则「跳过申请」会把整个阶段画成失败。
 
 ## 四·补三、ACME 签发的四条硬规则（每条都踩过）
 
@@ -199,13 +301,130 @@
   `node -e "eval('...')"` 验一下能不能编译。
 
 ## 六·补二、执行日志的展示规范
-
 - 编辑页（`pipeline/detail.vue`）跑流水线时，日志**内联在阶段列表下方**，不用抽屉；
   抽屉只留给列表页的「运行」。
 - 日志行要高亮：时间戳 / 阶段分隔 / `[任务名]` / URL / 域名 / PEM / JSON 键，
   成败关键字上色。**用文本节点渲染，禁止 `v-html`**（日志里含用户填的域名、密钥路径）。
 - 阶段卡片要能看出结果：失败=整卡红描边（四条边，不是只描左边）、全部成功=绿、在跑=黄。
   数据来自 SSE 的 `event: tasks`（任务项带 `stage` 字段），别自己去猜阶段。
+
+## 六·补三、流水线画布（Vue Flow）
+
+详情页（`pipeline/detail.vue`）默认是**画布视图**，列表视图保留（窄屏 / 逐项核对时切换）。
+画布用 [`@vue-flow/core`](https://github.com/bcakmakoglu/vue-flow)（MIT，React Flow 的 Vue 版）
++ `@vue-flow/background|controls|minimap`，组件在 `pipeline/components/pipeline-canvas.vue`。
+
+- **映射**：阶段 = group 节点（浅色虚线容器，任务用 `parentNode` 挂进去）；任务 = 卡片节点。
+- **阶段外框可拖，任务卡片不可拖。** 阶段节点 `draggable: true`，任务卡片永远 `draggable: false`
+  且 `parentNode` 挂在阶段上 —— 拖动阶段时卡片跟着整体走，单独拖卡片不改变任何坐标。
+  卡片在阶段内的位置由「阶段内顺序」决定（`autoTaskPos`），所以结构永远不会被摆乱。
+  阶段坐标存 `content.layout.stages`，任务坐标不落库（`layout.tasks` 只用于拖动过程中的临时记录）。
+- **连线只表达「先后」，不搬任务。** 从 A 拖到 B 只做两件事：把 B 标成已连线、把它接进执行链；
+  **不 splice、不换阶段、不删空阶段**。早先的实现会把目标任务搬到源任务的阶段里，
+  跨阶段一拖就把用户的结构「合并」掉了 —— 这是明确要避免的行为。
+  顺序永远由「阶段顺序 + 阶段内顺序」决定，所以连线不可能成环，后端结构也不用改。
+  反向连线（指向排在自己前面的任务）直接拒绝并提示。
+- **没连线 = 不执行。** `task.linked === false` 的任务：画布不给它画线、卡片右上角标「未连线」、
+  引擎跳过它并记 `unlinked` 状态（日志「还没有连线，跳过这一步」）。
+  新建任务默认 `linked: false`，从别的卡片拖一条蓝线过来才激活。
+  链上的边是「按顺序取相邻两个已连线任务」，所以中间夹着未连线任务时，前后两个会直接连起来。
+- **阶段开关 = 整段跳过。** 阶段卡片头部最右侧常驻一个开关（`stage.enabled`，缺省 / true 都算启用）。
+  关掉后 `engine.run()` 拍平执行序列时整段 `continue`（日志「已停用，整段跳过」），
+  画布上阶段灰化、序号变灰、运行按钮禁用，里面的任务卡片一起降饱和（`is-stage-off`）；
+  列表视图有同一个开关和「整段已停用」标记。和任务级 `task.enabled` 的差别只是粒度。
+  三个必须守住的点：开关**不要塞进 hover 浮层**（它是状态指示）、必须带 `nodrag`
+  （否则按住开关会拖动整个阶段框）、`.stage-node-actions` 的 `right` 要给它让位（42px）。
+- **序号徽标是「硬币」样式**：实心圆 + 3px `--g-surface` 白边 + 双层投影（中性灰 + 掺阶段色的光晕）。
+  白边取 `--g-surface` 而不是写死 `#fff`，暗色下才会自动变深；暗色 `--g-blue` 是浅蓝，
+  序号文字要跟着翻成深色。尺寸写死 26px 且 `box-sizing: border-box`（白边算在里面），
+  否则徽标会撑大、把阶段名挤走。
+- **点连线可以删除。** 顺序线删掉 → 目标任务变「未连线」、不再执行；「失败后」线删掉 → 清 `onErrorTaskId`。
+  两种都先弹确认框说明后果（`ElMessageBox`，按钮文案分别是「断开」「删除」）。
+  删除只改数据、不动任务归属 —— 任务仍留在原来的阶段里。
+- **每个阶段最多 5 个任务**（`MAX_TASKS_PER_STAGE`，在 `canvas-types.ts`）。
+  `openPicker` 和 `choosePlugin` 各拦一次（弹窗开着的时候也可能被别处加满）。
+  满了以后画布上的「添加任务」条变成灰色「本阶段已满 5 个任务」，
+  列表视图的 `.task-add` 变 `.is-limit` + `disabled`。
+- **坐标不再落库**：`content.layout` 这套机制保留在组件里（`CanvasLayout` / `layout` prop），
+  但详情页不传也不存 —— 位置既然固定，存坐标只会让不同流水线的视觉不一致。
+- **画布高度跟视口走**：`clamp(440px, calc(100vh - 286px - bottomOffset), 1200px)`，
+  底部日志终端展开时靠 `bottomOffset` 让位；宽度 100% 跟随容器。
+  尺寸一变（窗口缩放、终端展开）由 `ResizeObserver` 触发 `fitAll` 重新对准。
+- **四个必须遵守的坑**（都踩过）：
+  1. 卡片**不能**写 `overflow: hidden`。锚点挂在左右边缘、中心点落在边框上，一裁切
+     `pointerdown` 就打到卡片本体，Vue Flow 收不到 handle 事件，表现是「拖不出连线」。
+  2. 锚点放大只能用独立的 `scale` 属性，**不要覆盖 `transform`** —— Vue Flow 用
+     `translate(-50%, -50%)` 定位，覆盖后锚点被推出卡片，同样拖不出线。
+  3. 视图对准自己按节点几何算（`fitAll` + `setViewport`），**不要用 `fitView`**：
+     它读 Vue Flow 缓存的容器尺寸，底部终端展开/收起导致高度刚变时会用旧值，
+     内容就偏在画布下半部分。容器尺寸变化用 `ResizeObserver` 兜住。
+  4. **节点不可拖 / 不可选时，Vue Flow 会给节点容器写内联 `pointer-events: none`。**
+     `NodeWrapper` 的判定是
+     `hasPointerEvents = isSelectable || isDraggable || 有 nodeClick 等钩子`，
+     我们把 `draggable` / `selectable` 都设成 false（需求「位置固定」），它就直接判定
+     这个节点不需要指针事件 —— 节点里所有按钮、卡片双击、连线锚点**全部点不到**。
+     表现极具迷惑性：元素在 DOM 里、`opacity: 1`、`cursor: pointer` 都在，
+     就是点不动（「画布模式下加不了任务」的真凶，同一个根因也让拖线一起坏掉）。
+     解法：CSS 里对 `.vue-flow__node` 显式写 `pointer-events: none`，
+     再把 `.stage-node-head` / `.stage-node-actions` / `.stage-node-add` / `.stage-node-limit`
+     / `.task-node` / `.flow-handle:not(.is-ghost)` 逐个写回 `auto`。
+     **不要图省事把整个 `.vue-flow__node` 设成 auto** —— 那样节点矩形内全部吃掉指针，
+     在阶段空白处就拖不动画布了。`pointer-events` 可继承，父级 none 时子级 auto 仍能命中。
+     现在阶段节点是 `draggable: true`，Vue Flow 会给它内联写 `pointer-events: auto`（内联优先于 CSS），
+     所以在阶段空白处按下鼠标是**拖阶段**、不是平移画布；想平移画布用背景空白处或空格拖动。
+- 节点高度是固定值（`NODE_H=160`），改卡片样式要同步改 `canvas-types.ts` 的 `CANVAS_METRICS`，
+  否则阶段容器高度和连线端点会错位。阶段高度里要给底部「添加任务」条留位置
+  （`stageHeight()` 里的 `addZone`），漏了按钮会压到最后一张卡片上。
+- **「添加阶段」按钮在顶部操作条、紧挨「保存」**（`detail-head-right`），画布 / 列表两个视图共用；
+  不要再在内容区底部加一个，两个入口会让人以为功能不同。
+- **「添加任务」是阶段底部常驻的虚线按钮**（`添加任务 N/5`），不要塞进头部 hover 浮层：
+  浮层平时 `opacity: 0`，24px 图标藏在角落，实测用户根本找不到、也点不到。
+  空阶段文案自动变「添加第一个任务」。
+- **一个入口、两个出口**：左侧唯一的 `in` 是整张卡片的输入（顺序线和失败后线都从这里进）；
+  右侧上点 `out` = 「成功后」、右侧下点 `err` = 「失败后」。
+  两个出口都带常驻文字标签（`.flow-port-label.is-out` / `.is-err`），放在
+  `CANVAS_METRICS.stagePadRight` 留出的右侧留白里，不压卡片内容、也不压端口出来的线；
+  进口只有一个，不写标签。红点常驻半透明（`opacity: .45`），配过跳转后 `.is-on` 常亮。
+- **「失败后」连线和顺序连线是同一套线型**：贝塞尔曲线 + 中点圆点、蓝色实线 2px，
+  语义只由出口（位置 + 标签）表达；**不要**再改回红色虚线 + 中点「失败后」胶囊。
+  两条线都进同一个 `in` 口，末端重合是预期行为（错误线 `zIndex: 1`，重合处优先命中它）。
+- **Vue Flow 只在离锚点 `connectionRadius`（我们设 28px）以内才发 `connect` 事件。**
+  卡片有一两百像素宽，用户按提示「把失败后端口拖到卡片上」时落点在卡片中间，离左侧 `in` 锚点很远，
+  连线直接作废 —— 表现就是「拖不动」。解法是 `@connect-start` 记住源锚点，
+  `@connect-end` 时若这一趟没触发过 `connect`（用 `dragConnected` 标记），
+  就用 `document.elementsFromPoint` 找落点下的 `.vue-flow__node-task[data-id]` 自己补一条。
+  **不要靠调大 `connectionRadius` 解决**：半径一大会吸附到相邻卡片的错误锚点上。
+- **edge 的描边样式是 `style` prop，必须声明并转发给 `BaseEdge`。**
+  `EdgeWrapper` 把 `style: edgeStyle.value` 当 prop 传进自定义 edge 组件；不声明就会被
+  当成普通属性丢掉 —— 表现是「明明设了 `stroke` + `strokeDasharray`，画出来还是默认色」。
+  写法：`defineProps<{ style?: Record<string, any> }>()` + `<BaseEdge ... :style="style" />`。
+- **连线层压在阶段容器上方（`z-index: 2`），任务卡片再压在连线上面（`z-index: 3`）。**
+  阶段容器有一层不透明底色，连线层留在下面会把线整段盖住，跨阶段失败线就只剩阶段之间两小段。
+  `.vue-flow__edges` 上是 Vue Flow 写死的内联 `z-index: 0`，必须用 `!important` 压过；
+  卡片 z-index 也必须高于连线层，否则端口和卡片内容会被线的点击区域挡住。
+- **「失败后」连线跨阶段也直接走贝塞尔，不绕底部通道。**
+  用户明确要求它和上方普通连线看起来一样。代价是它会从中间阶段的任务卡片背后穿过
+  （卡片在上层，遮住中段），这是接受的取舍：不要再加 `laneY` 之类的绕行通道，
+  也不要把线提到卡片上面（会挡住端口拖拽和卡片双击）。
+  注意 `captureScreenshot` 的 `clip` 只认 `width`/`height`，写成 `w`/`h` 会静默失败。
+
+## 六·补四、登录图形验证码（密码错几次之后要填）
+
+- 服务端生成，**不落库、不用会话**：`services/captcha.py` 画 SVG（108×40，随机旋转 + 干扰线 + 噪点），
+  令牌是 `HMAC(SECRET_KEY, "CODE.EXP")` 取前 32 位，拼成 `exp.sig` 交给前端。
+  校验时按用户提交的字符重算签名比对，所以多进程 / 重启都不影响，也不用建表。
+- 两个开关在 **系统设置 → 安全 → 登录安全策略**：`captchaEnabled`（默认开）、
+  `captchaAfter`（默认 1）。语义是「失败 N 次后，**下一次**登录必须先过验证码」，
+  即设 1 = 错一次，下次就要填；设 4 = 错满 4 次，第 5 次才要填。
+- **不存在的账号也要计数**（`_anon_fails`，键 `用户名|IP`，TTL 1 小时，容量上限 5000），
+  否则「拿别人的用户名试密码」这条路径就绕过验证码了。注意：进入「要求验证码」分支后
+  会直接返回，**不再累加计数**，所以卡在验证码这一步不会把账号一路推向锁定。
+- 登录接口的错误响应刻意**不用 `fail()`**（`fail()` 的 `data` 恒为 `None`），
+  而是手写 `{"code": 400, "msg": ..., "data": {"needCaptcha": true}}`。
+  前端 `utils/http/index.ts` 的响应拦截器把 `data` 一并塞进 `HttpError`，
+  登录页读 `error.data.needCaptcha` 决定是否把验证码行露出来。
+- 前端 `views/auth/login/index.vue`：验证码行 `v-if="captchaNeeded"`，图片点击换一张；
+  提交时只在 `captchaNeeded` 为真才带 `captchaCode` / `captchaToken`。
 
 ## 七、构建与验证
 
@@ -223,6 +442,21 @@ cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
 
 - `index.html` 必须带 `Cache-Control: no-cache, must-revalidate`：
   否则重新构建后浏览器还在跑旧 bundle，表现为「新功能没出现」。
+- **无头验证（系统 Edge + CDP，脚本放 `_tmp/cdp-*.mjs`）有两个必踩的坑**：
+  1. 路由是 **hash 模式**，地址必须写成 `http://localhost:5173/#/certd/pipeline/detail/5`；
+     写成 `/certd/pipeline/detail/5` 会被重定向到工作台，然后你会以为「页面没渲染」。
+  2. 登录态存在 **`sys-v3.0.2-user`**（键名带前端版本号，`art-design-pro` 的存储迁移会
+     把 `sys-v0.0.0-user` 搬过去）。注入旧键虽然能靠迁移生效，但直接写新键更稳。
+  另外「按钮点不到」这类问题**不要用 `el.click()` 验证** —— 它会绕过命中测试，
+  遮罩 / `pointer-events: none` 全都测不出来。要用 `Input.dispatchMouseEvent` 发真实
+  鼠标事件，再用 `document.elementFromPoint()` 断言命中的是不是目标元素。
+- **测「任务配置抽屉」的「确定」要用没有必填项的任务类型。**
+  `confirmTask` 会校验插件必填项，空参数的 `CertApply` 点确定只会弹
+  「请填写「xxx」」、抽屉不关 —— 看起来非常像「按钮点不到」，很容易白查半小时。
+  用 `DeployWait`（等待）或 `DeployBackupCerts`（数据备份），它们没有任何必填项。
+- **Element Plus 的禁用态不在根元素上。** 判断 `el-select` 是否禁用要看
+  `.el-select__wrapper.is-disabled` 或内部 `input.disabled`；
+  根节点 `.el-select` 上**不带** `is-disabled`，只查根节点会得出「没禁用」的错误结论。
 
 ---
 
@@ -258,7 +492,9 @@ cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
 - 列表页：`useTable` + `ArtTable` + `ArtTableHeader` + `ArtSearchBar`；
 - 表单：优先 `ArtForm`（自带栅格、响应式、标签排版、reset/submit），
   业务字段用 `views/certd/components/plugin-field.vue` 渲染；
-- 统计 / 图表：`ArtStatsCard`、`ArtLineChart`、`ArtRingChart`；
+- 统计 / 图表：`ArtStatsCard`、`ArtLineChart`、`ArtRingChart`、
+  `ArtGaugeChart`（车速表仪表：弧线刻度 + 指针 + 中央/底部数字读数，
+  `value` / `max` / `unit` 三个 prop 就够，配色按 70% / 90% 自动分档）；
 - 图标：`ArtSvgIcon`（Iconify）与 `brand-avatar.vue`（本地文件优先）；
 - 样式：用 `art-card` / `art-table-card` / `art-full-height` 与主题变量。
 
@@ -291,7 +527,12 @@ cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
 ### 8.2·补二、流水线编辑页的排版约定
 
 - 页面顺序固定为：**操作条（标题 / 保存 / 定时任务 / 运行）→ 阶段列表 → 运行准备日志**。
+  **顶部不放「日志」按钮、也不放启用/停用开关**：
+  - 日志统一在底部固定终端（进页面时自动接上上次执行，阶段标题和任务卡图标也是日志入口，
+    关掉后从那两个入口再打开）；
+  - 启用/停用放在**「证书流水线」列表的表格里**（一列 `ElSwitch`，点了立刻生效，不用再保存一次）。
   「触发方式与执行设置」**收进抽屉**（由操作条上的「定时任务」按钮呼出），
+  按钮角标显示人话时间（`每天 03:00` / `每周一 02:00` / `未设置`），原始 cron 放 tooltip。
   不要再把它做成占满整屏的卡片放回页面里。
 - **开关里不许放文字**（不要 `inline-prompt` + `active-text`）：开关里塞字会把滑块压小、
   窄屏更难点。状态用开关旁边的文案（`已启用 / 已停用`）或 tooltip 表达。
@@ -346,6 +587,98 @@ cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
   确认后**合并**进输入框（已有值不重复、不覆盖用户手填的域名）；
 - 默认勾选泛域名（大多数证书要的就是 `*.example.com`）。
 
+### 8.2·补四、工作台的资源仪表（CPU / 内存 / 系统盘）
+
+- 「系统信息」卡片固定三块车速表（`ArtGaugeChart`）：CPU 使用率 / 内存使用率 /
+  系统盘使用率，**硬盘只展示系统盘**，数据盘不铺在这里（接口仍返回全部 `disks`）。
+- 系统盘由后端 `services/system_info.py` 判定：Windows 取 `SystemDrive`（通常是 `C:\`），
+  类 Unix 取 `/`，结果放在 `systemDisk`，每块盘同时带 `system` 布尔位；
+  前端只在老接口没有这两个字段时才自己兜底（C 盘 → 根目录 → 第一块盘）。
+- 使用率分档（正常 / 偏高 / 告警）走 `utils/certd.ts` 的
+  `usageLevel` / `usageColor` / `usageText`，阈值 70% / 90%，**页面里不要各自写一遍**。
+- 仪表是 canvas，读不到 CSS 变量：暗色配色在 `ArtGaugeChart` 内部按 `isDark` 各给一套，
+  换主题时 `useChartComponent` 会自动重绘。
+
+### 8.2·补五、DNS 记录页（原「CNAME 记录」）
+
+- 这个页面同时管两类行，靠后端的 `source` 区分：
+  `manual`（手动登记的 CNAME，可同步 / 校验 / 编辑）与
+  `acme` / `cloud`（证书申请自动写入的验证记录，**只读**，页面上只留「删除留痕」）。
+  页面里不要自己判断「这条能不能同步」，一律看 `source`。
+- 自动登记是引擎干的：写 / 删 `_acme-challenge.<域名>` 验证记录时调用
+  `services/dns_log.py` 的 `remember()` / `forget()`；
+  同一条记录（user + 记录名 + 类型）反复写入只更新一行并累加 `write_count`，
+  清理后状态变 `cleaned` 但行保留 —— 用户由此能看出「这个域名走没走过 DNS 记录」。
+- 记录名必须来自 `provider` 的真实写入结果（`engine._full_record_name()`），
+  它是带 `record_prefix` 和子域名托管的；不要用 `root_domain()` 自己算，
+  否则页面上的记录名和 DNS 后台对不上。
+- 这些字段是后加的：`db.init_db()` 里的 `_COLUMN_PATCHES` 负责给老库幂等补列，
+  以后再给老表加字段记得登记进去（SQLite 的 `create_all` 不会改已有表）。
+
+### 8.2·补六、流水线分组（失败后转备用）
+
+- 一个分组 = 一串「按顺序试一试」的流水线，菜单入口是**证书流水线**下面的
+  **流水线分组**（`/certd/pipeline-group`，页面 `views/certd/pipeline/group.vue`）。
+  数据表 `pi_pipeline_group`（成员存在 `items` JSON：`[{pipelineId, onFailurePipelineId}]`）
+  与 `pi_pipeline_group_run`（一次分组执行 = 一行，`steps` JSON 记每一步）。
+- **语义固定为「顺序尝试 + 失败转移」**，不要改成并行、也不要改成「全部跑一遍」：
+  跑第一条 → 成功就结束；失败就跳它这一行配的 `onFailurePipelineId`；
+  没配就直接判分组失败。典型场景是「主 CA 失败自动转备用 CA」。
+- **同一条流水线在一次分组里只跑一次**（`group_runner._execute()` 里的 `visited` 集合）。
+  这是硬规则：A 的失败转移指向 B、B 又指回 A 时，没有这个集合就是死循环。
+  命中时记一条 `skipped` 步骤，界面上能看出「跳过是因为跑过了」。
+- **分组不自己跑证书任务**，只调 `engine.run_pipeline_async()`，所以每次执行在
+  「执行历史」里都有一条独立的 `History`，分组记录里的 `historyId` 指向它 ——
+  界面上的「日志」按钮就跳到 `/certd/history`。不要另造一套执行日志。
+- 分组在自己的线程里轮询执行历史等结果（`_wait_history()`，2 秒一次、最长 6 小时），
+  **不要占用 engine 的线程池**，否则并发流水线会被分组卡住。
+- 成员校验在 `routers/pipeline_group.py` 的 `_clean_items()`：流水线必须存在且属于当前用户、
+  不能重复添加、`onFailurePipelineId` 不能指向自己。新增字段一并在这里校验，错误统一回一句中文。
+- 列表接口要回填标题（`pipelineTitle` / `onFailurePipelineTitle`），前端不许多查一遍；
+  列表行还带 `lastRun`（最近一次分组执行的状态与时间）。
+- 执行页交互：运行后前端轮询 `GET /api/pipeline-group/run/{runId}` 直到状态变化，
+  再提示成功 / 失败；「执行记录」抽屉按步骤列状态、失败转移目标和日志入口。
+
+### 8.2·补七、阶段里每个步骤可单独启停
+
+- 每个任务（步骤）都带 `enabled` 字段，**缺省 / true = 启用，false = 停用**；
+  停用的步骤运行时**整段跳过**：不发请求、不算失败、不影响后续步骤
+  （引擎 `PipelineRunner.run()` 里进任务循环第一件事就判 `enabled is False`）。
+  历史里这一步的状态记 `disabled`（不是 failed / skipped），日志写「「XXX」已停用，跳过这一步」。
+- **界面上开关不做成二级菜单**：任务卡头部右侧一个 `ElSwitch`（`size=small`，
+  不塞文字），点了**立刻落库**（调 `save(true)`，失败回滚开关状态），
+  并在卡片右上角显示「已停用」标签；整卡 `opacity: .62` + 虚线边框 + 图标去色，一眼看出这次不跑它。
+  顶部摘要与阶段标题都要写「N 步已停用」，否则「4 个任务」和实际执行数对不上。
+- **统计口径跟着走**：列表接口 `stepCount` 只算启用的步骤，另给 `taskCount` 与
+  `stepDisabledCount`；`_content_kinds()` 也要跳过停用任务，
+  否则「申请 + 部署」标签会写着一个这次根本不会执行的部署步骤。
+- 单跑某个阶段时，`has_apply` 判断（决定要不要从证书库补证书上下文）同样要忽略停用的申请任务。
+- 新建任务默认 `enabled: true`；老流水线内容里没有这个键，按启用处理，不用迁移数据。
+
+### 8.2·补八、已经合并掉的页面（别再建独立菜单）
+
+有两处「功能重叠的独立页」已经并进主页面，老路由保留成 redirect，菜单项一律删掉：
+
+- **「账号与安全」→ 系统设置 → 安全**。原来的 `views/certd/profile/index.vue` 整体搬成
+  `views/certd/system/components/account-security.vue`（基本资料 / 修改密码 / 两步验证），
+  在 `system/setting.vue` 的「安全」页签里渲染。这个页签**所有登录用户都能看**
+  （自己的账号自己改），而同一页签下的「登录安全策略」表单 `v-if="isAdmin"`。
+  路由 `/certd/profile` → redirect `/certd/setting?tab=security`（`isHide: true`）。
+  `config/modules/fastEnter.ts` 的「账号与安全」快捷入口也要跟着改 `routeName`。
+- **「流水线分组」→ 证书流水线 → 分组页签**。`views/certd/pipeline/index.vue` 顶部加
+  `.page-switch` 双页签（流水线 / 分组），列表内容包在 `v-if="activeTab === 'pipeline'"` 里，
+  否则 `<PipelineGroup />`。页签与 URL 同步：`?tab=group` ⇄ 分组。
+  路由 `/certd/pipeline-group` → redirect `/certd/pipeline?tab=group`。
+  分组页原本按整页高度写死（`art-full-height` = `height: var(--art-full-height)`），
+  嵌进页签后会多撑出页签条那 30px。**不能只写 `height: auto`** —— 高度变成内容驱动后
+  表格没有可用高度，`el-table` 只剩 98px、空状态插画被裁成一条。正确写法是占满剩余空间：
+  `.certd-pipeline :deep(.certd-group) { flex: 1 1 auto; height: auto; min-height: 0; }`。
+- 合并时容易踩的两个小坑：
+  1. `setting.vue` 原来把「安全」页签也 `v-if="isAdmin"` 了，合并后必须去掉，
+     否则普通用户点进来只有一个「项目信息」页签。
+  2. 非管理员默认落在哪个页签要兜底：`activeTab` 先读 `route.query.tab`，
+     `onMounted` 里若当前页签对普通用户不可见，退回 `security`。
+
 ### 8.3 响应式是验收项
 
 - 栅格必须有 `xs/sm/md/lg/xl` 降级，禁止写死列宽导致窗口变窄就横向滚动；
@@ -353,6 +686,24 @@ cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
 - 表单窄屏（< 768px）标签在上（`ArtForm` 的 `labelPosition` 按 `useWindowSize` 切换）；
 - 验收方法：CDP 无头浏览器分别按 1600 / 1280 / 1024 / 768 / 414 五档宽度截图，
   断言 `document.documentElement.scrollWidth === innerWidth`，且控制台零报错。
+
+### 8.3·补、路由导航与 loading 的硬规则（「卡在转圈」就是这些坑）
+
+- **全屏 loading 只在 `handleDynamicRoutes` 里显示**（`loadingService.showLoading()`，
+  `lock: true`，会挡住整页点击）。它只由 `closeLoading()` 或 `afterEach` 关闭。
+- **守卫里不要用 `next(false)` 取消导航**：被取消的导航不会触发 `afterEach`，
+  `pendingLoading` 就永远是 true，用户看到的就是「整页转圈点不动，只能刷新」。
+  并发导航（初始化还没跑完又点了一次菜单）要等 `routeInitPromise` 结束再重新
+  `next({ ...to, replace: true })`，见 `guards/beforeEach.ts`。
+- **看门狗兜底**：`utils/ui/loading.ts` 里 12 秒没关就强制关掉；
+  `utils/sys/error-handle.ts` 在全局异常 / 未处理 Promise 上也会先关 loading。
+  这两个是最后一道保险，别删。
+- **重新构建后老标签页必然拿到 404 的 chunk**（哈希变了、旧文件已删）：
+  `guards/routerError.ts` 负责 `router.onError` → 先把 loading 关掉 → 识别出
+  chunk 加载失败就带着目标路由刷新一次（`sessionStorage` 标记防死循环，
+  `afterEach` 成功后解除标记）。新页面 / 新路由用了动态 import 也自动受这套逻辑保护。
+- 排障顺序：卡在转圈 → 先看 `document.querySelectorAll(".el-loading-mask")` 是否还有；
+  有就是守卫漏关（查导航是否被取消）；没有就是页面自己的 `v-loading` 卡住（查 finally）。
 
 ### 8.4 排障提醒（生产构建看不到 console）
 

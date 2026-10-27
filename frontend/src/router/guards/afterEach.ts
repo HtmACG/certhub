@@ -5,6 +5,7 @@ import NProgress from 'nprogress'
 import { useCommon } from '@/hooks/core/useCommon'
 import { loadingService } from '@/utils/ui'
 import { getPendingLoading, resetPendingLoading } from './beforeEach'
+import { clearChunkReloadFlag } from './routerError'
 
 /** 路由全局后置守卫 */
 export function setupAfterEachGuard(router: Router) {
@@ -12,6 +13,9 @@ export function setupAfterEachGuard(router: Router) {
 
   router.afterEach(() => {
     scrollToTop()
+
+    // 导航成功 = 资源加载没问题，解除「已自动刷新」标记
+    clearChunkReloadFlag()
 
     // 关闭进度条
     const settingStore = useSettingStore()

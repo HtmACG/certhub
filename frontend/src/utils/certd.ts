@@ -28,6 +28,12 @@ export function runStatusMeta(status?: string): StatusMeta {
       return { text: '运行中', type: 'warning', icon: 'ri:loader-4-line' }
     case 'canceled':
       return { text: '已取消', type: 'info', icon: 'ri:stop-circle-line' }
+    case 'skipped':
+      return { text: '已跳过', type: 'info', icon: 'ri:skip-forward-line' }
+    case 'disabled':
+      return { text: '已停用', type: 'info', icon: 'ri:pause-circle-line' }
+    case 'unlinked':
+      return { text: '未连线', type: 'info', icon: 'ri:link-unlink' }
     default:
       return { text: '未执行', type: 'info', icon: 'ri:subtract-line' }
   }
@@ -75,6 +81,36 @@ export function formatDuration(seconds?: number | null): string {
   const rest = Math.round(seconds % 60)
   if (minutes < 60) return minutes + ' 分 ' + rest + ' 秒'
   return Math.floor(minutes / 60) + ' 时 ' + (minutes % 60) + ' 分'
+}
+
+/** 资源使用率分档：正常 / 偏高 / 告警（CPU、内存、硬盘仪表共用同一套阈值） */
+export type UsageLevel = 'normal' | 'warn' | 'alarm'
+
+export const USAGE_LEVEL_COLOR: Record<UsageLevel, string> = {
+  normal: '#67c23a',
+  warn: '#e6a23c',
+  alarm: '#f56c6c',
+}
+
+/** 使用率 → 分档：≥90% 告警、≥70% 偏高、其余正常 */
+export function usageLevel(percent?: number | string | null): UsageLevel {
+  const value = Number(percent) || 0
+  if (value >= 90) return 'alarm'
+  if (value >= 70) return 'warn'
+  return 'normal'
+}
+
+/** 使用率 → 颜色 */
+export function usageColor(percent?: number | string | null): string {
+  return USAGE_LEVEL_COLOR[usageLevel(percent)]
+}
+
+/** 使用率 → 中文状态词 */
+export function usageText(percent?: number | string | null): string {
+  const level = usageLevel(percent)
+  if (level === 'alarm') return '告警'
+  if (level === 'warn') return '偏高'
+  return '正常'
 }
 
 /** 域名列表 → 展示文本 */

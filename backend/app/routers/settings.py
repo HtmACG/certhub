@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..config import settings as app_settings
 from ..db import get_db
 from ..defaults import merge_defaults
 from ..deps import audit, fail, get_current_user, ok, require_admin, page_no
@@ -20,6 +21,17 @@ ALLOWED_KEYS = ("site", "security", "notify", "network")
 
 # 历史遗留的打码值：老前端提交回来的 ****** 视为「这一项没改」
 SECRET_MASK = "******"
+
+#: 项目 / 开发者信息（只读），前端「系统设置 → 项目信息」原样展示。
+#: 改这里就能改页面上显示的内容，不用动前端。
+ABOUT_INFO = {
+    "name": "CertHub",
+    "version": app_settings.VERSION,
+    "developer": "北幕林奈",
+    "email": "htmacg@163.com",
+    "website": "www.htmacg.cn",
+    "websiteUrl": "http://www.htmacg.cn",
+}
 
 #: 代理测试的目标：都来自「国内服务器连不通就得靠代理」的场景
 PROXY_TEST_TARGETS = [
@@ -60,6 +72,8 @@ def get_settings(user: User = Depends(get_current_user), db: Session = Depends(g
     if user.role != "admin":
         result.pop("security", None)
         result.pop("network", None)
+    # 只读：项目信息 / 开发者 / 版本号
+    result["about"] = dict(ABOUT_INFO)
     return ok(result)
 
 

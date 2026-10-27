@@ -242,8 +242,14 @@ def doge_cdn_domains(config: dict) -> tuple[list[dict], str]:
 
 def jdcloud_cdn_domains(config: dict) -> tuple[list[dict], str]:
     from . import deploy_cn
+    from .deploy import DeployError
 
-    rows = deploy_cn.jdcloud_cdn_domains(config)
+    try:
+        rows = deploy_cn.jdcloud_cdn_domains(config)
+    except DeployError as exc:
+        # 京东云的错误已经被翻译成中文结论（没开通 CDN / AK 无权），
+        # 原样给用户看，别再套一层「DeployError：」前缀
+        return [], str(exc)
     names = [_pick_domain(row) for row in rows]
     return _items([name for name in names if name], "京东云域名"), ""
 

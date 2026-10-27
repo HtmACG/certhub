@@ -48,6 +48,16 @@ export interface PluginField {
   autoMatchDomains?: boolean
   /** 该字段允许的授权类型（精确到类型，例如群晖任务只认 synology） */
   accessTypes?: string[]
+  /**
+   * 字段动作按钮：渲染在字段下方，点一下做一件事并把结果写回字段。
+   * 目前只有群晖的「获取设备ID」（输一次 6 位验证码换长期免验证码的受信设备令牌）。
+   */
+  action?: {
+    type: 'synology-device-id' | string
+    label?: string
+    icon?: string
+    hint?: string
+  }
   [key: string]: any
 }
 
@@ -62,6 +72,8 @@ export interface TaskPlugin {
   inputs: PluginField[]
   outputs?: any[]
   logo?: string
+  /** 本地图标相对路径（后端 fetch_access_logos.py 下的，离线可用） */
+  logoFile?: string
   color?: string
   favicon?: string
   short?: string
@@ -109,6 +121,19 @@ export interface PipelineTask {
   title: string
   input: Record<string, any>
   continueOnError?: boolean
+  /** 任务卡片上的开关：false = 运行时跳过这一步（缺省 / true 都是启用） */
+  enabled?: boolean
+  /**
+   * 失败后跳转：本任务执行失败时，跳到这个任务继续跑（跳过中间的任务）。
+   * 只能指向执行顺序里排在后面的任务，否则会成环。
+   */
+  onErrorTaskId?: string
+  /**
+   * 是否已经连到流程里（缺省 = true，老数据不用迁移）。
+   * 画布上新加的步骤是 false：不画自动连线，运行时也跳过，
+   * 必须手动把线连到它身上（`linked` 变 true）才会参与执行。
+   */
+  linked?: boolean
 }
 
 /** 流水线阶段 */
@@ -116,6 +141,11 @@ export interface PipelineStage {
   id: string
   title: string
   tasks: PipelineTask[]
+  /**
+   * 阶段开关（画布阶段卡片右上角）：false = 运行时整段跳过（缺省 / true 都是启用）。
+   * 和任务的 enabled 同一个语义，只是粒度到阶段 —— 临时不想发证书时不用逐个关任务。
+   */
+  enabled?: boolean
 }
 
 /** 流水线触发器 */
@@ -131,6 +161,15 @@ export interface PipelineContent {
   stages: PipelineStage[]
   triggers: PipelineTrigger[]
   triggerKey?: string
+  /**
+   * 画布坐标（可选）。
+   * stages 是画布绝对坐标，tasks 是相对所属阶段容器的坐标 —— 与 Vue Flow 的 parentNode 语义一致。
+   * 后端只校验 stages，这个字段原样存回，老数据没有就按阶段自动排版。
+   */
+  layout?: {
+    stages?: Record<string, { x: number; y: number }>
+    tasks?: Record<string, { x: number; y: number }>
+  }
 }
 
 /** 流水线列表项 */
@@ -148,7 +187,14 @@ export interface PipelineItem {
   updateTime: string
   running: boolean
   stageCount: number
+  /** 会实际执行的步骤数（已排除「已停用」和「未连线」） */
   stepCount: number
+  /** 已停用的步骤数 */
+  stepDisabledCount?: number
+  /** 画布上没连线的步骤数：不连线就不执行 */
+  stepUnlinkedCount?: number
+  /** 结构里的任务总数（含停用 / 未连线） */
+  taskCount?: number
   triggerCount: number
   domains: string[]
   /** 流程分类：cert / deploy / notify（后端解析 content 得出） */
@@ -399,8 +445,50 @@ export function runPipeline(id: number) {
   return request.post<{ historyId: number }>({ url: `/api/pipeline/${id}/run` })
 }
 
+/** 单独运行某一个阶段（阶段卡片上的「执行」按钮），返回 historyId */
+export function runStagePipeline(id: number, stageId: string) {
+  return request.post<{ historyId: number }>({
+    url: `/api/pipeline/${id}/stage/run`,
+    params: { stageId },
+  })
+}
+
 export function togglePipeline(id: number) {
   return request.post<{ disabled: boolean }>({ url: `/api/pipeline/${id}/disable` })
+}
+
+/* ------------------------------------------------------------------ 流水线分组 */
+
+/** 分组列表（成员里带流水线标题，失败转移也带标题） */
+export function fetchPipelineGroupList(params: any) {
+  return request.get({ url: '/api/pipeline-group/list', params })
+}
+
+export function createPipelineGroup(body: any) {
+  return request.post<{ id: number }>({ url: '/api/pipeline-group', params: body })
+}
+
+export function updatePipelineGroup(id: number, body: any) {
+  return request.put({ url: `/api/pipeline-group/${id}`, params: body })
+}
+
+export function deletePipelineGroup(id: number) {
+  return request.del({ url: `/api/pipeline-group/${id}` })
+}
+
+/** 运行分组：按顺序尝试，某条失败就跳它配置的「失败后执行」 */
+export function runPipelineGroup(id: number) {
+  return request.post<{ runId: number; groupId: number }>({
+    url: `/api/pipeline-group/${id}/run`,
+  })
+}
+
+export function fetchPipelineGroupRuns(params: any) {
+  return request.get({ url: '/api/pipeline-group/run/list', params })
+}
+
+export function fetchPipelineGroupRun(runId: number) {
+  return request.get<any>({ url: `/api/pipeline-group/run/${runId}`, showErrorMessage: false })
 }
 
 export function copyPipeline(id: number) {
@@ -481,6 +569,23 @@ export function deleteAccess(id: number) {
 export function fetchAccessDomains(id: number) {
   return request.get<{ type: string; domains: string[]; patterns: string[] }>({
     url: `/api/access/${id}/domains`,
+    showErrorMessage: false,
+  })
+}
+
+/**
+ * 群晖「获取设备ID」：输一次 6 位双重认证验证码，换一个长期免验证码的受信设备令牌。
+ * config 传表单里的当前值（url / username / password / deviceName / insecure），
+ * accessId 非空时后端会拿库里的配置兜底（编辑已有授权时密码框为空）。
+ */
+export function fetchSynologyDeviceId(params: {
+  config: Record<string, any>
+  otpCode: string
+  accessId?: number
+}) {
+  return request.post<{ deviceId: string; deviceName: string }>({
+    url: '/api/access/synology/device-id',
+    params,
     showErrorMessage: false,
   })
 }
@@ -712,6 +817,11 @@ export function testNotification(id: number) {
 
 export function fetchOverview() {
   return request.get<any>({ url: '/api/dashboard/overview' })
+}
+
+/** 系统信息（CPU / 内存 / 硬盘使用率），工作台系统信息看板 */
+export function fetchSystemInfo() {
+  return request.get<any>({ url: '/api/dashboard/system' })
 }
 
 export function fetchSettings() {

@@ -116,7 +116,8 @@ const fastEnterConfig: FastEnterConfig = {
       name: '账号与安全',
       enabled: true,
       order: 9,
-      routeName: 'CertdProfile'
+      // 已合并进「系统设置 → 安全」，快捷入口直接指过去
+      routeName: 'CertdSystemSetting'
     }
   ]
 }

@@ -30,6 +30,7 @@
  * @author Art Design Pro Team
  */
 import type { App } from 'vue'
+import { loadingService } from '@/utils/ui/loading'
 
 const IGNORABLE_SCRIPT_ERRORS = [
   'ResizeObserver loop completed with undelivered notifications.',
@@ -133,11 +134,27 @@ export function registerResourceErrorHandler() {
 }
 
 /**
+ * 兜底：任何全局异常 / 未处理的 Promise 先把全屏 loading 关掉。
+ *
+ * loading 是 lock: true 的遮罩，一旦因为导航被取消、组件抛错等原因没人关它，
+ * 用户看到的就是「整页转圈点不动，只能刷新」。宁可少遮一次，也不能锁死页面。
+ */
+function releaseLoadingOnError() {
+  loadingService.hideLoading()
+}
+
+/**
  * 安装统一错误处理
  */
 export function setupErrorHandle(app: App) {
-  app.config.errorHandler = vueErrorHandler
+  app.config.errorHandler = (err, instance, info) => {
+    vueErrorHandler(err, instance, info)
+    releaseLoadingOnError()
+  }
   window.onerror = scriptErrorHandler
   registerPromiseErrorHandler()
   registerResourceErrorHandler()
+  window.addEventListener('unhandledrejection', releaseLoadingOnError)
+  // 捕获阶段能拿到资源加载失败（script / link），这种错误同样会把页面卡在 loading
+  window.addEventListener('error', releaseLoadingOnError, true)
 }

@@ -67,6 +67,33 @@
             </ElInput>
           </ElFormItem>
 
+          <!-- 图形验证码：密码错误达到阈值后才出现，不打扰正常登录 -->
+          <ElFormItem v-if="captchaNeeded" prop="captchaCode">
+            <div class="captcha-row">
+              <ElInput
+                v-model.trim="formData.captchaCode"
+                class="login-input"
+                maxlength="4"
+                autocomplete="off"
+                placeholder="图形验证码"
+              >
+                <template #prefix>
+                  <ArtSvgIcon icon="ri:shield-keyhole-line" class="input-icon" />
+                </template>
+              </ElInput>
+              <button
+                type="button"
+                class="captcha-img"
+                :title="captchaLoading ? '正在刷新' : '看不清？点击换一张'"
+                :disabled="captchaLoading"
+                @click="refreshCaptcha"
+              >
+                <img v-if="captchaImage" :src="captchaImage" alt="图形验证码" />
+                <span v-else class="captcha-img-empty">加载中…</span>
+              </button>
+            </div>
+          </ElFormItem>
+
           <ElButton
             class="login-btn"
             type="primary"
@@ -180,7 +207,7 @@
   import { useSiteStore } from '@/store/modules/site'
   import { useI18n } from 'vue-i18n'
   import { HttpError } from '@/utils/http/error'
-  import { bind2fa, fetchBind2faSecret, fetchLogin } from '@/api/auth'
+  import { bind2fa, fetchBind2faSecret, fetchCaptcha, fetchLogin } from '@/api/auth'
   import { fetchAuthSettings } from '@/api/certd'
   import { languageOptions } from '@/locales'
   import type { LanguageEnum } from '@/enums/appEnum'
@@ -203,8 +230,36 @@
 
   const formData = reactive({
     username: '',
-    password: ''
+    password: '',
+    captchaCode: ''
   })
+
+  // ---- 图形验证码：密码错够了才要求，正常登录看不到这一行 ----
+  const captchaNeeded = ref(false)
+  const captchaImage = ref('')
+  const captchaToken = ref('')
+  const captchaLoading = ref(false)
+
+  const refreshCaptcha = async () => {
+    captchaLoading.value = true
+    try {
+      const data = await fetchCaptcha()
+      captchaImage.value = data?.image || ''
+      captchaToken.value = data?.token || ''
+      formData.captchaCode = ''
+    } catch {
+      captchaImage.value = ''
+      captchaToken.value = ''
+    } finally {
+      captchaLoading.value = false
+    }
+  }
+
+  /** 后端说需要验证码时，把输入行露出来并换一张新图 */
+  const requireCaptcha = async () => {
+    if (!captchaNeeded.value) captchaNeeded.value = true
+    await refreshCaptcha()
+  }
 
   const rules = computed<FormRules>(() => ({
     username: [{ required: true, message: t('login.placeholder.username'), trigger: 'blur' }],
@@ -270,10 +325,21 @@
       const valid = await formRef.value.validate()
       if (!valid) return
 
+      if (captchaNeeded.value && !formData.captchaCode) {
+        ElMessage.warning('请输入图形验证码')
+        return
+      }
+
       loading.value = true
 
-      const { username, password } = formData
-      const res = await fetchLogin({ userName: username, password })
+      const { username, password, captchaCode } = formData
+      const res = await fetchLogin({
+        userName: username,
+        password,
+        ...(captchaNeeded.value
+          ? { captchaCode, captchaToken: captchaToken.value }
+          : {})
+      })
 
       // 账号开了两步验证：先弹验证码框，密码不再重复提交
       if (res?.need2fa) {
@@ -294,7 +360,11 @@
 
       finishLogin(res)
     } catch (error) {
-      if (!(error instanceof HttpError)) {
+      // 密码错误 / 验证码错误：后端会带 needCaptcha，立刻把验证码行露出来
+      const needCaptcha = (error as any)?.data?.needCaptcha
+      if (needCaptcha) {
+        await requireCaptcha()
+      } else if (!(error instanceof HttpError)) {
         console.error('[Login] Unexpected error:', error)
       }
     } finally {
@@ -485,6 +555,46 @@
     margin-top: 14px;
     font-size: 14px;
     border-radius: var(--custom-radius);
+  }
+
+  /* ---- 图形验证码 ---- */
+  .captcha-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+  }
+
+  .captcha-img {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 108px;
+    height: 40px;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: var(--custom-radius);
+    transition: border-color 0.16s ease;
+  }
+
+  .captcha-img:hover {
+    border-color: var(--el-color-primary);
+  }
+
+  .captcha-img img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .captcha-img-empty {
+    font-size: 12px;
+    color: var(--art-gray-500);
   }
 
   .bottom-hint {

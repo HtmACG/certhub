@@ -164,11 +164,12 @@ async def _unhandled(request: Request, exc: Exception):
                                  "data": None})
 
 
-from .routers import access, auth, cert, dashboard, dns_record, domain, history, monitor, notification, openapi, pipeline, site, settings as settings_router, user  # noqa: E402
+from .routers import access, auth, cert, dashboard, dns_record, domain, history, monitor, notification, openapi, pipeline, pipeline_group, site, settings as settings_router, user  # noqa: E402
 
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(pipeline.router)
+app.include_router(pipeline_group.router)
 app.include_router(history.router)
 app.include_router(access.router)
 app.include_router(cert.router)

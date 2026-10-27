@@ -15,6 +15,17 @@ export function fetchLogin(params: Api.Auth.LoginParams) {
 }
 
 /**
+ * 图形验证码
+ * 免登录：密码错误达到阈值后，登录接口会回 needCaptcha，登录页再来取一张新图
+ */
+export function fetchCaptcha() {
+  return request.get<{ token: string; image: string; expiresIn: number; enabled: boolean }>({
+    url: '/api/auth/captcha',
+    showErrorMessage: false
+  })
+}
+
+/**
  * 强制绑定两步验证：获取密钥与 otpauth 链接
  * 只认登录接口下发的 bind 令牌，不走已登录状态
  */

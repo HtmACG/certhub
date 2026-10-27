@@ -108,6 +108,23 @@ ACCESS_TYPES: dict[str, dict[str, Any]] = {
               helper="仅使用 STS 临时凭证时需要填写"),
         ],
     },
+    "trustasia": {
+        "name": "TrustAsia 亚洲诚信",
+        "category": "cloud",
+        "desc": "CertCloud OpenAPI 证书申请（Key ID + API Key），支持 DV / OV / EV、泛域名与多域名",
+        "inputs": [
+            f("keyId", "Key ID", required=True,
+              helper="CertCloud 控制台 → 账户/开发者 → OpenAPI 密钥里创建的 Key ID"),
+            f("authKey", "API Key", "password", required=True,
+              helper="创建密钥时生成的完整 API Key（只显示一次，丢了就重新建一个）"),
+            f("environment", "接口环境", "select", default="prod",
+              options=[{"label": "正式环境（api.certcloud.cn）", "value": "prod"},
+                       {"label": "测试环境（api-uat.certcloud.cn）", "value": "uat"}],
+              helper="正式申请选正式环境；联调可以切测试环境"),
+            f("apiBase", "自定义接口地址", default="",
+              helper="留空即可。只有走自建代理 / 本地联调时才填，例如 http://127.0.0.1:9000/openapi/v3"),
+        ],
+    },
     "ssh": {
         "name": "主机 SSH",
         "category": "host",
@@ -184,30 +201,36 @@ ACCESS_TYPES: dict[str, dict[str, Any]] = {
               # 老授权没有这个开关，靠 otpType 推导，避免默认值把已有行为改掉
               deriveFrom={"key": "otpType",
                           "map": {"none": False, "key": True, "code": True}},
-              helper="DSM「个人设置 → 双重认证」是否开着。开着就必须给验证码，"
+              helper="DSM「个人设置 → 双重认证」是否开着。开着就必须过一次验证，"
                      "否则登录会返回 403 / 404"),
+            # 与 certd 一致：输一次 6 位验证码换「设备ID」，之后登录只带 device_id 免验证码
+            f("deviceId", "设备 ID", "password", default="", group="二步验证",
+              showWhen={"key": "twoFactor", "value": True},
+              action={"type": "synology-device-id", "label": "获取设备ID"},
+              placeholder="点右侧「获取设备ID」自动填入",
+              helper="填好上面的地址 / 账号 / 密码后点「获取设备ID」，输入双重认证 APP 上的 6 位码，"
+                     "它会自动填入（只需要做一次）。"
+                     "前置：DSM → 控制面板 → 安全性 → 勾选「允许网页浏览器的用户通过信任设备来跳过双重验证」；"
+                     "DSM 的「信任设备」列表里会多一条记录，不要删；"
+                     "证书续签间隔建议 ≤30 天，避免设备 ID 过期（过期后重新获取一次即可）"),
+            f("deviceName", "设备名", default="CertHub", group="二步验证",
+              showWhen={"key": "twoFactor", "value": True},
+              helper="DSM「信任设备」列表里显示的名字，同一台机器随便起，多个流水线共用同一个即可"),
+            f("otpSecret", "验证密钥（可选兜底）", "password", default="", group="二步验证",
+              showWhen={"key": "twoFactor", "value": True},
+              helper="没有设备 ID 时的兜底：DSM → 个人设置 → 双重认证 → 「遗失手机或设备」里那串 Base32"
+                     "（例：JBSWY3DPEHPK3PXP）。填了它，设备 ID 过期时能自动用现算的验证码重登"),
             f("otpType", "验证码来源", "select", default="key", group="二步验证",
               showWhen={"key": "twoFactor", "value": True},
               options=[
                   {"label": "验证密钥自动生成（推荐，长期可用）", "value": "key"},
                   {"label": "临时填 6 位验证码（仅排障）", "value": "code"},
               ],
-              helper="选「验证密钥」后每次部署自动现算验证码，不用人工续期"),
-            f("otpSecret", "验证密钥", "password", default="", group="二步验证",
-              showWhen=[{"key": "twoFactor", "value": True},
-                        {"key": "otpType", "values": ["key"]}],
-              helper="TOTP 密钥：DSM → 个人设置 → 双重认证 → 「遗失手机或设备」里那串 Base32"
-                     "（例：JBSWY3DPEHPK3PXP）。填一次即可，之后每次部署自动生成验证码"),
+              helper="只在没有设备 ID 时才有意义；长期自动续签优先用「设备 ID」"),
             f("otpCode", "6 位验证码（临时）", "password", default="", group="二步验证",
               showWhen=[{"key": "twoFactor", "value": True},
                         {"key": "otpType", "values": ["code"]}],
-              helper="30 秒过期，只适合当下排障；自动续签请改用「验证密钥」"),
-            f("deviceId", "设备 ID", default="CertHub", group="二步验证", placeholder="CertHub",
-              helper="群晖把「这台设备已通过二步验证」记在这个 ID 下。默认 CertHub 即可，"
-                     "多个流水线想共用登录状态就填同一个"),
-            f("deviceToken", "设备令牌", "password", default="", group="二步验证",
-              helper="登录成功（点「测试」或跑一次部署）后会自动回填，之后免验证码；"
-                     "换设备 / 重装 DSM 时清空让它重新生成"),
+              helper="30 秒过期，只适合当下排障；长期请用「设备 ID」或「验证密钥」"),
             # ---- 证书 ----
             f("asDefault", "设为默认证书", "switch", default=True, group="证书",
               helper="导入后把这张证书设为 DSM 默认证书（DSM 与套件 https 都用它）"),
@@ -419,6 +442,7 @@ ACCESS_TYPES: dict[str, dict[str, Any]] = {
               options=[
                   {"label": "Google Trust Services", "value": "google"},
                   {"label": "SSL.com", "value": "sslcom"},
+                  {"label": "FreeSSL / LiteSSL（亚洲诚信）", "value": "litessl"},
                   {"label": "其它 CA", "value": "other"},
               ],
               helper="只做标识与提示用，实际以证书申请任务里选的 CA 为准"),
@@ -481,6 +505,7 @@ _ACCESS_VISUAL: dict[str, tuple[str, str, str]] = {
     "k8s": ("logos:kubernetes", "#326ce5", "K"),
     "safeline": ("thesvg-color:safeline", "#0b6cf0", "雷"),
     "baiducloud": ("simple-icons:baidu", "#2932e1", "百"),
+    "trustasia": ("", "#c6272a", "信"),
     "eab": ("mdi:key-variant", "#8b5cf6", "E"),
 }
 
@@ -552,6 +577,7 @@ _CERT_INPUTS = [
           {"label": "ZeroSSL（免费 DV，90 天，自动换取 EAB）", "value": "zerossl"},
           {"label": "Google Trust Services（免费 DV，90 天，必须先建 EAB 凭据）", "value": "google"},
           {"label": "Buypass（免费 DV，180 天）", "value": "buypass"},
+          {"label": "FreeSSL / LiteSSL（亚洲诚信，免费 DV，需 EAB）", "value": "litessl"},
           {"label": "自定义 ACME（填目录地址）", "value": "custom"},
       ],
       helper="不同 CA 的资质要求不同：Google Trust Services 与 SSL.com 这类 CA 必须先有 "
@@ -565,8 +591,8 @@ _CERT_INPUTS = [
       helper="ACME 账户注册邮箱，CA 的证书到期提醒也发到这里；账号私钥首次申请时自动生成，"
              "跟着流水线保存，续期时直接复用，不需要在授权管理里预先建账号"),
     f("eabAccessId", "EAB 凭据", "access", accessCategory="cert",
-      showWhen={"key": "provider", "values": ["google", "custom"]},
-      helper="Google Trust Services / SSL.com 这类 CA 必须先有 EAB 凭据："
+      showWhen={"key": "provider", "values": ["google", "custom", "litessl"]},
+      helper="Google Trust Services / SSL.com / FreeSSL（LiteSSL）这类 CA 必须先有 EAB 凭据："
              "到「授权管理 → 证书签发」新建一条 EAB 凭据，再在这里选它。"
              "Google 的 EAB key 创建后 7 天失效，过期后在授权里更新即可，不用改流水线"),
     f("useProxy", "使用代理访问 CA", "switch", default=False,
@@ -669,6 +695,13 @@ _CERT_INPUTS = [
       ),
     f("forceUpdate", "强制续期", "switch", default=False, group="续期策略",
       helper="开启后忽略剩余有效期，每次执行都重新申请证书"),
+    f("skipIfCertificateExists", "证书已存在且未过期就跳过", "switch", default=True,
+      group="续期策略",
+      helper="证书库里已有同域名的有效证书时不重复申请，直接执行后面的部署 / 通知步骤"),
+    f("skipRecentMinutes", "刚申请过就跳过（分钟）", "number", default=10, min=0, max=1440,
+      group="续期策略", placeholder="10",
+      helper="同一套域名在这么多分钟内已经签出过证书就不再下单，避免重复运行 / 多环境同时触发"
+             "导致重复申请；填 0 关闭这条判断"),
 ]
 
 CERT_OUTPUTS = [
@@ -1225,6 +1258,12 @@ TASK_PLUGINS: list[dict[str, Any]] = [
             f("keyType", "密钥类型", "select", default="ec256",
               options=[{"label": "ECC 256", "value": "ec256"},
                        {"label": "RSA 2048", "value": "rsa2048"}]),
+            f("forceUpdate", "强制重新生成", "switch", default=False, group="续期策略",
+              helper="开启后忽略剩余有效期与已有证书，每次执行都重新生成"),
+            f("skipIfCertificateExists", "已有未过期证书就跳过", "switch", default=True,
+              group="续期策略"),
+            f("skipRecentMinutes", "刚生成过就跳过（分钟）", "number", default=10, min=0, max=1440,
+              group="续期策略", placeholder="10"),
         ],
         "outputs": CERT_OUTPUTS,
     },
@@ -1251,6 +1290,18 @@ TASK_PLUGINS: list[dict[str, Any]] = [
             f("pollInterval", "轮询间隔（秒）", "number", default=10),
             f("timeout", "超时时间（秒）", "number", default=900,
               helper="火山引擎签发通常需要 1~10 分钟"),
+            f("renewDays", "提前续期天数", "number", default=20, min=1, max=90,
+              group="续期策略", placeholder="20",
+              helper="证书剩余天数少于这个值才真正去续签；重复执行不会重复申请"),
+            f("forceUpdate", "强制续期", "switch", default=False, group="续期策略",
+              helper="开启后忽略剩余有效期与已有证书，每次执行都重新申请"),
+            f("skipIfCertificateExists", "证书已存在且未过期就跳过", "switch", default=True,
+              group="续期策略",
+              helper="证书库里已有同域名的有效证书时跳过申请，继续执行后面的部署 / 通知步骤"),
+            f("skipRecentMinutes", "刚申请过就跳过（分钟）", "number", default=10, min=0, max=1440,
+              group="续期策略", placeholder="10",
+              helper="这套域名在这么多分钟内已签出过证书就不再下单，避免重复申请；填 0 关闭"),
+
         ],
         "outputs": CERT_OUTPUTS,
     },
@@ -1279,6 +1330,18 @@ TASK_PLUGINS: list[dict[str, Any]] = [
             f("pollInterval", "轮询间隔（秒）", "number", default=10),
             f("timeout", "超时时间（秒）", "number", default=900,
               helper="个人测试证书通常几分钟内签发"),
+            f("renewDays", "提前续期天数", "number", default=20, min=1, max=90,
+              group="续期策略", placeholder="20",
+              helper="证书剩余天数少于这个值才真正去续签；重复执行不会重复申请"),
+            f("forceUpdate", "强制续期", "switch", default=False, group="续期策略",
+              helper="开启后忽略剩余有效期与已有证书，每次执行都重新申请"),
+            f("skipIfCertificateExists", "证书已存在且未过期就跳过", "switch", default=True,
+              group="续期策略",
+              helper="证书库里已有同域名的有效证书时跳过申请，继续执行后面的部署 / 通知步骤"),
+            f("skipRecentMinutes", "刚申请过就跳过（分钟）", "number", default=10, min=0, max=1440,
+              group="续期策略", placeholder="10",
+              helper="这套域名在这么多分钟内已签出过证书就不再下单，避免重复申请；填 0 关闭"),
+
         ],
         "outputs": CERT_OUTPUTS,
     },
@@ -1300,6 +1363,190 @@ TASK_PLUGINS: list[dict[str, Any]] = [
               helper="用于自动添加 TXT 验证记录，可以是任意服务商的授权"),
             f("pollInterval", "轮询间隔（秒）", "number", default=10),
             f("timeout", "超时时间（秒）", "number", default=900),
+            f("renewDays", "提前续期天数", "number", default=20, min=1, max=90,
+              group="续期策略", placeholder="20",
+              helper="证书剩余天数少于这个值才真正去续签；重复执行不会重复申请"),
+            f("forceUpdate", "强制续期", "switch", default=False, group="续期策略",
+              helper="开启后忽略剩余有效期与已有证书，每次执行都重新申请"),
+            f("skipIfCertificateExists", "证书已存在且未过期就跳过", "switch", default=True,
+              group="续期策略",
+              helper="证书库里已有同域名的有效证书时跳过申请，继续执行后面的部署 / 通知步骤"),
+            f("skipRecentMinutes", "刚申请过就跳过（分钟）", "number", default=10, min=0, max=1440,
+              group="续期策略", placeholder="10",
+              helper="这套域名在这么多分钟内已签出过证书就不再下单，避免重复申请；填 0 关闭"),
+        ],
+        "outputs": CERT_OUTPUTS,
+    },
+    {
+        "type": "CertApplyTrustAsia",
+        "name": "TrustAsia 亚洲诚信证书",
+        "group": "cert",
+        "icon": "cloud",
+        "desc": "向 TrustAsia（CertCloud）下单申请 DV / OV / EV 证书，自动写 DNS 验证记录并回传证书",
+        "inputs": [
+            f("domains", "证书域名", "tags", required=True, domainFrom="dnsAccessId",
+              helper="支持多域名与泛域名：多域名产品一次可以填多个（逗号或换行分隔），"
+                     "泛域名写 *.example.com。域名个数、能不能泛域名由所选产品决定"),
+            f("accessId", "TrustAsia 授权", "access", accessCategory="cloud", required=True,
+              helper="在「授权管理 → 云厂商」新建一条 TrustAsia 授权，填 CertCloud 的 Key ID 与 API Key"),
+            f("productId", "证书产品", "select", default="trustasia_ssl_dv_v2",
+              required=True,
+              options=[
+                  {"label": "域名型 DV · 单域名（trustasia_ssl_dv_v2）", "value": "trustasia_ssl_dv_v2"},
+                  {"label": "域名型 DV · 通配符（trustasia_ssl_dv_wildcard_v2）",
+                   "value": "trustasia_ssl_dv_wildcard_v2"},
+                  {"label": "域名型 DV · 多域名（trustasia_ssl_dv_sans_v2）", "value": "trustasia_ssl_dv_sans_v2"},
+                  {"label": "企业型 OV · 单域名（trustasia_ssl_ov_v2）", "value": "trustasia_ssl_ov_v2"},
+                  {"label": "企业型 OV · 通配符（trustasia_ssl_ov_wildcard_v2）",
+                   "value": "trustasia_ssl_ov_wildcard_v2"},
+                  {"label": "企业型 OV · 多域名（trustasia_ssl_ov_sans_v2）", "value": "trustasia_ssl_ov_sans_v2"},
+                  {"label": "增强型 EV · 单域名（trustasia_ssl_ev_v2）", "value": "trustasia_ssl_ev_v2"},
+                  {"label": "增强型 EV · 多域名（trustasia_ssl_ev_sans_v2）", "value": "trustasia_ssl_ev_sans_v2"},
+              ],
+              helper="产品 ID 就是下单接口的 product_id。OV / EV 需要组织审核，账号里要先有对应额度"),
+            f("dcvMethod", "域名验证方式", "select", default="dns",
+              options=[
+                  {"label": "DNS TXT 验证（推荐，支持泛域名）", "value": "dns"},
+                  {"label": "CNAME 验证", "value": "cname"},
+                  {"label": "HTTP 文件验证（不支持泛域名）", "value": "file"},
+                  {"label": "邮件验证（需要人工点确认邮件）", "value": "email"},
+              ],
+              helper="DNS / CNAME 需要选 DNS 授权，流水线会自动添加并清理验证记录；"
+                     "文件验证会写进网站根目录"),
+            f("dnsAccessId", "DNS 授权", "access", accessCategory="dns", required=True,
+              showWhen={"key": "dcvMethod", "values": ["dns", "dns-persist", "cname"]},
+              helper="用于自动添加 TXT / CNAME 验证记录，可以是任意 DNS 服务商的授权"),
+            f("httpUploadType", "验证文件写入方式", "select", default="local",
+              showWhen={"key": "dcvMethod", "value": "file"},
+              options=[
+                  {"label": "写入本机目录", "value": "local"},
+                  {"label": "上传到远程主机", "value": "ssh"},
+              ]),
+            f("httpWebRoot", "网站根目录", default="/var/www/html",
+              showWhen={"key": "dcvMethod", "value": "file"},
+              helper="CA 给的验证文件路径会拼在这个目录后面"),
+            f("httpAccessId", "主机授权", "access", accessCategory="host",
+              showWhen=[{"key": "dcvMethod", "value": "file"},
+                        {"key": "httpUploadType", "value": "ssh"}]),
+            f("keyType", "密钥算法", "select", default="rsa2048",
+              options=[
+                  {"label": "RSA 2048（兼容性最好）", "value": "rsa2048"},
+                  {"label": "RSA 3072", "value": "rsa3072"},
+                  {"label": "RSA 4096", "value": "rsa4096"},
+              ],
+              helper="私钥在本机生成，只把 CSR 提交给 CA，私钥不会经过网络"),
+            f("validityMonths", "订单有效期（月）", "number", default=3,
+              helper="3 表示 90 天；其他取值必须是 12 的倍数（12 = 1 年，24 = 2 年），"
+                     "可用范围受产品限制"),
+            f("email", "联系人邮箱", default="",
+              helper="DV 证书的 CA 通知邮箱；OV / EV 会用作联系人邮箱（下面填了以那边为准）"),
+
+            # ---------------- 组织信息（OV / EV 必填） ----------------
+            f("organizationId", "已有组织 ID", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]},
+              helper="填了已有组织 ID 就直接复用（其余组织字段可留空）；"
+                     "第一次申请请把下面填全，CA 审核通过后会记住这个组织"),
+            f("organizationName", "组织名称", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]},
+              helper="与营业执照上的名称一致"),
+            f("organizationAddress", "组织地址", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]}),
+            f("organizationCity", "城市", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]}),
+            f("organizationState", "省份 / 地区", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]}),
+            f("organizationZipCode", "邮编", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]}),
+            f("organizationCountry", "国家代码", default="CN",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]},
+              helper="两位国家代码，中国大陆填 CN"),
+            f("organizationTelephone", "组织电话", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]},
+              helper="CA 会打这个电话做组织核验，务必能接通"),
+            f("organizationUscc", "统一社会信用代码", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]},
+              helper="国内企业填营业执照上的统一社会信用代码，海外企业可留空"),
+            f("contactFirstName", "联系人名", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]}),
+            f("contactLastName", "联系人姓", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]}),
+            f("contactJobTitle", "联系人职位", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]}),
+            f("contactTelephone", "联系人电话", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]}),
+            f("contactEmail", "联系人邮箱", default="",
+              group="组织与联系人（OV / EV）",
+              showWhen={"key": "productId", "values": [
+                  "trustasia_ssl_ov_v2", "trustasia_ssl_ov_wildcard_v2", "trustasia_ssl_ov_sans_v2",
+                  "trustasia_ssl_ev_v2", "trustasia_ssl_ev_sans_v2"]}),
+
+            # ---------------- 申请成功通知 ----------------
+            f("notifyOnSuccess", "申请成功后发通知", "switch", default=True,
+              group="成功通知",
+              helper="证书签发成功就通过通知渠道发一条（域名 + 有效期），不用再单独加「发送通知」任务"),
+            f("notificationId", "通知渠道", "notification",
+              group="成功通知",
+              helper="留空则用「通知渠道」里设为默认的那一条；没有配置渠道时静默跳过"),
+
+            # ---------------- 高级 ----------------
+            f("pollInterval", "轮询间隔（秒）", "number", default=10, group="高级设置"),
+            f("timeout", "超时时间（秒）", "number", default=1800, group="高级设置",
+              helper="DV 通常几分钟；OV / EV 要人工审核，建议 3600 以上"),
+            f("userExternalId", "终端用户标识", default="", group="高级设置",
+              helper="多租户平台必须填稳定且唯一的值（用于隔离组织复用与长效验证绑定）；"
+                     "单账号自用可留空"),
+
+            # ---------------- 续期与跳过 ----------------
+            f("renewDays", "提前续期天数", "number", default=20, min=1, max=90,
+              group="续期策略", placeholder="20",
+              helper="证书剩余天数少于这个值才真正去下单；重复执行不会重复申请"),
+            f("forceUpdate", "强制续期", "switch", default=False, group="续期策略",
+              helper="开启后忽略剩余有效期与已有证书，每次执行都重新下单"),
+            f("skipIfCertificateExists", "证书已存在且未过期就跳过", "switch", default=True,
+              group="续期策略",
+              helper="证书库里已有同域名的有效证书时跳过申请，继续执行后面的部署 / 通知步骤"),
+            f("skipRecentMinutes", "刚申请过就跳过（分钟）", "number", default=10, min=0, max=1440,
+              group="续期策略", placeholder="10",
+              helper="这套域名在这么多分钟内已签出过证书就不再下单；填 0 关闭"),
         ],
         "outputs": CERT_OUTPUTS,
     },
@@ -1347,8 +1594,8 @@ TASK_PLUGINS: list[dict[str, Any]] = [
         "desc": "上传证书并绑定到阿里云 CDN 加速域名",
         "inputs": [
             f("accessId", "阿里云授权", "access", accessCategory="cloud", required=True),
-            f("domain", "CDN 域名", "select", required=True,
-              helper="选好授权后自动拉取加速域名，并按证书域名选中匹配的那个",
+            f("domain", "CDN 域名", "tags", required=True,
+              helper="可以从账号下自动拉取加速域名，支持多选并按证书域名自动选中",
               remote="cdnDomains", remoteFrom="accessId", autoMatchDomains=True),
             f("certName", "证书名称", default="{domain}-{timestamp}"),
         ],
@@ -1363,8 +1610,8 @@ TASK_PLUGINS: list[dict[str, Any]] = [
         "desc": "上传证书并绑定到腾讯云 CDN 加速域名",
         "inputs": [
             f("accessId", "腾讯云授权", "access", accessCategory="cloud", required=True),
-            f("domain", "CDN 域名", "select", required=True,
-              helper="选好授权后自动拉取加速域名，并按证书域名选中匹配的那个",
+            f("domain", "CDN 域名", "tags", required=True,
+              helper="可以从账号下自动拉取加速域名，支持多选并按证书域名自动选中",
               remote="cdnDomains", remoteFrom="accessId", autoMatchDomains=True),
         ],
         "outputs": [],
@@ -1594,6 +1841,8 @@ _CERT_ACCESS_TYPES: dict[str, dict[str, list[str]]] = {
     "CertApplyVolcengine": {"accessId": ["volcengine"], "dnsAccessId": _DNS_CAPABLE_TYPES},
     "CertApplyAliyun": {"accessId": ["aliyun"], "dnsAccessId": _DNS_CAPABLE_TYPES},
     "CertApplyTencent": {"accessId": ["tencentcloud"], "dnsAccessId": _DNS_CAPABLE_TYPES},
+    "CertApplyTrustAsia": {"accessId": ["trustasia"], "dnsAccessId": _DNS_CAPABLE_TYPES,
+                           "httpAccessId": ["ssh"]},
 }
 
 for _plugin in TASK_PLUGINS:
@@ -1713,6 +1962,14 @@ ACME_PROVIDERS = {
         "directory": "https://dv.acme-v02.api.pki.goog/directory",
         "eab": True,
     },
+    "litessl": {
+        # FreeSSL.cn 的 ACME v2 服务（LiteSSL 公益项目，签发方 TrustAsia）。
+        # 老地址 https://acme.freessl.cn/directory 已下线（域名不再解析），
+        # 现行目录是 acme.litessl.com，且 meta.externalAccountRequired=true（必须带 EAB）。
+        "name": "FreeSSL / LiteSSL",
+        "directory": "https://acme.litessl.com/acme/v2/directory",
+        "eab": True,
+    },
     "buypass": {
         "name": "Buypass",
         "directory": "https://api.buypass.com/acme/directory",
@@ -1751,6 +2008,13 @@ _CERT_SOURCE_META: dict[str, dict[str, Any]] = {
         "validity": "180 天",
         "logo": "",
         "color": "#00979d",
+    },
+    "litessl": {
+        "desc": "FreeSSL.cn 的 ACME 服务（LiteSSL 公益项目，TrustAsia 签发），"
+                "在 FreeSSL「证书自动化 → ACME 账户管理」建 EAB 凭据后全自动申请",
+        "validity": "90 天",
+        "logo": "",
+        "color": "#6a4dfd",
     },
     "custom": {
         "desc": "接入任意 ACME v2 兼容 CA，例如 ssl.com、自建 step-ca",
@@ -1791,6 +2055,18 @@ _CERT_PLUGIN_META: dict[str, dict[str, Any]] = {
         "tags": ["免费", "DV", "国内 CA"],
         "logo": "thesvg-color:tencentcloud",
         "color": "#006eff",
+    },
+    "CertApplyTrustAsia": {
+        "name": "TrustAsia 亚洲诚信",
+        "kind": "商业 CA",
+        "desc": "TrustAsia（CertCloud）下单签发，支持 DV / OV / EV、泛域名与多域名；"
+                "自动写 DNS / CNAME 验证记录",
+        "validity": "3 个月起（按产品）",
+        "challenge": "DNS / CNAME / 文件验证",
+        "tags": ["DV", "OV", "EV", "泛域名", "国内 CA"],
+        "logo": "",
+        "logoBrand": "trustasia",
+        "color": "#c6272a",
     },
     "CertApplySelfSigned": {
         "name": "自签证书",
@@ -1860,7 +2136,8 @@ def _build_supported_certs() -> list[dict[str, Any]]:
             "taskType": plugin_type,
             "logo": meta.get("logo", ""),
             "favicon": "",
-            "logoFile": _logo_file_of(meta.get("logo", ""), "cert", plugin_type),
+            "logoFile": (_brand_logo(meta["logoBrand"]) if meta.get("logoBrand")
+                         else _logo_file_of(meta.get("logo", ""), "cert", plugin_type)),
             "color": meta.get("color", ""),
         })
 
@@ -1881,6 +2158,19 @@ def _build_supported_certs() -> list[dict[str, Any]]:
         "color": "#e6a23c",
     })
     return items
+
+
+# 申请类任务：任务选择器与概览页共用同一张品牌 logo（授权类型里那份本地图）
+for _plugin in TASK_PLUGINS:
+    _cert_meta = _CERT_PLUGIN_META.get(_plugin["type"])
+    if not _cert_meta:
+        continue
+    _plugin.setdefault("logo", _cert_meta.get("logo", ""))
+    _plugin.setdefault("color", _cert_meta.get("color", ""))
+    _plugin.setdefault(
+        "logoFile",
+        _brand_logo(_cert_meta["logoBrand"]) if _cert_meta.get("logoBrand")
+        else _logo_file_of(_cert_meta.get("logo", ""), "cert", _plugin["type"]))
 
 
 #: 证书来源按用途分组：group=apply 能签发，group=import 只能导入

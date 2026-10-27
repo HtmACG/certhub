@@ -68,6 +68,10 @@ let routeInitFailed = false
 
 // 路由初始化进行中标记，防止并发请求
 let routeInitInProgress = false
+// 正在进行的那次初始化；并发进来的导航等它结束后再重新导航，
+// 而不是 next(false) 直接取消 —— 取消的导航不会触发 afterEach，
+// 全屏 loading（lock: true）就再也关不掉了，表现为「页面一直转圈卡死」。
+let routeInitPromise: Promise<void> | null = null
 
 /**
  * 获取 pendingLoading 状态
@@ -170,10 +174,19 @@ async function handleRouteGuard(
 
   // 3. 处理动态路由注册
   if (!routeRegistry?.isRegistered() && userStore.isLogin) {
-    // 防止并发请求（快速连续导航场景）
+    // 防止并发请求（快速连续导航场景）：
+    // 等正在进行的初始化结束，然后重新导航；绝不能 next(false)（见 routeInitPromise 注释）
     if (routeInitInProgress) {
-      // 正在初始化中，等待完成后重新导航
-      next(false)
+      const pending = routeInitPromise
+      if (pending) {
+        try {
+          await pending
+        } catch {
+          // 初始化失败时由 handleDynamicRoutes 自己跳 500，这里继续走下面的判断
+        }
+      }
+      closeLoading()
+      next({ path: to.path, query: to.query, hash: to.hash, replace: true })
       return
     }
     await handleDynamicRoutes(to, next, router)
@@ -212,6 +225,7 @@ function handleLoginStatus(
   }
 
   // 未登录且访问需要权限的页面，跳转到登录页并携带 redirect 参数
+  closeLoading()
   userStore.logOut()
   next({
     name: 'Login',
@@ -264,6 +278,12 @@ async function handleDynamicRoutes(
   // 显示 loading
   pendingLoading = true
   loadingService.showLoading()
+
+  // 记下这次初始化，供并发导航等待（结束时一定 resolve，见 finally）
+  let finishInit: () => void = () => {}
+  routeInitPromise = new Promise<void>((resolve) => {
+    finishInit = resolve
+  })
 
   try {
     // 1. 获取用户信息
@@ -361,6 +381,10 @@ async function handleDynamicRoutes(
 
     // 跳转到 500 页面，使用 replace 避免产生历史记录
     next({ name: 'Exception500', replace: true })
+  } finally {
+    routeInitInProgress = false
+    finishInit()
+    routeInitPromise = null
   }
 }
 

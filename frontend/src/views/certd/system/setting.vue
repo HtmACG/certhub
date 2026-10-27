@@ -9,7 +9,7 @@
   <div class="certd-setting art-full-height g-scope" v-loading="loading">
     <ElCard class="art-card" shadow="never">
       <ElTabs v-model="activeTab">
-        <ElTabPane label="站点信息" name="site">
+        <ElTabPane v-if="isAdmin" label="站点信息" name="site">
           <ElForm label-position="top" class="setting-form">
             <ElRow :gutter="16">
               <ElCol :xs="24" :sm="12" :md="12" :lg="8">
@@ -101,12 +101,24 @@
           </ElForm>
         </ElTabPane>
 
-        <ElTabPane v-if="isAdmin" label="安全" name="security">
-          <ElForm label-position="top" class="setting-form">
+        <!--
+          「安全」页签对所有登录用户可见：
+          上半部分是自己的账号（原「账号与安全」页，已合并进来），
+          下半部分的登录策略只有管理员能改。
+        -->
+        <ElTabPane label="安全" name="security">
+          <AccountSecurity />
+
+          <ElForm v-if="isAdmin" label-position="top" class="setting-form policy-form">
+            <div class="sec-title">
+              登录安全策略
+              <span class="sec-title-tip">对全站所有账号生效</span>
+            </div>
             <ElRow :gutter="16">
               <ElCol :xs="24" :sm="12" :md="8">
                 <ElFormItem label="登录失败上限（次）">
                   <ElInputNumber v-model="security.loginFailLimit" :min="0" :max="50" class="w-full" />
+                  <p class="field-tip">填 0 表示不限制、也不锁定</p>
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="8">
@@ -117,14 +129,35 @@
               <ElCol :xs="24" :sm="12" :md="8">
                 <ElFormItem label="强制两步验证">
                   <ElSwitch v-model="security.force2fa" />
+                  <p class="field-tip">开启后未绑定 2FA 的账号登录时必须先绑定</p>
+                </ElFormItem>
+              </ElCol>
+              <ElCol :xs="24" :sm="12" :md="8">
+                <ElFormItem label="密码错误后要求图形验证码">
+                  <ElSwitch v-model="security.captchaEnabled" />
+                  <p class="field-tip">关闭后登录只校验密码，不再出验证码</p>
+                </ElFormItem>
+              </ElCol>
+              <ElCol :xs="24" :sm="12" :md="8">
+                <ElFormItem label="连续错误几次后出现验证码">
+                  <ElInputNumber
+                    v-model="security.captchaAfter"
+                    :min="1"
+                    :max="10"
+                    :disabled="!security.captchaEnabled"
+                    class="w-full"
+                  />
+                  <p class="field-tip">默认 1 次：密码一错，下一次登录就要填验证码</p>
                 </ElFormItem>
               </ElCol>
             </ElRow>
-            <ElButton type="primary" :loading="saving === 'security'" @click="save('security')">保存</ElButton>
+            <ElButton type="primary" :loading="saving === 'security'" @click="save('security')">
+              保存
+            </ElButton>
           </ElForm>
         </ElTabPane>
 
-        <ElTabPane label="到期提醒" name="notify">
+        <ElTabPane v-if="isAdmin" label="到期提醒" name="notify">
           <ElForm label-position="top" class="setting-form">
             <ElRow :gutter="16">
               <ElCol :xs="24" :sm="12" :md="8">
@@ -218,6 +251,61 @@
             <ElButton type="primary" :loading="saving === 'network'" @click="save('network')">保存</ElButton>
           </ElForm>
         </ElTabPane>
+
+        <!-- 项目信息：只读，内容来自后端 /api/settings 的 about（改后端常量即可，不用动前端） -->
+        <ElTabPane label="项目信息" name="about">
+          <div class="about-panel">
+            <div class="about-brand">
+              <ArtLogo :size="42" />
+              <div class="about-brand-text">
+                <div class="about-name">{{ about.name || 'CertHub' }}</div>
+                <div class="about-sub">
+                  版本号 <b>{{ about.version || '-' }}</b>
+                  <span class="about-dot">·</span>
+                  前端构建 v{{ webVersion }}
+                </div>
+              </div>
+            </div>
+
+            <ElDescriptions :column="1" border class="about-desc">
+              <ElDescriptionsItem label="项目名称">{{ about.name || 'CertHub' }}</ElDescriptionsItem>
+              <ElDescriptionsItem label="版本号">{{ about.version || '-' }}</ElDescriptionsItem>
+              <ElDescriptionsItem label="前端构建">v{{ webVersion }}</ElDescriptionsItem>
+              <ElDescriptionsItem label="开发者">{{ about.developer || '-' }}</ElDescriptionsItem>
+              <ElDescriptionsItem label="邮箱">
+                <ElLink
+                  v-if="about.email"
+                  type="primary"
+                  :underline="false"
+                  :href="'mailto:' + about.email"
+                >
+                  <ArtSvgIcon icon="ri:mail-line" class="mr-1" />{{ about.email }}
+                </ElLink>
+                <span v-else>-</span>
+              </ElDescriptionsItem>
+              <ElDescriptionsItem label="网站">
+                <ElLink
+                  v-if="about.website"
+                  type="primary"
+                  :underline="false"
+                  :href="about.websiteUrl || 'http://' + about.website"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <ArtSvgIcon icon="ri:global-line" class="mr-1" />{{ about.website }}
+                </ElLink>
+                <span v-else>-</span>
+              </ElDescriptionsItem>
+              <ElDescriptionsItem v-if="site.copyright" label="版权">
+                {{ site.copyright }}
+              </ElDescriptionsItem>
+            </ElDescriptions>
+
+            <p class="about-tip">
+              这些信息由服务端的项目配置提供，升级 / 迁移后自动跟随，不需要在页面上重复填写。
+            </p>
+          </div>
+        </ElTabPane>
       </ElTabs>
     </ElCard>
   </div>
@@ -230,12 +318,14 @@
   import { ElMessage } from 'element-plus'
   import type { UploadFile } from 'element-plus'
   import ArtLogo from '@/components/core/base/art-logo/index.vue'
+  import AccountSecurity from './components/account-security.vue'
 
   defineOptions({ name: 'CertdSystemSetting' })
 
   const userStore = useUserStore()
   const siteStore = useSiteStore()
   const isAdmin = computed(() => userStore.info?.role === 'admin')
+  const route = useRoute()
 
   /** 上传 Logo 的体积上限（换算成 data URI 后还要再放大 1/3，别把设置项撑爆） */
   const LOGO_MAX_KB = 256
@@ -243,9 +333,14 @@
 
   const loading = ref(false)
   const saving = ref('')
-  const activeTab = ref('site')
+  // 支持 ?tab=security 直达（老的「账号与安全」入口已并进来，会带这个参数跳过来）
+  const activeTab = ref(String(route.query.tab || 'site'))
 
   const site = reactive<any>({})
+  /** 项目信息（只读，来自后端 about） */
+  const about = reactive<any>({})
+  /** 前端构建版本（VITE_VERSION，构建时写进产物） */
+  const webVersion = __APP_VERSION__
   const security = reactive<any>({})
   const notify = reactive<any>({})
   const network = reactive<any>({})
@@ -267,6 +362,7 @@
     try {
       const data = await fetchSettings()
       Object.assign(site, data.site || {})
+      Object.assign(about, data.about || {})
       Object.assign(security, data.security || {})
       Object.assign(notify, data.notify || {})
       Object.assign(network, data.network || {})
@@ -376,12 +472,42 @@
     return (probe.error || '不可用') + (probe.ms ? ' · ' + probe.ms + 'ms' : '')
   }
 
-  onMounted(load)
+  onMounted(() => {
+    // 普通用户进不来管理页签，落错页签就退到「安全」
+    const adminTabs = ['site', 'notify', 'network']
+    if (!isAdmin.value && adminTabs.includes(activeTab.value)) {
+      activeTab.value = 'security'
+    }
+    load()
+  })
 </script>
 
 <style scoped>
   .setting-form {
     max-width: 1080px;
+  }
+
+  /* 「安全」页签里的登录策略：跟上面的「我的账号」拉开距离，说明这是全站设置 */
+  .policy-form {
+    padding-top: 18px;
+    margin-top: 4px;
+    border-top: 1px solid var(--art-card-border);
+  }
+
+  .sec-title {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--art-text-gray-900, var(--g-text, #1f2937));
+  }
+
+  .sec-title-tip {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--art-gray-500);
   }
 
   .form-tip {
@@ -397,6 +523,64 @@
     margin: 4px 0 0;
     font-size: 12px;
     line-height: 1.5;
+    color: var(--art-gray-500);
+  }
+
+  /* ---------------- 项目信息（只读） ---------------- */
+  .about-panel {
+    max-width: 720px;
+  }
+
+  .about-brand {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: var(--art-gray-100);
+    border: 1px solid var(--art-card-border);
+    border-radius: 10px;
+  }
+
+  .about-brand-text {
+    min-width: 0;
+  }
+
+  .about-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--art-gray-800);
+  }
+
+  .about-sub {
+    margin-top: 4px;
+    font-size: 12.5px;
+    color: var(--art-gray-500);
+  }
+
+  .about-sub b {
+    font-weight: 600;
+    color: var(--art-gray-700);
+  }
+
+  .about-dot {
+    margin: 0 6px;
+    color: var(--art-gray-400);
+  }
+
+  .about-desc :deep(.el-descriptions__label) {
+    width: 110px;
+    white-space: nowrap;
+  }
+
+  .about-desc :deep(.el-descriptions__content) {
+    word-break: break-all;
+  }
+
+  .about-tip {
+    margin: 12px 0 0;
+    font-size: 12px;
+    line-height: 1.6;
     color: var(--art-gray-500);
   }
 

@@ -68,6 +68,10 @@ declare namespace Api {
       password: string
       /** 两步验证码（账号开启 2FA 时必填） */
       code?: string
+      /** 图形验证码令牌（密码错误达到阈值后必填，来自 /api/auth/captcha） */
+      captchaToken?: string
+      /** 用户填写的图形验证码 */
+      captchaCode?: string
     }
 
     /** 登录响应 */
@@ -91,6 +95,12 @@ declare namespace Api {
       userName: string
       email: string
       avatar?: string
+      /** 昵称（后端 /api/user/info 有返回，缺省时回落到用户名） */
+      nickname?: string
+      /** 原始角色：admin / user（roles 是 R_SUPER / R_USER 的权限标识，别混用） */
+      role?: string
+      /** 是否已开启两步验证 */
+      totpEnabled?: boolean
     }
   }
 

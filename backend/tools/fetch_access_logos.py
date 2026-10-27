@@ -45,7 +45,10 @@ TASK_DIR = PROJECT / "frontend" / "public" / "logos" / "task"
 #: 这些品牌用的是官网原图（128px PNG，见 plugins.py 的 _ACCESS_LOGO_EXT）
 #: 或手工挑选的矢量，脚本一律跳过，免得被 Iconify 的通用图标覆盖掉。
 KEEP_LOCAL = {"baota", "synology", "qnap", "jdcloud", "dogecloud", "yidun",
-              "upyun", "baishan", "kuocaicdn", "woai", "ctyun"}
+              "upyun", "baishan", "kuocaicdn", "woai", "ctyun",
+              # 亚洲诚信：官方 logo 是「红盾 + 白字」的宽幅字标，这里存的是从官方 SVG
+              # 里裁出来的方形 mark（frontend/public/logos/access/trustasia.svg）
+              "trustasia"}
 
 
 def iconify_url(icon: str, color: str) -> str:

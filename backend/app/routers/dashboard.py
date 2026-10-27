@@ -10,6 +10,7 @@ from ..db import get_db
 from ..deps import get_current_user, ok
 from ..models import Certificate, History, Pipeline, SiteMonitor, User
 from ..plugins import DEPLOY_TARGETS, SUPPORTED_CERTS
+from ..services.system_info import collect_system_info
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -110,3 +111,13 @@ def overview(user: User = Depends(get_current_user), db: Session = Depends(get_d
             "expireTime": _fmt(s.expire_time),
         } for s in sites[:6]],
     })
+
+
+@router.get("/system")
+def system_info(user: User = Depends(get_current_user)):
+    """系统信息：CPU / 内存 / 硬盘使用率（工作台系统信息看板）。
+
+    用普通 def 而非 async：CPU 使用率要在两次采样之间阻塞约 0.4 秒，
+    交给 FastAPI 线程池跑，不卡住事件循环。
+    """
+    return ok(collect_system_info())

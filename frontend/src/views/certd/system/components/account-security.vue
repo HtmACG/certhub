@@ -1,16 +1,18 @@
 <!--
-  个人中心
+  我的账号（系统设置 → 安全）
   =========================================================
-  三个分区：基本资料 / 修改密码 / 两步验证（TOTP，兼容 Google Authenticator）。
-  两步验证支持扫码绑定：卡片打开就自动生成二维码，已开启时也能再扫码添加设备
-  （同一密钥可加入多台设备，不会把老设备踢掉）。
+  原来独立的「账号与安全」页，按需求合并进系统设置的「安全」页签。
+  这里只放**跟当前登录用户自己有关**的东西：
+  基本资料 / 修改密码 / 两步验证。
+  与全站有关的登录策略（失败上限、锁定时长、图形验证码）留在 setting.vue，
+  并且只有管理员看得到。
 -->
 <template>
-  <div class="certd-profile art-full-height g-scope">
-    <ElRow :gutter="12">
-      <ElCol :xs="24" :sm="24" :md="14" :lg="14" :xl="14">
-        <ElCard class="art-card mb-3" shadow="never">
-          <template #header><div class="card-header">基本资料</div></template>
+  <div class="account-security">
+    <ElRow :gutter="16">
+      <ElCol :xs="24" :sm="24" :md="12" :lg="12">
+        <div class="sec-block">
+          <div class="sec-title">基本资料</div>
           <ElForm label-position="top">
             <ElRow :gutter="16">
               <ElCol :xs="24" :sm="12">
@@ -34,18 +36,23 @@
                 </ElFormItem>
               </ElCol>
             </ElRow>
-            <ElButton type="primary" :loading="savingProfile" @click="saveProfile">保存</ElButton>
+            <ElButton type="primary" :loading="savingProfile" @click="saveProfile">保存资料</ElButton>
           </ElForm>
-        </ElCard>
+        </div>
 
-        <ElCard class="art-card" shadow="never">
-          <template #header><div class="card-header">修改密码</div></template>
+        <div class="sec-block">
+          <div class="sec-title">修改密码</div>
           <ElForm label-position="top">
             <ElFormItem label="当前密码">
               <ElInput v-model="password.oldPassword" type="password" show-password autocomplete="off" />
             </ElFormItem>
             <ElFormItem label="新密码">
-              <ElInput v-model="password.newPassword" type="password" show-password autocomplete="new-password" />
+              <ElInput
+                v-model="password.newPassword"
+                type="password"
+                show-password
+                autocomplete="new-password"
+              />
               <div class="pwd-hint">
                 <div v-for="item in pwdChecks" :key="item.text" class="pwd-check" :class="{ ok: item.ok }">
                   <ArtSvgIcon
@@ -68,19 +75,17 @@
             <ElButton type="primary" :loading="savingPassword" @click="savePassword">修改密码</ElButton>
             <span class="pwd-tip">修改成功后需要用新密码重新登录</span>
           </ElForm>
-        </ElCard>
+        </div>
       </ElCol>
 
-      <ElCol :xs="24" :sm="24" :md="10" :lg="10" :xl="10">
-        <ElCard class="art-card" shadow="never" v-loading="loadingTotp">
-          <template #header>
-            <div class="card-header">
-              两步验证
-              <ElTag :type="info.totpEnabled ? 'success' : 'info'" size="small" effect="light">
-                {{ info.totpEnabled ? '已开启' : '未开启' }}
-              </ElTag>
-            </div>
-          </template>
+      <ElCol :xs="24" :sm="24" :md="12" :lg="12">
+        <div class="sec-block" v-loading="loadingTotp">
+          <div class="sec-title">
+            两步验证
+            <ElTag :type="info.totpEnabled ? 'success' : 'info'" size="small" effect="light">
+              {{ info.totpEnabled ? '已开启' : '未开启' }}
+            </ElTag>
+          </div>
 
           <!-- 未开启：扫码绑定 -->
           <div v-if="!info.totpEnabled">
@@ -90,7 +95,7 @@
             </p>
             <div class="totp-wrap">
               <div class="totp-qr">
-                <QrcodeVue v-if="totp.uri" :value="totp.uri" :size="160" level="M" />
+                <QrcodeVue v-if="totp.uri" :value="totp.uri" :size="150" level="M" />
                 <div v-else class="totp-qr-empty">二维码生成中…</div>
                 <div class="totp-qr-label">{{ issuerLabel }}</div>
               </div>
@@ -122,7 +127,7 @@
           <!-- 已开启：可继续扫码添加设备 + 关闭 -->
           <div v-else>
             <p class="form-tip">
-              两步验证已开启，每次登录需要输入 App 上的 6 位验证码。 换手机或多台设备时，用新设备
+              两步验证已开启，每次登录需要输入 App 上的 6 位验证码。换手机或多台设备时，用新设备
               <b>扫描同一张二维码</b>即可，密钥不变、老设备照常可用。
             </p>
             <ElButton size="small" @click="toggleAddDevice">
@@ -131,7 +136,7 @@
 
             <div v-if="showAddDevice" class="totp-wrap mt-3">
               <div class="totp-qr">
-                <QrcodeVue v-if="totp.uri" :value="totp.uri" :size="160" level="M" />
+                <QrcodeVue v-if="totp.uri" :value="totp.uri" :size="150" level="M" />
                 <div v-else class="totp-qr-empty">二维码生成中…</div>
                 <div class="totp-qr-label">{{ issuerLabel }}</div>
               </div>
@@ -154,7 +159,7 @@
               </ElButton>
             </div>
           </div>
-        </ElCard>
+        </div>
       </ElCol>
     </ElRow>
   </div>
@@ -173,12 +178,14 @@
   import { useSiteStore } from '@/store/modules/site'
   import { ElMessage } from 'element-plus'
 
-  defineOptions({ name: 'CertdProfile' })
+  defineOptions({ name: 'AccountSecurity' })
 
   const userStore = useUserStore()
   const siteStore = useSiteStore()
 
-  const info = computed(() => userStore.info || {})
+  // 后端 /api/user/info 的字段比 UserInfo 类型宽（nickname / role / totpEnabled），
+  // 这里直接按 any 用，避免每次 setUserInfo 都因为「可选 vs 必填」报类型错
+  const info = computed<any>(() => userStore.info || {})
   const savingProfile = ref(false)
   const savingPassword = ref(false)
   const savingTotp = ref(false)
@@ -202,7 +209,7 @@
       await updateProfile({ nickname: profile.nickname, email: profile.email })
       ElMessage.success('已保存')
       if (userStore.info) {
-        userStore.setUserInfo({ ...userStore.info, nickname: profile.nickname, email: profile.email })
+        userStore.setUserInfo({ ...(userStore.info as any), nickname: profile.nickname, email: profile.email })
       }
     } finally {
       savingProfile.value = false
@@ -249,15 +256,10 @@
       password.confirmPassword = ''
       ElMessage.success('密码已修改，请用新密码重新登录')
       // 旧 token 仍然有效（JWT 无法吊销），改了密码就该立刻换身份重新认证
-      await logOutAndRelogin()
+      userStore.logOut()
     } finally {
       savingPassword.value = false
     }
-  }
-
-  // 退出登录并回到登录页：logOut() 内部清 token / 用户态并 push 到 Login 路由
-  const logOutAndRelogin = () => {
-    userStore.logOut()
   }
 
   /**
@@ -283,9 +285,7 @@
     }
   }
 
-  /**
-   * 复制密钥（手动添加到 App 用）
-   */
+  /** 复制密钥（手动添加到 App 用） */
   const copySecret = async () => {
     if (!totp.secret) return
     try {
@@ -305,7 +305,7 @@
     try {
       await enable2fa(totpCode.value)
       ElMessage.success('两步验证已开启')
-      if (userStore.info) userStore.setUserInfo({ ...userStore.info, totpEnabled: true })
+      if (userStore.info) userStore.setUserInfo({ ...(userStore.info as any), totpEnabled: true })
       totpCode.value = ''
       showAddDevice.value = false
     } finally {
@@ -322,7 +322,7 @@
     try {
       await disable2fa(totpCode.value)
       ElMessage.success('已关闭两步验证')
-      if (userStore.info) userStore.setUserInfo({ ...userStore.info, totpEnabled: false })
+      if (userStore.info) userStore.setUserInfo({ ...(userStore.info as any), totpEnabled: false })
       totpCode.value = ''
       // 关闭后回到「扫码绑定」的初始态
       totp.uri = ''
@@ -346,12 +346,26 @@
 </script>
 
 <style scoped>
-  .card-header {
+  /* 每个分区之间一条细线，比整页卡片轻，放进页签里也不显得重复套框 */
+  .sec-block {
+    padding-bottom: 4px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--art-card-border);
+  }
+
+  .sec-block:last-child {
+    margin-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .sec-title {
     display: flex;
     gap: 8px;
     align-items: center;
+    margin-bottom: 12px;
     font-size: 14px;
     font-weight: 600;
+    color: var(--art-text-gray-900, var(--g-text, #1f2937));
   }
 
   .form-tip {
@@ -410,13 +424,13 @@
   }
 
   .totp-qr-empty {
-    padding: 46px 20px;
+    padding: 42px 20px;
     font-size: 12px;
     color: var(--art-gray-500);
   }
 
   .totp-qr-label {
-    max-width: 168px;
+    max-width: 158px;
     overflow: hidden;
     font-size: 11px;
     color: var(--art-gray-500);

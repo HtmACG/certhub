@@ -676,3 +676,35 @@ node node_modules/vite/bin/vite.js build      # 产物 dist/，由后端同源�
 > `.env.production` 的 `VITE_API_URL` 必须是相对路径 `/`：构建产物由 FastAPI 托管，
 > 写死域名会让换端口 / 反向代理部署直接失效。开发环境 `.env.development` 的
 > `VITE_API_PROXY_URL` 指向 `http://127.0.0.1:8000`。
+
+---
+
+## 十三、开源协议
+
+本项目（后端 `backend/` 与前端 `frontend/`）整体采用 **GNU General Public License v3.0（GPL-3.0-only）**，
+许可证全文见仓库根目录 [`LICENSE`](./LICENSE)。
+
+```
+CertHub  Copyright (C) 2026  HtmACG
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+```
+
+分发、修改或以网络服务形式提供本项目时，请保留版权声明与许可证文本，并向接收方提供对应源码。
+
+### 第三方组件
+
+| 组件 | 许可证 | 位置 |
+| --- | --- | --- |
+| Art Design Pro 3.0.2（前端模板） | MIT | [`frontend/LICENSE`](./frontend/LICENSE) |
+| 其余 Python / npm 依赖 | 各自原许可证 | `backend/requirements.txt`、`frontend/package.json` |
+
+> 说明：上游 [Certd](https://github.com/certd/certd) 采用 AGPL-3.0。本项目为独立实现，
+> 若你在此之上引入上游代码，则该部分仍需遵循 AGPL-3.0（AGPL-3.0 与 GPL-3.0 单向兼容）。

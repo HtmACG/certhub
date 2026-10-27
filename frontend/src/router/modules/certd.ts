@@ -26,6 +26,14 @@ export const certdRoutes: AppRouteRecord[] = [
     meta: { title: '流水线详情', icon: 'ri:git-branch-line', isHide: true, isHideTab: true },
   },
   {
+    // 分组已合并进「证书流水线」页的第二个页签，这里只保留老链接的跳转
+    path: '/certd/pipeline-group',
+    name: 'CertdPipelineGroupLegacy',
+    component: '/certd/pipeline',
+    redirect: '/certd/pipeline?tab=group',
+    meta: { title: '流水线分组', icon: 'ri:stack-line', isHide: true, isHideTab: true },
+  },
+  {
     path: '/certd/history',
     name: 'CertdHistory',
     component: '/certd/history',
@@ -77,7 +85,8 @@ export const certdRoutes: AppRouteRecord[] = [
     path: '/certd/setting',
     name: 'CertdSystemSetting',
     component: '/certd/system/setting',
-    meta: { title: '系统设置', icon: 'ri:settings-4-line', roles: ['R_SUPER'], keepAlive: true },
+    // 安全页签里有「我的账号」，普通用户也要能进；管理员专属页签由页面内 isAdmin 控制
+    meta: { title: '系统设置', icon: 'ri:settings-4-line', keepAlive: true },
   },
   {
     path: '/certd/audit',
@@ -92,10 +101,11 @@ export const certdRoutes: AppRouteRecord[] = [
     meta: { title: '开放接口', icon: 'ri:terminal-box-line', keepAlive: true },
   },
   {
+    // 「账号与安全」已合并进「系统设置 → 安全」，这里只保留老链接的跳转
     path: '/certd/profile',
-    name: 'CertdProfile',
-    component: '/certd/profile',
-    // 侧边栏可见：改密码、两步验证都要从这里进（头像下拉按要求只保留了"退出登录"）
-    meta: { title: '账号与安全', icon: 'ri:user-settings-line', keepAlive: true },
+    name: 'CertdProfileLegacy',
+    component: '/certd/system/setting',
+    redirect: '/certd/setting?tab=security',
+    meta: { title: '账号与安全', icon: 'ri:user-settings-line', isHide: true, isHideTab: true },
   },
 ]

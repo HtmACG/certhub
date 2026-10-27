@@ -106,6 +106,14 @@
         <ElTooltip v-if="item.domainFrom" content="从选中的 DNS 授权拉取域名，可多选后一次性填入">
           <ElButton :loading="domainLoading" @click="openDomainPicker">选择域名</ElButton>
         </ElTooltip>
+        <ElTooltip
+          v-if="item.remote"
+          :content="'从对端拉取' + (item.title || '资源') + '，可多选后一次性填入'"
+        >
+          <ElButton :loading="remoteLoading" @click="openRemotePicker">
+            选择{{ item.title || '资源' }}
+          </ElButton>
+        </ElTooltip>
       </div>
       <p v-if="matchTip" class="match-tip is-auto">
         <ArtSvgIcon icon="ri:magic-line" />
@@ -153,54 +161,114 @@
       class="w-full"
     />
 
+    <!-- 字段动作按钮（元数据驱动：item.action）：
+         目前只有群晖的「获取设备ID」——输一次 6 位验证码换长期免验证码的受信设备令牌 -->
+    <div v-if="item.action" class="field-action-row">
+      <ElButton
+        size="small"
+        type="primary"
+        plain
+        :loading="actionLoading"
+        :disabled="actionDisabled"
+        @click="runFieldAction"
+      >
+        <ArtSvgIcon :icon="item.action.icon || 'ri:key-2-line'" class="mr-1" />
+        {{ item.action.label || '获取' }}
+      </ElButton>
+      <span v-if="item.action.hint" class="field-action-hint">{{ item.action.hint }}</span>
+    </div>
+
     <p v-if="item.helper" class="plugin-field-helper">{{ item.helper }}</p>
 
-    <!-- 拉取到的域名列表：可多选，支持全选 / 只选泛域名 / 搜索 -->
+    <!-- 群晖双重认证：输 6 位码换设备ID -->
+    <ElDialog
+      v-model="otpDialogVisible"
+      class="g-scope"
+      title="获取群晖设备ID"
+      width="min(420px, 92vw)"
+      destroy-on-close
+    >
+      <div class="otp-dialog-body">
+        <p class="otp-dialog-tip">
+          打开双重认证 APP（Authenticator / 群晖 Secure SignIn 等），输入当前 6 位验证码。
+        </p>
+        <ElInput
+          v-model="otpInput"
+          maxlength="6"
+          placeholder="6 位数字验证码"
+          class="otp-dialog-input"
+          @keyup.enter="submitOtp"
+        />
+        <p class="otp-dialog-tip is-weak">
+          拿到的设备ID只需填一次；换 DSM、重装系统、或超过 30 天没用需要重新获取。
+        </p>
+        <p v-if="otpError" class="match-tip is-warn">{{ otpError }}</p>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <ElButton @click="otpDialogVisible = false">取消</ElButton>
+          <ElButton type="primary" :loading="actionLoading" @click="submitOtp">获取设备ID</ElButton>
+        </div>
+      </template>
+    </ElDialog>
+
+    <!-- 拉取到的资源列表：可多选，支持全选 / 只选泛域名 / 搜索（DNS 域名、CDN 加速域名共用） -->
     <ElDialog
       v-model="domainPickerVisible"
       class="g-scope"
-      :title="'从「' + (item.title || '域名') + '」选择域名'"
+      :title="pickerTitle"
       width="min(640px, 94vw)"
       destroy-on-close
     >
       <div class="domain-picker-toolbar">
         <ElInput
           v-model="domainKeyword"
-          placeholder="搜索域名"
+          :placeholder="'搜索' + (item.title || '资源')"
           clearable
           class="flex-1"
           :prefix-icon="undefined"
         />
         <ElButton @click="toggleDomainSelection('all')">全选</ElButton>
         <ElButton @click="toggleDomainSelection('none')">清空</ElButton>
-        <ElButton @click="toggleDomainSelection('wildcard')">只选泛域名</ElButton>
+        <ElButton v-if="pickerHasWildcard" @click="toggleDomainSelection('wildcard')">
+          只选泛域名
+        </ElButton>
       </div>
 
       <ElCheckboxGroup v-model="selectedDomains" class="domain-picker-list">
         <ElCheckbox
-          v-for="row in filteredDomains"
-          :key="row.value"
+          v-for="row in filteredPickerRows"
+          :key="String(row.value)"
           :value="row.value"
           :label="row.value"
           class="domain-picker-item"
         >
-          <span class="domain-picker-name">{{ row.value }}</span>
-          <ElTag size="small" effect="plain" :type="row.wildcard ? 'warning' : 'info'">
-            {{ row.wildcard ? '泛域名' : '主域名' }}
+          <span class="domain-picker-name">{{ row.label || row.value }}</span>
+          <ElTag
+            v-if="row.wildcard"
+            size="small"
+            effect="plain"
+            type="warning"
+          >
+            泛域名
           </ElTag>
         </ElCheckbox>
       </ElCheckboxGroup>
 
-      <p v-if="!filteredDomains.length" class="match-tip">
-        {{ domainError || '没有匹配的域名，换个关键字试试' }}
+      <p v-if="!filteredPickerRows.length" class="match-tip">
+        {{ pickerError || '没有匹配的项，换个关键字试试' }}
       </p>
 
       <template #footer>
         <div class="dialog-footer">
           <span class="match-tip">已选 {{ selectedDomains.length }} 个</span>
           <ElButton @click="domainPickerVisible = false">取消</ElButton>
-          <ElButton type="primary" :loading="domainLoading" @click="applySelectedDomains">
-            填入所选域名
+          <ElButton
+            type="primary"
+            :loading="domainLoading || remoteLoading"
+            @click="applySelectedDomains"
+          >
+            填入所选项
           </ElButton>
         </div>
       </template>
@@ -215,6 +283,7 @@
     fetchAccessOptions,
     fetchNotificationOptions,
     fetchPluginOptions,
+    fetchSynologyDeviceId,
   } from '@/api/certd'
   import { ElMessage } from 'element-plus'
   import { matchShowWhen } from '@/utils/certd'
@@ -237,6 +306,63 @@
 
   /** 字段值：直接双向绑定到父级表单的这一项 */
   const value = defineModel<any>()
+
+  /* ---------------- 字段动作（item.action） ---------------- */
+  const actionLoading = ref(false)
+  const otpDialogVisible = ref(false)
+  const otpInput = ref('')
+  const otpError = ref('')
+
+  /** 取设备ID 需要地址 / 账号；密码可以让后端用已保存的兜底 */
+  const actionDisabled = computed(() => {
+    const action = props.item.action
+    if (!action) return false
+    if (action.type === 'synology-device-id') {
+      const form = props.formValues || {}
+      return !String(form.url || '').trim() || !String(form.username || '').trim()
+    }
+    return false
+  })
+
+  const runFieldAction = () => {
+    const action = props.item.action
+    if (!action) return
+    if (action.type === 'synology-device-id') {
+      otpInput.value = ''
+      otpError.value = ''
+      otpDialogVisible.value = true
+    }
+  }
+
+  const submitOtp = async () => {
+    const code = String(otpInput.value || '').replace(/\D/g, '')
+    if (code.length !== 6) {
+      otpError.value = '请输入 6 位数字验证码'
+      return
+    }
+    const form = props.formValues || {}
+    otpError.value = ''
+    actionLoading.value = true
+    try {
+      const result = await fetchSynologyDeviceId({
+        config: {
+          url: form.url,
+          username: form.username,
+          password: form.password,
+          deviceName: form.deviceName,
+          insecure: form.insecure,
+        },
+        otpCode: code,
+      })
+      value.value = result?.deviceId || ''
+      otpDialogVisible.value = false
+      ElMessage.success('已获取设备ID，点「保存」后生效')
+    } catch (error: any) {
+      otpError.value = error?.message || '获取设备ID失败'
+    } finally {
+      actionLoading.value = false
+    }
+  }
 
   const accessOptions = ref<any[]>([])
   const accessLoading = ref(false)
@@ -455,19 +581,28 @@
     matchedOption.value = matches[0] || null
 
     const current = value.value
+    // 多选字段：当前值与上次自动填入的数组一致才算「没被用户动过」
+    const sameAsAuto = Array.isArray(current) && Array.isArray(autoFilledValue.value) &&
+      current.length === autoFilledValue.value.length &&
+      current.every((v) => autoFilledValue.value.includes(v))
     const untouched = current === undefined || current === null || current === '' ||
-      (autoFilledValue.value !== null && current === autoFilledValue.value)
+      (autoFilledValue.value !== null &&
+        (Array.isArray(current) ? sameAsAuto : current === autoFilledValue.value))
     if (!untouched || !matches.length) return
 
-    const picked = matches[0].value
     if (props.item.component === 'tags') {
-      const list = Array.isArray(current) ? current : []
-      if (!list.length) value.value = [picked]
-      else if (!list.includes(picked)) value.value = [...list, picked]
+      // 多选：所有匹配项一次性选中（已有的不重复）
+      const list = Array.isArray(current) ? [...current] : []
+      for (const match of matches) {
+        if (!list.includes(match.value)) list.push(match.value)
+      }
+      value.value = list
+      autoFilledValue.value = list
     } else {
+      const picked = matches[0].value
       value.value = picked
+      autoFilledValue.value = picked
     }
-    autoFilledValue.value = picked
   }
 
   /** 用户手动选了别的值：清掉「自动匹配」标记 */
@@ -491,32 +626,76 @@
       return '没有与证书域名匹配的项，可以从列表里手动选择'
     }
     const label = matchedOption.value?.label || matchedOption.value?.value || ''
-    const extra = matchCount.value > 1 ? '（共 ' + matchCount.value + ' 项匹配，已选第一个）' : ''
+    const extra = matchCount.value > 1
+      ? props.item.component === 'tags'
+        ? '（共 ' + matchCount.value + ' 项匹配，均已选中）'
+        : '（共 ' + matchCount.value + ' 项匹配，已选第一个）'
+      : ''
     return '按证书域名自动匹配：' + label + extra
   })
 
-  /** 自动匹配到的就是当前值，才叫「自动」 */
-  const autoMatched = computed(
-    () => !!matchedOption.value && autoFilledValue.value !== null && value.value === autoFilledValue.value
-  )
+  /** 自动匹配到的就是当前值，才叫「自动」（多选字段按数组比对） */
+  const autoMatched = computed(() => {
+    if (!matchedOption.value || autoFilledValue.value === null) return false
+    const current = value.value
+    if (Array.isArray(current) && Array.isArray(autoFilledValue.value)) {
+      return current.length === autoFilledValue.value.length &&
+        current.every((v) => autoFilledValue.value.includes(v))
+    }
+    return current === autoFilledValue.value
+  })
 
   /** 该字段当前是否可见（showWhen 判定），不可见时不做提示也不自动填 */
   const conditionalVisible = computed(() => matchShowWhen(props.item.showWhen, props.formValues || {}))
 
-  /* ---------------- 域名拉取：拉一次、勾多个 ---------------- */
+  /* ---------------- 资源拉取：拉一次、勾多个（DNS 域名 / CDN 加速域名共用） ---------------- */
   const domainPickerVisible = ref(false)
+  /** 弹窗当前选的是 DNS 域名（domainFrom）还是远程资源（remote） */
+  const pickerMode = ref<'dns' | 'remote'>('dns')
   const domainKeyword = ref('')
   const domainError = ref('')
   const domainOptions = ref<{ value: string; wildcard: boolean }[]>([])
-  const selectedDomains = ref<string[]>([])
+  const selectedDomains = ref<any[]>([])
 
-  const filteredDomains = computed(() => {
+  /** 远程资源映射成弹窗行（label 展示、value 回填；标出泛域名） */
+  const remotePickerRows = computed<{ label: string; value: any; wildcard: boolean }[]>(
+    () =>
+      remoteOptions.value.map((option) => ({
+        label: option.label,
+        value: option.value,
+        wildcard: String(option.value).startsWith('*.'),
+      }))
+  )
+
+  /** 弹窗里的全部行：按当前模式取 DNS 域名或远程资源 */
+  const pickerRows = computed<{ label?: string; value: any; wildcard: boolean }[]>(() =>
+    pickerMode.value === 'dns'
+      ? domainOptions.value.map((row) => ({ ...row, label: row.value }))
+      : remotePickerRows.value
+  )
+
+  const filteredPickerRows = computed(() => {
     const keyword = domainKeyword.value.trim().toLowerCase()
-    if (!keyword) return domainOptions.value
-    return domainOptions.value.filter((row) => row.value.toLowerCase().includes(keyword))
+    if (!keyword) return pickerRows.value
+    return pickerRows.value.filter((row) =>
+      String(row.label || row.value).toLowerCase().includes(keyword)
+    )
   })
 
-  /** 打开弹窗：先拉列表，默认勾上「当前值里还没有的」域名 */
+  const pickerTitle = computed(() => {
+    const name = props.item.title || '资源'
+    return pickerMode.value === 'dns'
+      ? '从「' + name + '」选择域名'
+      : '从「' + name + '」选择' + name
+  })
+
+  const pickerError = computed(() =>
+    pickerMode.value === 'dns' ? domainError.value : remoteError.value
+  )
+
+  const pickerHasWildcard = computed(() => pickerRows.value.some((row) => row.wildcard))
+
+  /** 打开 DNS 域名弹窗：先拉列表，默认勾上「当前值里还没有的」域名 */
   const openDomainPicker = async () => {
     const item = props.item
     const sourceKey = item.domainFrom
@@ -526,6 +705,7 @@
       ElMessage.warning('请先选择 DNS 授权')
       return
     }
+    pickerMode.value = 'dns'
     domainKeyword.value = ''
     domainError.value = ''
     domainPickerVisible.value = true
@@ -554,27 +734,48 @@
     }
   }
 
+  /** 打开远程资源弹窗（CDN 加速域名等）：先把对端资源拉全，默认勾上已填的 */
+  const openRemotePicker = async () => {
+    const item = props.item
+    if (!item.remote) return
+    const accessKey = item.remoteFrom || 'accessId'
+    if (!(props.formValues || {})[accessKey]) {
+      ElMessage.warning('请先选择对应授权')
+      return
+    }
+    pickerMode.value = 'remote'
+    domainKeyword.value = ''
+    domainPickerVisible.value = true
+    // 强制拉一次，保证资源是最新的
+    await loadRemote(true)
+    const rows = remotePickerRows.value
+    const current = new Set(tagValue.value.map((v) => String(v)))
+    // 默认勾选：当前已填的；没有已填项时退回全部，省得再点一次全选
+    const preselected = rows.filter((row) => current.has(String(row.value)))
+    selectedDomains.value = (preselected.length ? preselected : rows).map((row) => row.value)
+  }
+
   const toggleDomainSelection = (mode: 'all' | 'none' | 'wildcard') => {
     if (mode === 'none') {
       selectedDomains.value = []
       return
     }
-    const scope = filteredDomains.value.filter((row) =>
+    const scope = filteredPickerRows.value.filter((row) =>
       mode === 'all' ? true : row.wildcard
     )
     selectedDomains.value = scope.map((row) => row.value)
   }
 
-  /** 把勾选的域名合并进当前值（已有的不重复、不覆盖用户手填的其他域名） */
+  /** 把勾选项合并进当前值（已有的不重复、不覆盖用户手填的其他项） */
   const applySelectedDomains = () => {
     if (!selectedDomains.value.length) {
-      ElMessage.warning('请至少选择一个域名')
+      ElMessage.warning('请至少选择一项')
       return
     }
     const merged = [...new Set([...tagValue.value, ...selectedDomains.value])]
     tagValue.value = merged
     domainPickerVisible.value = false
-    ElMessage.success('已填入 ' + selectedDomains.value.length + ' 个域名')
+    ElMessage.success('已填入 ' + selectedDomains.value.length + ' 项')
   }
 
   // 授权一选好就去拉对端资源，不用等用户点开下拉再等一次
@@ -618,6 +819,58 @@
 
   .field-with-hint {
     width: 100%;
+  }
+
+  /* 字段下面的动作按钮行（群晖「获取设备ID」这类） */
+  .field-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+    margin-top: 6px;
+  }
+
+  .field-action-row :deep(.el-button) {
+    flex: 0 0 auto;
+  }
+
+  .field-action-hint {
+    flex: 1 1 160px;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--art-gray-500);
+  }
+
+  /* 获取设备ID 的弹窗 */
+  .otp-dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .otp-dialog-tip {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--art-gray-600);
+  }
+
+  .otp-dialog-tip.is-weak {
+    color: var(--art-gray-500);
+  }
+
+  .otp-dialog-input :deep(.el-input__inner) {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 16px;
+    letter-spacing: 4px;
+    text-align: center;
+  }
+
+  .dialog-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
   }
 
   .match-tip {

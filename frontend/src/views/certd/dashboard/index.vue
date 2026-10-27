@@ -1,17 +1,19 @@
 <!--
   工作台
   =========================================================
-  结构按「上面一块简约看板 + 下面四个列表」来：
+  结构按「上面一块简约看板 + 中间三个仪表 + 下面四个列表」来：
 
   1. 顶部看板：一行文字 + 4 个数字 + 3 个快捷动作，不做大标题、不堆卡片；
-  2. 下面只有四个列表：流水线 / 执行记录 / 证书 / 监控站点，
+  2. 中部「系统信息」：CPU / 内存 / 系统盘三个车速表仪表（ArtGaugeChart），
+     硬盘只展示系统盘，数据盘不铺在这里；每 5 秒自动刷新一次读数；
+  3. 下面只有四个列表：流水线 / 执行记录 / 证书 / 监控站点，
      每张卡只放最近 5 条，「查看全部」跳对应页面。
 
   趋势图、签发机构分布、能力总览这类"看板式"内容已经去掉 ——
   工作台的定位是"扫一眼现状、点进去处理"，不是报表。
 -->
 <template>
-  <div class="certd-dashboard art-full-height g-scope" v-loading="loading">
+  <div class="certd-dashboard g-scope" v-loading="loading">
     <!-- ① 简约看板 -->
     <div class="dash-board">
       <div class="board-line">
@@ -53,7 +55,98 @@
       </div>
     </div>
 
-    <!-- ② 四个列表 -->
+    <!-- ② 系统信息看板：CPU / 内存 / 系统盘使用率，三个车速表仪表 -->
+    <ElCard v-if="hasSystemInfo" class="art-card system-card" shadow="never">
+      <template #header>
+        <div class="card-header">
+          <span class="card-title"><ArtSvgIcon icon="ri:server-line" />系统信息</span>
+          <span class="card-count">{{ sys.hostname }}</span>
+          <ElTooltip :content="systemLoading ? '正在刷新' : '立即刷新系统信息'" placement="top">
+            <ElButton link :loading="systemLoading" @click="loadSystemInfo">
+              <ArtSvgIcon icon="ri:refresh-line" />
+            </ElButton>
+          </ElTooltip>
+        </div>
+      </template>
+
+      <!-- 三个车速表：CPU / 内存 / 系统盘（只展示系统盘，数据盘不铺在这里） -->
+      <div class="sys-grid">
+        <!-- CPU -->
+        <div class="sys-col">
+          <div class="sys-head">
+            <ArtSvgIcon icon="ri:cpu-line" class="sys-icon" />
+            <span class="sys-name">CPU 使用率</span>
+            <span class="sys-state" :style="{ color: usageColor(sys.cpu.percent) }">
+              {{ usageText(sys.cpu.percent) }}
+            </span>
+          </div>
+          <ArtGaugeChart :value="Number(sys.cpu.percent) || 0" :height="gaugeHeight" />
+          <div class="sys-detail is-center" :title="sys.cpu.name">
+            {{ sys.cpu.coresPhysical }} 核 {{ sys.cpu.coresLogical }} 线程
+            <template v-if="sys.cpu.freqMhz"> · {{ (sys.cpu.freqMhz / 1000).toFixed(1) }} GHz</template>
+          </div>
+        </div>
+
+        <!-- 内存 -->
+        <div class="sys-col">
+          <div class="sys-head">
+            <ArtSvgIcon icon="ri:database-2-line" class="sys-icon" />
+            <span class="sys-name">内存使用率</span>
+            <span class="sys-state" :style="{ color: usageColor(sys.memory.percent) }">
+              {{ usageText(sys.memory.percent) }}
+            </span>
+          </div>
+          <ArtGaugeChart :value="Number(sys.memory.percent) || 0" :height="gaugeHeight" />
+          <div class="sys-detail is-center">
+            已用 {{ formatBytes(sys.memory.used) }} / 共 {{ formatBytes(sys.memory.total) }}
+          </div>
+          <div v-if="sys.swap.total" class="sys-detail is-center">
+            交换区 {{ sys.swap.percent }}% · {{ formatBytes(sys.swap.used) }} /
+            {{ formatBytes(sys.swap.total) }}
+          </div>
+        </div>
+
+        <!-- 系统盘：只展示系统盘（Windows 是系统所在盘符，Linux 是 /） -->
+        <div class="sys-col">
+          <div class="sys-head">
+            <ArtSvgIcon icon="ri:hard-drive-2-line" class="sys-icon" />
+            <span class="sys-name">系统盘使用率</span>
+            <span v-if="systemDisk" class="sys-state" :style="{ color: usageColor(systemDisk.percent) }">
+              {{ usageText(systemDisk.percent) }}
+            </span>
+          </div>
+          <template v-if="systemDisk">
+            <ArtGaugeChart :value="Number(systemDisk.percent) || 0" :height="gaugeHeight" />
+            <div class="sys-detail is-center" :title="systemDisk.mount">
+              {{ diskLabel }} 已用 {{ formatBytes(systemDisk.used) }} /
+              {{ formatBytes(systemDisk.total) }}
+            </div>
+            <div class="sys-detail is-center">
+              剩余 {{ formatBytes(systemDisk.free) }}
+              <template v-if="systemDisk.fstype"> · {{ systemDisk.fstype }}</template>
+            </div>
+          </template>
+          <div v-else class="sys-detail is-center" :style="{ height: gaugeHeight, lineHeight: gaugeHeight }">
+            暂时读不到系统盘信息
+          </div>
+        </div>
+      </div>
+
+      <!-- 主机与运行时长 -->
+      <div class="sys-footer">
+        <span class="sys-footer-item">
+          <ArtSvgIcon icon="ri:computer-line" />{{ sys.os }}
+        </span>
+        <span class="sys-footer-item">
+          <ArtSvgIcon icon="ri:time-line" />已运行 {{ formatUptime(sys.uptime) }}
+        </span>
+        <span class="sys-footer-item">
+          <ArtSvgIcon icon="ri:calendar-line" />启动于 {{ sys.bootTime }}
+        </span>
+      </div>
+    </ElCard>
+
+    <!-- ③ 四个列表 -->
     <div class="list-grid">
       <!-- 流水线 -->
       <ElCard class="art-card" shadow="never">
@@ -80,7 +173,9 @@
               <span class="item-title">{{ item.title || '未命名流水线' }}</span>
               <span class="item-sub">
                 {{ item.disabled ? '已停用' : '已启用' }} · {{ item.stageCount }} 个阶段 ·
-                {{ item.stepCount }} 个任务
+                {{ item.stepCount }} 个任务<template v-if="item.stepDisabledCount"
+                  >（{{ item.stepDisabledCount }} 步已停用）</template
+                >
                 <template v-if="item.lastHistoryTime">· 上次 {{ item.lastHistoryTime }}</template>
               </span>
             </div>
@@ -231,9 +326,18 @@
     fetchOverview,
     fetchPipelineList,
     fetchSiteList,
+    fetchSystemInfo,
   } from '@/api/certd'
+  import ArtGaugeChart from '@/components/core/charts/art-gauge-chart/index.vue'
   import { useUserStore } from '@/store/modules/user'
-  import { certStatusMeta, runStatusMeta, siteStatusMeta, triggerText } from '@/utils/certd'
+  import {
+    certStatusMeta,
+    runStatusMeta,
+    siteStatusMeta,
+    triggerText,
+    usageColor,
+    usageText,
+  } from '@/utils/certd'
 
   defineOptions({ name: 'CertdDashboard' })
 
@@ -254,6 +358,75 @@
   const certTotal = ref(0)
   const sites = ref<any[]>([])
   const siteTotal = ref(0)
+
+  /* ---------------- 系统信息 ---------------- */
+  const sys = ref<any>({})
+  const systemLoading = ref(false)
+  /** 系统信息自动刷新间隔（毫秒） */
+  const SYSTEM_REFRESH_MS = 5000
+  let sysTimer: ReturnType<typeof setInterval> | undefined
+
+  const hasSystemInfo = computed(
+    () => sys.value && sys.value.cpu && sys.value.memory
+  )
+
+  /**
+   * 系统盘：只展示系统盘（Windows 是系统所在盘符，类 Unix 是 /）。
+   * 后端 collect_system_info 已经挑好并放在 systemDisk 里；
+   * 老接口没有 systemDisk / system 字段时在这里兜底（C 盘 → 根目录 → 第一块盘），
+   * 免得「升级只换了前端」时整块仪表是空的。
+   */
+  const systemDisk = computed(() => {
+    const info = sys.value || {}
+    if (info.systemDisk) return info.systemDisk
+    const disks: any[] = Array.isArray(info.disks) ? info.disks : []
+    if (!disks.length) return null
+    return (
+      disks.find((disk) => disk.system) ||
+      disks.find((disk) => /^[a-c]:[\\/]?$/i.test(String(disk.mount || ''))) ||
+      disks.find((disk) => String(disk.mount || '') === '/') ||
+      disks[0]
+    )
+  })
+  const diskLabel = computed(() => systemDisk.value?.mount || '系统盘')
+
+  /** 仪表高度：窄屏压矮一点，免得下面的说明被挤出卡片 */
+  const { width: windowWidth } = useWindowSize()
+  const gaugeHeight = computed(() => ((windowWidth.value || 1200) <= 768 ? '150px' : '178px'))
+
+  const loadSystemInfo = async () => {
+    systemLoading.value = true
+    try {
+      sys.value = await fetchSystemInfo()
+    } catch {
+      // 拉取失败保留上一次数据，不打断看板
+    } finally {
+      systemLoading.value = false
+    }
+  }
+
+  /** 字节数转人类可读（1.2 GB 这种） */
+  const formatBytes = (bytes: number) => {
+    const value = Number(bytes)
+    if (!value || value <= 0) return '0 B'
+    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+    const index = Math.min(
+      units.length - 1,
+      Math.floor(Math.log(value) / Math.log(1024))
+    )
+    return (value / Math.pow(1024, index)).toFixed(index ? 1 : 0) + ' ' + units[index]
+  }
+
+  /** 运行秒数转「2 天 3 小时 / 5 小时 6 分」 */
+  const formatUptime = (seconds: number) => {
+    const value = Number(seconds) || 0
+    const days = Math.floor(value / 86400)
+    const hours = Math.floor((value % 86400) / 3600)
+    const minutes = Math.floor((value % 3600) / 60)
+    if (days) return `${days} 天 ${hours} 小时`
+    if (hours) return `${hours} 小时 ${minutes} 分`
+    return `${minutes} 分钟`
+  }
 
   const userName = computed(() => userStore.info?.nickname || userStore.info?.userName || '管理员')
   const isAdmin = computed(() => userStore.info?.role === 'admin')
@@ -316,15 +489,37 @@
     }
   }
 
-  onMounted(load)
+  onMounted(() => {
+    load()
+    loadSystemInfo()
+    // 定时刷新系统信息，CPU/内存/硬盘使用率保持实时
+    sysTimer = setInterval(loadSystemInfo, SYSTEM_REFRESH_MS)
+  })
+
+  onUnmounted(() => {
+    if (sysTimer) clearInterval(sysTimer)
+  })
 </script>
 
 <style scoped>
+  /*
+    工作台的内容比一屏高（看板 + 三个仪表 + 四个列表），这里刻意不用
+    art-full-height：那个类给的是「刚好一屏」的固定高度 + flex 列，
+    卡片会被压缩（.art-card 的 card-body 还带 overflow: hidden），
+    结果「系统信息」的仪表溢出到下面的列表卡片底下，看起来就是「被遮盖」。
+    改成 min-height + 子元素不许收缩：一屏内撑满，超了交给外层 main 滚动。
+  */
   .certd-dashboard {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-height: var(--art-full-height);
     padding-bottom: 8px;
+  }
+
+  /* 看板 / 卡片 / 列表都不许被压扁 */
+  .certd-dashboard > * {
+    flex: 0 0 auto;
   }
 
   /* ---------------- 简约看板：一行文字 + 数字 + 动作 ---------------- */
@@ -504,10 +699,106 @@
     color: var(--g-text-3, var(--art-gray-500));
   }
 
+  /* ---------------- 系统信息看板 ---------------- */
+  .system-card :deep(.el-card__header) {
+    padding-bottom: 10px;
+  }
+
+  /* 三个仪表等宽横排：CPU / 内存 / 系统盘 */
+  .sys-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .sys-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding-left: 18px;
+    border-left: 1px solid var(--g-line-2, var(--art-card-border));
+  }
+
+  .sys-col:first-child {
+    padding-left: 0;
+    border-left: none;
+  }
+
+  .sys-head {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+
+  .sys-icon {
+    font-size: 16px;
+    color: var(--g-text-2, var(--art-gray-600));
+  }
+
+  .sys-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--g-text, var(--art-gray-800));
+  }
+
+  /* 状态词（正常 / 偏高 / 告警）：颜色由使用率分档决定，写在行内 style 上 */
+  .sys-state {
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .sys-detail {
+    overflow: hidden;
+    font-size: 12px;
+    color: var(--g-text-3, var(--art-gray-500));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sys-detail.is-center {
+    text-align: center;
+  }
+
+  .sys-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--g-line-2, var(--art-card-border));
+  }
+
+  .sys-footer-item {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--g-text-2, var(--art-gray-600));
+  }
+
+  .sys-footer-item .art-svg-icon {
+    font-size: 14px;
+  }
+
   /* ---------------- 响应式 ---------------- */
   @media (max-width: 1024px) {
     .list-grid {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sys-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .sys-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
     }
   }
 

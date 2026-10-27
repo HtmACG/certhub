@@ -53,7 +53,23 @@ interface LoadingInstance {
   close: () => void
 }
 
+/**
+ * 兜底超时：loading 是 lock: true 的全屏遮罩，一旦没人关它，整个应用就"卡死"了
+ * （只能刷新）。路由守卫里任何一条被取消的导航都可能漏掉关闭，所以这里加个看门狗：
+ * 超过这个时间还没被关掉就强制关闭，宁可少遮一次也不能把页面锁死。
+ */
+const AUTO_HIDE_MS = 12000
+
 let loadingInstance: LoadingInstance | null = null
+let autoHideTimer: number | null = null
+
+/** 清掉兜底定时器 */
+function clearAutoHideTimer(): void {
+  if (autoHideTimer !== null) {
+    clearTimeout(autoHideTimer)
+    autoHideTimer = null
+  }
+}
 
 export const loadingService = {
   /**
@@ -69,6 +85,11 @@ export const loadingService = {
       }
       loadingInstance = ElLoading.service(config)
     }
+    clearAutoHideTimer()
+    autoHideTimer = window.setTimeout(() => {
+      console.warn('[loading] 超过 ' + AUTO_HIDE_MS + ' ms 仍未关闭，已自动关闭（导航可能被取消）')
+      this.hideLoading()
+    }, AUTO_HIDE_MS)
     return () => this.hideLoading()
   },
 
@@ -76,6 +97,7 @@ export const loadingService = {
    * 隐藏 loading
    */
   hideLoading(): void {
+    clearAutoHideTimer()
     if (loadingInstance) {
       loadingInstance.close()
       loadingInstance = null

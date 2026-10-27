@@ -35,33 +35,58 @@
               <ElTag v-if="detail.running" size="small" type="warning" effect="dark">运行中</ElTag>
               <ElTag v-if="form.disabled" size="small" type="info" effect="plain">已停用</ElTag>
               <span class="detail-meta-text">
-                {{ stages.length }} 个阶段 · {{ taskCount }} 个任务
+                {{ stages.length }} 个阶段<template v-if="offStageCount">
+                  （{{ offStageCount }} 个已停用）</template
+                >
+                · {{ taskCount }} 个任务<template v-if="disabledTaskCount">
+                  （{{ disabledTaskCount }} 步已停用）</template
+                ><template v-if="unlinkedTaskCount">
+                  （{{ unlinkedTaskCount }} 步未连线，不会执行）</template
+                >
               </span>
             </div>
           </div>
         </div>
+        <!-- 顶部不再放「日志」和「启用/停用」：
+             日志由底部终端 + 阶段/任务的日志入口负责；
+             启用状态在「证书流水线」列表的表格里直接开关 -->
         <div class="detail-head-right">
-          <ElTooltip
-            :content="enabled ? '点击停用：停用后定时任务与 Webhook 都不再执行' : '点击启用'"
-          >
-            <span class="switch-field">
-              <ElSwitch v-model="enabled" />
-              <span class="switch-field-label">{{ enabled ? '已启用' : '已停用' }}</span>
-            </span>
-          </ElTooltip>
-          <ElTooltip :content="logDockVisible ? '隐藏底部日志终端' : '打开底部日志终端'">
-            <ElButton :type="logDockVisible ? 'primary' : 'default'" plain @click="toggleDock">
-              <ArtSvgIcon icon="ri:terminal-box-line" class="mr-1" />日志
-              <span v-if="logTotalCount" class="btn-badge">{{ logTotalCount }}</span>
-            </ElButton>
-          </ElTooltip>
+          <!-- 画布 / 列表：画布看「真实流水」（节点 + 连线 + 拖动拼接），列表适合窄屏和逐项核对 -->
+          <div class="view-switch" role="tablist" aria-label="视图切换">
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="viewMode === 'canvas'"
+              :class="{ 'is-active': viewMode === 'canvas' }"
+              @click="viewMode = 'canvas'"
+            >
+              <ArtSvgIcon icon="ri:flow-chart" />画布
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="viewMode === 'list'"
+              :class="{ 'is-active': viewMode === 'list' }"
+              @click="viewMode = 'list'"
+            >
+              <ArtSvgIcon icon="ri:list-check-2" />列表
+            </button>
+          </div>
+          <!-- 添加阶段紧挨保存：编辑动作集中在一处，不用滚到画布底部找按钮 -->
+          <ElButton @click="addStage">
+            <ArtSvgIcon icon="ri:add-line" class="mr-1" />添加阶段
+          </ElButton>
           <ElButton :loading="saving" @click="save()">
             <ArtSvgIcon icon="ri:save-3-line" class="mr-1" />保存
           </ElButton>
-          <ElTooltip :content="timerEnabled && cron ? '当前定时：' + cron : '还没设定时任务'">
+          <ElTooltip
+            :content="timerEnabled && cron ? '当前定时：' + cron + '（点开可改）' : '还没设定时任务，点开设置'"
+          >
             <ElButton @click="scheduleDrawerVisible = true">
               <ArtSvgIcon icon="ri:calendar-schedule-line" class="mr-1" />定时任务
-              <span v-if="timerEnabled && cron" class="btn-badge">{{ cron }}</span>
+              <span class="btn-badge" :class="{ 'is-muted': !cronSummary }">
+                {{ cronSummary || '未设置' }}
+              </span>
             </ElButton>
           </ElTooltip>
           <ElButton type="primary" :loading="running" :disabled="!stages.length" @click="runAndWatch">
@@ -281,8 +306,37 @@
       </template>
     </ElDialog>
 
+    <!--
+      画布视图：Vue Flow 节点画布（阶段=容器、任务=卡片）。
+      拖动卡片调位置、从右侧圆点拖到另一张卡片=拼接执行顺序、双击卡片配置。
+    -->
+    <PipelineCanvas
+      v-if="viewMode === 'canvas'"
+      :stages="stages"
+      :plugin-of="pluginOf"
+      :status-of="canvasStatusOf"
+      :stage-state-of="stageStateClass"
+      :meta-of="summaryEntries"
+      :running="running"
+      :any-run-active="anyRunActive"
+      :bottom-offset="logDockVisible && !logDockCollapsed ? logDockHeight : 0"
+      :layout="canvasLayout"
+      @open-task="openTaskDialog"
+      @task-log="openTaskLogAt"
+      @task-delete="removeTask"
+      @task-add="openPicker"
+      @stage-run="runStageAt"
+      @stage-log="openStageLogAt"
+      @stage-rename="openTitleDialog('stage', $event)"
+      @stage-delete="removeStage"
+      @stage-toggle="toggleStage"
+      @connect-task="onCanvasConnect"
+      @edge-delete="onEdgeDelete"
+      @layout-change="onLayoutChange"
+    />
+
     <!-- 阶段列表：竖向流水，阶段之间用箭头串起来，一眼看出执行顺序 -->
-    <div class="stage-flow">
+    <div v-else class="stage-flow">
       <template v-for="(stage, stageIndex) in stages" :key="stage.id">
         <div v-if="stageIndex > 0" class="flow-link" aria-hidden="true">
           <span class="flow-link-line"></span>
@@ -292,7 +346,11 @@
 
         <ElCard
           class="art-card stage-card"
-          :class="['stage-' + kindOfStage(stage).key, stageStateClass(stage)]"
+          :class="[
+            'stage-' + kindOfStage(stage).key,
+            stageStateClass(stage),
+            { 'is-off': stage.enabled === false },
+          ]"
           :style="{ '--stage-color': kindOfStage(stage).color }"
           shadow="never"
         >
@@ -321,8 +379,27 @@
                   <div class="stage-sub">
                     <span class="stage-kind">{{ kindOfStage(stage).text }}</span>
                     <span class="stage-sep">·</span>
-                    <span>{{ stage.tasks.length }} 个任务</span>
-                    <template v-if="stageStateText(stage)">
+                    <span>
+                      {{ stage.tasks.length }} 个任务<template v-if="stage.enabled !== false">
+                        <template
+                          v-if="stage.tasks.filter((task) => task.enabled === false).length"
+                        >
+                          （{{
+                            stage.tasks.filter((task) => task.enabled === false).length
+                          }}
+                          步已停用）</template
+                        ><template v-if="stage.tasks.filter((task) => task.linked === false).length">
+                          （{{
+                            stage.tasks.filter((task) => task.linked === false).length
+                          }}
+                          步未连线）</template
+                        >
+                      </template>
+                    </span>
+                    <!-- 阶段被关掉时整段都不跑，光看单步计数会以为还有任务在执行 -->
+                    <span v-if="stage.enabled === false" class="stage-off-tag">整段已停用</span>
+                    <!-- 停用的阶段不再显示上次执行结果：跟「已停用」并排会出现「已停用 · 上次成功」的自相矛盾 -->
+                    <template v-if="stageStateText(stage) && stage.enabled !== false">
                       <span class="stage-sep">·</span>
                       <span :class="'stage-state ' + stageStateClass(stage)">
                         {{ stageStateText(stage) }}
@@ -332,6 +409,24 @@
                 </div>
               </div>
               <div class="stage-head-right">
+                <!-- 阶段启停：关掉后运行时会整段跳过（和画布阶段卡片上的开关是同一个状态） -->
+                <ElTooltip
+                  :content="
+                    stage.enabled === false
+                      ? '该阶段已停用：运行时会整段跳过，点击启用'
+                      : '启停这个阶段：关闭后运行时整段跳过'
+                  "
+                  placement="top"
+                >
+                  <span class="stage-switch" @click.stop>
+                    <ElSwitch
+                      :model-value="stage.enabled !== false"
+                      size="small"
+                      :loading="stageTogglingId === stage.id"
+                      @change="(val: string | number | boolean) => toggleStage(stageIndex, Boolean(val))"
+                    />
+                  </span>
+                </ElTooltip>
                 <ElTooltip content="上移" placement="top">
                   <ElButton link :disabled="stageIndex === 0" @click="moveStage(stageIndex, -1)">
                     <ArtSvgIcon icon="ri:arrow-up-line" />
@@ -349,6 +444,24 @@
                 <ElTooltip content="添加任务到本阶段" placement="top">
                   <ElButton link type="primary" @click="openPicker(stageIndex)">
                     <ArtSvgIcon icon="ri:add-line" />
+                  </ElButton>
+                </ElTooltip>
+                <ElTooltip
+                  :content="
+                    isStageRunning(stage) || stage.id === stageRunningId
+                      ? '本阶段正在执行'
+                      : '单独运行本阶段'
+                  "
+                  placement="top"
+                >
+                  <ElButton
+                    link
+                    type="primary"
+                    :loading="isStageRunning(stage) || stage.id === stageRunningId"
+                    :disabled="!stage.tasks.length || anyRunActive || stage.enabled === false"
+                    @click="runStage(stage)"
+                  >
+                    <ArtSvgIcon icon="ri:play-line" />
                   </ElButton>
                 </ElTooltip>
                 <ElTooltip content="查看本阶段日志（在底部终端里）" placement="top">
@@ -370,7 +483,7 @@
               v-for="(task, taskIndex) in stage.tasks"
               :key="task.id"
               class="task-card"
-              :class="taskStateClass(task.id)"
+              :class="[taskStateClass(task.id), { 'is-disabled': task.enabled === false }]"
               @click="openTaskDialog(stageIndex, taskIndex)"
             >
               <div class="task-head">
@@ -408,7 +521,26 @@
                   <span v-if="taskTypeLabel(task)" class="task-type">{{ taskTypeLabel(task) }}</span>
                 </div>
                 <ElTag
-                  v-if="taskStatus(task.id)"
+                  v-if="task.enabled === false"
+                  type="info"
+                  size="small"
+                  effect="plain"
+                  class="task-state"
+                >
+                  已停用
+                </ElTag>
+                <!-- 没连线的步骤不会执行：列表视图也要标出来，和画布上的红字一致 -->
+                <ElTag
+                  v-else-if="task.linked === false"
+                  type="danger"
+                  size="small"
+                  effect="plain"
+                  class="task-state"
+                >
+                  未连线
+                </ElTag>
+                <ElTag
+                  v-else-if="taskStatus(task.id)"
                   :type="taskStatus(task.id)!.type"
                   size="small"
                   effect="light"
@@ -416,6 +548,20 @@
                 >
                   {{ taskStatus(task.id)!.text }}
                 </ElTag>
+                <!-- 单步开关：关掉后运行时会跳过这一步（立刻落库，不用再点保存） -->
+                <ElTooltip
+                  :content="task.enabled === false ? '已停用：运行时会跳过这一步，点击启用' : '启停这一步：关闭后运行时会跳过'"
+                  placement="top"
+                >
+                  <span class="task-switch" @click.stop>
+                    <ElSwitch
+                      :model-value="task.enabled !== false"
+                      size="small"
+                      :loading="taskTogglingId === task.id"
+                      @change="(val: string | number | boolean) => toggleTask(stageIndex, taskIndex, val)"
+                    />
+                  </span>
+                </ElTooltip>
               </div>
 
               <p v-if="pluginOf(task.type)?.desc" class="task-desc">
@@ -464,13 +610,31 @@
               </div>
             </div>
 
-            <button type="button" class="task-add" @click="openPicker(stageIndex)">
-              <ArtSvgIcon icon="ri:add-line" class="task-add-icon" />
+            <button
+              type="button"
+              class="task-add"
+              :class="{ 'is-limit': stage.tasks.length >= MAX_TASKS_PER_STAGE }"
+              :disabled="stage.tasks.length >= MAX_TASKS_PER_STAGE"
+              @click="openPicker(stageIndex)"
+            >
+              <ArtSvgIcon
+                :icon="stage.tasks.length >= MAX_TASKS_PER_STAGE ? 'ri:checkbox-circle-line' : 'ri:add-line'"
+                class="task-add-icon"
+              />
               <span class="task-add-text">
-                {{ stage.tasks.length ? '添加任务' : '添加第一个任务' }}
+                {{
+                  stage.tasks.length >= MAX_TASKS_PER_STAGE
+                    ? '本阶段已满 ' + MAX_TASKS_PER_STAGE + ' 个任务'
+                    : stage.tasks.length
+                      ? '添加任务'
+                      : '添加第一个任务'
+                }}
               </span>
               <span v-if="!stage.tasks.length" class="task-add-hint">
                 从任务库里选一个签发方式 / 部署目标 / 通知渠道
+              </span>
+              <span v-else-if="stage.tasks.length < MAX_TASKS_PER_STAGE" class="task-add-hint">
+                每个阶段最多 {{ MAX_TASKS_PER_STAGE }} 个任务
               </span>
             </button>
           </div>
@@ -478,14 +642,14 @@
       </template>
     </div>
 
-    <div class="stage-add">
-      <ElButton class="w-full" @click="addStage">
-        <ArtSvgIcon icon="ri:add-line" class="mr-1" />添加阶段
-      </ElButton>
-    </div>
-
-    <!-- 底部终端是 fixed 覆盖层，这里留一段等高占位，免得最后一张卡片永远压在终端底下 -->
-    <div class="log-dock-spacer" :style="{ height: dockSpacerHeight }" aria-hidden="true" />
+    <!-- 底部终端是 fixed 覆盖层，这里留一段等高占位，免得最后一张卡片永远压在终端底下
+         （画布自己按 bottomOffset 缩高，不需要占位） -->
+    <div
+      v-if="viewMode === 'list'"
+      class="log-dock-spacer"
+      :style="{ height: dockSpacerHeight }"
+      aria-hidden="true"
+    />
 
     <!--
       底部固定终端：所有日志统一收在这里。
@@ -659,9 +823,35 @@
           </ElFormItem>
           <ElFormItem label="失败后继续">
             <div class="flex items-center gap-2">
-              <ElSwitch v-model="editingTask.continueOnError" />
+              <ElSwitch v-model="editingTask.continueOnError" @change="onContinueChange" />
               <span class="form-tip">开启后该任务失败不会中断整条流水线（部署类常用）</span>
             </div>
+          </ElFormItem>
+          <!--
+            「失败后跳转」= 这一步挂了就去跑指定的那一步，中间的任务跳过。
+            与「失败后继续」互斥：既然要跳到别处，就不该再顺着往下走。
+          -->
+          <ElFormItem label="失败后跳转到">
+            <ElSelect
+              v-model="editingTask.onErrorTaskId"
+              class="w-full"
+              clearable
+              filterable
+              placeholder="不跳转（失败即中断整条流水线）"
+              :disabled="editingTask.continueOnError"
+              @change="onErrorTargetChange"
+            >
+              <ElOption
+                v-for="item in errorTargetOptions"
+                :key="item.id"
+                :label="item.label"
+                :value="item.id"
+              />
+            </ElSelect>
+            <p class="field-tip">
+              只能在「本任务之后」的任务里选。配了跳转后，失败会直接从目标任务继续执行，
+              中间那些任务会被跳过；画布上会从这一步右侧的「失败后」出口连一条线到目标。
+            </p>
           </ElFormItem>
         </ElForm>
         <ElDivider content-position="left">任务参数</ElDivider>
@@ -694,6 +884,7 @@
     fetchPipelineDetail,
     genTriggerKey,
     runPipeline,
+    runStagePipeline,
     stopHistory,
     updatePipeline,
   } from '@/api/certd'
@@ -712,6 +903,9 @@
   import BrandAvatar from '../components/brand-avatar.vue'
   import PluginForm from '../components/plugin-form.vue'
   import LogTerminal from '../components/log-terminal.vue'
+  import PipelineCanvas from './components/pipeline-canvas.vue'
+  import type { CanvasLayout } from './components/canvas-types'
+  import { MAX_TASKS_PER_STAGE } from './components/canvas-types'
   import { useRunLog } from '../composables/use-run-log'
 
   defineOptions({ name: 'CertdPipelineDetail' })
@@ -723,6 +917,8 @@
   const loading = ref(false)
   const saving = ref(false)
   const running = ref(false)
+  /** 正在单独执行的阶段 id（阶段卡片上的执行按钮 loading 用） */
+  const stageRunningId = ref('')
   const dirty = ref(false)
   const isNew = ref(false)
   const detail = ref<any>({})
@@ -737,11 +933,19 @@
   })
 
   const stages = ref<PipelineStage[]>([])
+  /** 阶段外框拖过之后的位置，跟着 content 一起落库（任务卡片自身不允许拖，所以只存阶段） */
+  const stageLayout = ref<CanvasLayout>({ stages: {}, tasks: {} })
   const triggers = ref<any[]>([])
   const cron = ref('')
   const timerEnabled = ref(true)
   const triggerKey = ref('')
   const lastRun = ref<Record<string, any>>({})
+
+  /* ---------------- 画布视图 ---------------- */
+  /** 默认画布：这是「流水」的本来面目；列表视图留着逐项核对 / 窄屏使用 */
+  const viewMode = ref<'canvas' | 'list'>(
+    typeof window !== 'undefined' && window.innerWidth < 900 ? 'list' : 'canvas'
+  )
 
   /* ---------------- 定时计划：用日历 / 时间选择器，而不是让人背 cron ---------------- */
   type ScheduleMode = 'daily' | 'weekly' | 'monthly' | 'once' | 'custom'
@@ -821,6 +1025,29 @@
     scheduleMode.value = 'custom'
   }
 
+  /**
+   * 头部「定时任务」按钮上的一句话：把 cron 说成人话（原始表达式放 tooltip）。
+   * 只覆盖界面上能选出来的几种形状，其它原样显示 —— 别让人背符号。
+   */
+  const cronSummary = computed(() => {
+    const text = (cron.value || '').trim()
+    if (!timerEnabled.value || !text) return ''
+    const parts = text.split(/\s+/)
+    if (parts.length !== 5) return text
+    const [minute, hour, day, month, weekday] = parts
+    if (!/^\d+$/.test(minute) || !/^\d+$/.test(hour)) return text
+    const time = pad(+hour) + ':' + pad(+minute)
+    if (day === '*' && month === '*' && weekday === '*') return '每天 ' + time
+    if (day === '*' && month === '*' && /^\d+$/.test(weekday)) {
+      const label = WEEKDAY_OPTIONS.find((item) => item.value === +weekday)?.label
+      return (label || '每' + weekday) + ' ' + time
+    }
+    if (/^\d+$/.test(day) && month === '*' && weekday === '*') {
+      return '每月 ' + day + ' 号 ' + time
+    }
+    return text
+  })
+
   /** 点常用预设：同时把日历选择器切到对应状态，避免「cron 变了但界面没变」 */
   const applyPreset = (value: string) => {
     cron.value = value
@@ -881,16 +1108,35 @@
     return '保存后由调度器计算'
   })
 
-  const enabled = computed({
-    get: () => !form.disabled,
-    set: (value: boolean) => {
-      form.disabled = !value
-      markDirty()
-    },
-  })
-
   const taskCount = computed(() =>
     stages.value.reduce((total, stage) => total + (stage.tasks?.length || 0), 0)
+  )
+
+  /** 被整段关掉的阶段数 */
+  const offStageCount = computed(
+    () => stages.value.filter((stage) => stage.enabled === false).length
+  )
+
+  /**
+   * 被关掉的步骤数：顶部与阶段标题都要能看出「这些这次不会跑」。
+   * 整段停用的阶段，里面的任务一个都不会执行 —— 统一算进「已停用」，
+   * 否则顶部会显示「3 个任务（0 步已停用）」，和实际执行对不上。
+   */
+  const disabledTaskCount = computed(() =>
+    stages.value.reduce((total, stage) => {
+      const tasks = stage.tasks || []
+      if (stage.enabled === false) return total + tasks.length
+      return total + tasks.filter((task) => task.enabled === false).length
+    }, 0)
+  )
+
+  /** 没连线的步骤：画布上没线、运行时跳过，顶部摘要要说清楚，否则「4 个任务」和实际执行对不上。
+      停用阶段里的任务已经算进「已停用」，这里不重复计。 */
+  const unlinkedTaskCount = computed(() =>
+    stages.value.reduce((total, stage) => {
+      if (stage.enabled === false) return total
+      return total + (stage.tasks || []).filter((task) => task.linked === false).length
+    }, 0)
   )
 
   /**
@@ -926,11 +1172,22 @@
     return runStatusMeta(item.status)
   }
 
+  /**
+   * 画布节点上的状态徽标。
+   * key 直接用后端状态值（success / failed / running / skipped），画布那边拼成 is-xxx 类名。
+   */
+  const canvasStatusOf = (taskId: string): { key: string; text: string } | null => {
+    const status = lastRun.value?.[taskId]?.status
+    if (!status) return null
+    return { key: String(status), text: runStatusMeta(status).text }
+  }
+
   /** 阶段整体状态：全成功=绿、有失败=红、在跑=黄（四条边，不是只描左边） */
   const stageStateClass = (stage: PipelineStage): string => {
+    // 跳过 / 停用 / 未连线的步骤不参与阶段成败判断：证书没到期跳过申请，不代表这个阶段失败
     const states = (stage.tasks || [])
       .map((task) => lastRun.value?.[task.id]?.status)
-      .filter(Boolean) as string[]
+      .filter((state) => state && state !== 'skipped' && state !== 'disabled' && state !== 'unlinked') as string[]
     if (!states.length) return ''
     if (states.some((state) => state === 'running')) return 'is-running'
     if (states.some((state) => state === 'failed')) return 'is-failed'
@@ -943,6 +1200,8 @@
     if (status === 'failed') return 'is-failed'
     if (status === 'running') return 'is-running'
     if (status === 'success') return 'is-success'
+    if (status === 'skipped') return 'is-skipped'
+    if (status === 'unlinked') return 'is-skipped'
     return ''
   }
 
@@ -989,6 +1248,7 @@
     const parts: string[] = []
     if (title !== name) parts.push(name)
     if (task.continueOnError) parts.push('失败继续')
+    if (task.onErrorTaskId) parts.push('失败后跳转')
     return parts.join(' · ')
   }
 
@@ -1048,6 +1308,31 @@
 
   const markDirty = () => {
     dirty.value = true
+  }
+
+  /**
+   * 顺序一变（拖线拼接、删阶段、删任务），「失败后跳转」可能指向了不存在的任务，
+   * 或者指向了排在自己前面的任务 —— 这两种保存时都会被后端拒。
+   * 这里统一扫一遍，把失效的直接断掉，别让用户点保存才看到报错。
+   */
+  const pruneErrorLinks = () => {
+    const flat: string[] = []
+    stages.value.forEach((stage) => (stage.tasks || []).forEach((task) => flat.push(task.id)))
+    const pos = new Map(flat.map((id, index) => [id, index]))
+    let cleared = 0
+    for (const stage of stages.value) {
+      for (const task of stage.tasks || []) {
+        const target = task.onErrorTaskId
+        if (!target) continue
+        const targetAt = pos.get(target)
+        const selfAt = pos.get(task.id) ?? -1
+        if (targetAt === undefined || targetAt <= selfAt) {
+          task.onErrorTaskId = ''
+          cleared++
+        }
+      }
+    }
+    return cleared
   }
 
   /* ---------------- 标题编辑（弹窗） ---------------- */
@@ -1136,6 +1421,10 @@
       stages.value = data.content?.stages ? JSON.parse(JSON.stringify(data.content.stages)) : []
       triggers.value = data.content?.triggers ? JSON.parse(JSON.stringify(data.content.triggers)) : []
       triggerKey.value = data.content?.triggerKey || ''
+      // 阶段外框拖过之后的位置（content.layout），没有就按自动布局排
+      stageLayout.value = data.content?.layout
+        ? JSON.parse(JSON.stringify(data.content.layout))
+        : { stages: {}, tasks: {} }
       lastRun.value = data.lastRun?.tasks || {}
       // 打开页面就把上次执行的日志接上，底部终端直接有内容可看
       if (data.lastRun?.id) {
@@ -1175,6 +1464,7 @@
   const removeStage = async (index: number) => {
     if (!stages.value[index].tasks.length) {
       stages.value.splice(index, 1)
+      pruneErrorLinks()
       markDirty()
       return
     }
@@ -1182,6 +1472,7 @@
       type: 'warning',
     })
     stages.value.splice(index, 1)
+    pruneErrorLinks()
     markDirty()
   }
 
@@ -1201,9 +1492,77 @@
     markDirty()
   }
 
+  /** 单步启停：改了就落库，否则用户以为生效了、实际跑的还是旧的 */
+  const taskTogglingId = ref('')
+  const toggleTask = async (
+    stageIndex: number,
+    taskIndex: number,
+    value: string | number | boolean
+  ) => {
+    const task = stages.value[stageIndex]?.tasks?.[taskIndex]
+    if (!task) return
+    const next = Boolean(value)
+    const before = task.enabled !== false
+    task.enabled = next
+    taskTogglingId.value = task.id
+    try {
+      const saved = await save(true)
+      if (!saved) {
+        task.enabled = before
+        return
+      }
+      ElMessage.success(
+        next
+          ? '已启用「' + (task.title || '该步骤') + '」'
+          : '已停用「' + (task.title || '该步骤') + '」，运行时将跳过这一步'
+      )
+    } finally {
+      taskTogglingId.value = ''
+    }
+  }
+
+  /**
+   * 阶段启停：和单步开关同一个套路 —— 改完立刻落库，否则用户以为关掉了、实际跑的还是旧的。
+   * 关掉后引擎按 stage.enabled === false 整段跳过（不再逐个关阶段里的任务）。
+   */
+  const stageTogglingId = ref('')
+  const toggleStage = async (stageIndex: number, enabled?: boolean) => {
+    const stage = stages.value[stageIndex]
+    if (!stage) return
+    // 上一次还在落库就别再发一次：画布上的开关没有 loading 态，连点两下会发两个 PUT
+    if (stageTogglingId.value === stage.id) return
+    const next = typeof enabled === 'boolean' ? enabled : stage.enabled === false
+    const before = stage.enabled !== false
+    if (next === before) return
+    stage.enabled = next
+    stageTogglingId.value = stage.id
+    try {
+      const saved = await save(true)
+      if (!saved) {
+        stage.enabled = before
+        return
+      }
+      ElMessage.success(
+        next
+          ? '已启用「' + (stage.title || '该阶段') + '」'
+          : '已停用「' + (stage.title || '该阶段') + '」，运行时将整段跳过'
+      )
+    } finally {
+      stageTogglingId.value = ''
+    }
+  }
+
   const removeTask = async (stageIndex: number, taskIndex: number) => {
     await ElMessageBox.confirm('确定删除这个任务吗？', '删除任务', { type: 'warning' })
-    stages.value[stageIndex].tasks.splice(taskIndex, 1)
+    const [removed] = stages.value[stageIndex].tasks.splice(taskIndex, 1)
+    // 别的任务可能把它当作「失败后跳转」的目标，删了要顺手断掉，否则画布会留一条指向空气的红线
+    if (removed) {
+      for (const stage of stages.value) {
+        for (const task of stage.tasks || []) {
+          if (task.onErrorTaskId === removed.id) task.onErrorTaskId = ''
+        }
+      }
+    }
     markDirty()
   }
 
@@ -1231,6 +1590,13 @@
   })
 
   const openPicker = (stageIndex: number) => {
+    const stage = stages.value[stageIndex]
+    if (!stage) return
+    // 一个阶段最多 5 个任务：再多卡片就排成一长条，画布缩放后看不清
+    if ((stage.tasks || []).length >= MAX_TASKS_PER_STAGE) {
+      ElMessage.warning('每个阶段最多 ' + MAX_TASKS_PER_STAGE + ' 个任务')
+      return
+    }
     pickerStageIndex.value = stageIndex
     pickerVisible.value = true
   }
@@ -1238,16 +1604,30 @@
   const choosePlugin = (plugin: TaskPlugin) => {
     const stage = stages.value[pickerStageIndex.value]
     if (!stage) return
+    // 弹窗开着的时候可能已经加满了（多端 / 快速连点），落库前再拦一次
+    if ((stage.tasks || []).length >= MAX_TASKS_PER_STAGE) {
+      pickerVisible.value = false
+      ElMessage.warning('每个阶段最多 ' + MAX_TASKS_PER_STAGE + ' 个任务')
+      return
+    }
     const task: PipelineTask = {
       id: shortId('task'),
       type: plugin.type,
       title: plugin.name,
       input: defaultsOf(plugin),
       continueOnError: plugin.group === 'deploy' ? true : false,
+      enabled: true,
+      // 新加的步骤不自动接进执行链：画布上不给它画线，运行时也会跳过。
+      // 用户把它拖接到流程上之后才会变 true（见 onCanvasConnect）。
+      // 例外：整条流水线还没有任何任务时，这一个就是起点，必须能跑起来。
+      linked: stages.value.some((item) => (item.tasks || []).length > 0) ? false : true,
     }
     stage.tasks.push(task)
     pickerVisible.value = false
     markDirty()
+    if (task.linked === false) {
+      ElMessage.info('已添加，把它连到流程上才会执行（从上一张卡片右侧蓝点拖过来）')
+    }
     // 直接打开配置，省掉「再点一次」的步骤
     openTaskDialog(pickerStageIndex.value, stage.tasks.length - 1)
   }
@@ -1284,6 +1664,42 @@
 
   /** 编辑副本，取消时不影响原任务 */
   const taskBackup = ref('')
+
+  /**
+   * 「失败后跳转到」的可选目标：只能选排在当前任务**后面**的任务。
+   * 执行顺序是把 stages → tasks 拍平后的线性序列，往前跳会成环。
+   */
+  const errorTargetOptions = computed(() => {
+    const flat: { id: string; label: string }[] = []
+    stages.value.forEach((stage, stageIndex) => {
+      ;(stage.tasks || []).forEach((task) => {
+        // 没连线的步骤运行时会被跳过，跳过去等于什么都没做，所以不给它当候选
+        if (task.linked === false) return
+        flat.push({
+          id: task.id,
+          label:
+            stageIndex +
+            1 +
+            '. ' +
+            (stage.title || '未命名阶段') +
+            ' / ' +
+            (task.title || task.type),
+        })
+      })
+    })
+    const currentId = editingTask.value?.id
+    const currentAt = flat.findIndex((item) => item.id === currentId)
+    return currentAt < 0 ? flat : flat.slice(currentAt + 1)
+  })
+
+  // 「失败后继续」和「失败后跳转」互斥：一个说继续往下走，一个说要跳到别处
+  const onContinueChange = (value: string | number | boolean) => {
+    if (value && editingTask.value) editingTask.value.onErrorTaskId = ''
+  }
+
+  const onErrorTargetChange = (value?: string) => {
+    if (value && editingTask.value) editingTask.value.continueOnError = false
+  }
 
   const openTaskDialog = (stageIndex: number, taskIndex: number) => {
     editingStageIndex.value = stageIndex
@@ -1332,7 +1748,71 @@
     for (const trigger of triggers.value) {
       if (trigger.type !== 'timer') triggerList.push(trigger)
     }
-    return { stages: list, triggers: triggerList, triggerKey: triggerKey.value }
+    return { stages: list, triggers: triggerList, triggerKey: triggerKey.value, layout: stageLayout.value }
+  }
+
+  /** 画布拖完阶段外框后回传坐标：只存阶段，任务卡片的相对位置由顺序决定 */
+  const canvasLayout = computed<CanvasLayout>(() => stageLayout.value)
+  const onLayoutChange = (layout: CanvasLayout) => {
+    stageLayout.value = { stages: { ...(layout?.stages || {}) }, tasks: { ...(layout?.tasks || {}) } }
+    markDirty()
+  }
+
+  /**
+   * 点连线删除。
+   * 顺序连线：断开的是「目标那一步」，它变成未连线（不执行），任务本身留在原阶段不动。
+   * 失败后连线：清掉源任务的 onErrorTaskId，顺序不受影响。
+   * 删之前先问一句，并把后果写清楚 —— 断开后这一步就不跑了，不能让人误点。
+   */
+  const onEdgeDelete = async (payload: {
+    sourceTaskId: string
+    targetTaskId: string
+    kind: 'next' | 'error'
+  }) => {
+    const { sourceTaskId, targetTaskId, kind } = payload || ({} as any)
+    if (!sourceTaskId || !targetTaskId) return
+    const locate = (taskId: string) => {
+      for (const stage of stages.value) {
+        const hit = (stage.tasks || []).find((task) => task.id === taskId)
+        if (hit) return hit
+      }
+      return null
+    }
+    const sourceTask = locate(sourceTaskId)
+    const targetTask = locate(targetTaskId)
+    if (!sourceTask || !targetTask) return
+    const name = (task: PipelineTask) => task.title || task.type
+
+    if (kind === 'error') {
+      try {
+        await ElMessageBox.confirm(
+          '删除后「' + name(sourceTask) + '」失败时不再跳到「' + name(targetTask) + '」。',
+          '删除这条「失败后」连线？',
+          { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+        )
+      } catch {
+        return
+      }
+      sourceTask.onErrorTaskId = ''
+      markDirty()
+      ElMessage.success('已删除「失败后」连线')
+      return
+    }
+
+    try {
+      await ElMessageBox.confirm(
+        '断开后「' +
+          name(targetTask) +
+          '」会变成「未连线」，运行时跳过、不再执行；任务仍留在原来的阶段里。',
+        '删除这条连线？',
+        { type: 'warning', confirmButtonText: '断开', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+    targetTask.linked = false
+    markDirty()
+    ElMessage.success('已断开：「' + name(targetTask) + '」不再执行')
   }
 
   const save = async (silent = false): Promise<boolean> => {
@@ -1403,6 +1883,11 @@
 
   const logRunning = computed(
     () => runLog.status.value === 'running' || !!runLog.runningStage.value
+  )
+
+  /** 有没有任何执行在进行（整条流水线 / 某阶段）：阶段执行按钮此时禁用，避免并发跑 */
+  const anyRunActive = computed(
+    () => running.value || !!stageRunningId.value || logRunning.value
   )
 
   const isTaskRunning = (taskId: string) => lastRun.value?.[taskId]?.status === 'running'
@@ -1544,6 +2029,40 @@
     }
   }
 
+  /**
+   * 单独运行某一个阶段：
+   * 先静默保存（避免「改了没生效」），再调按阶段运行的接口，
+   * 底部终端自动切到该阶段的日志，任务卡只更新本阶段的状态。
+   */
+  const runStage = async (stage: PipelineStage) => {
+    if (stage.enabled === false) {
+      ElMessage.warning('该阶段已停用，请先启用再单独运行')
+      return
+    }
+    if (!stage.tasks?.length) {
+      ElMessage.warning('该阶段还没有任务，无法单独运行')
+      return
+    }
+    if (anyRunActive.value) return
+    stageRunningId.value = stage.id
+    try {
+      const saved = await save(true)
+      if (!saved) return
+      const result = await runStagePipeline(form.id, stage.id)
+      detail.value.running = true
+      // 终端拉起来并直接切到本阶段
+      openDock()
+      logScope.value = stage.id
+      logTaskFilter.value = ''
+      // 不 await —— 流要等该阶段跑完才结束
+      void runLog.connect(result?.historyId || null)
+    } catch (error: any) {
+      ElMessage.error(error?.message || '启动失败')
+    } finally {
+      stageRunningId.value = ''
+    }
+  }
+
   /* ---------------- 其它 ---------------- */
   const regenerateKey = async () => {
     const result = await genTriggerKey()
@@ -1564,6 +2083,105 @@
 
   const goBack = () => {
     router.push('/certd/pipeline')
+  }
+
+  /* ---------------- 画布事件（列表视图的按钮直接调原函数，这里只做下标 → 对象的适配） ---------------- */
+  const openTaskLogAt = (stageIndex: number, taskIndex: number) => {
+    const stage = stages.value[stageIndex]
+    const task = stage?.tasks?.[taskIndex]
+    if (stage && task) openTaskLog(stage, task)
+  }
+
+  const runStageAt = (stageIndex: number) => {
+    const stage = stages.value[stageIndex]
+    if (stage) void runStage(stage)
+  }
+
+  const openStageLogAt = (stageIndex: number) => {
+    const stage = stages.value[stageIndex]
+    if (stage) openStageLog(stage)
+  }
+
+  /**
+   * 连线拼接：把 target 任务挪到 source 任务后面。
+   * 执行顺序就是 stages/tasks 的数组顺序，所以「连线」等价于重排，天然不会成环。
+   * 同阶段 → 组内换位；跨阶段 → 把任务搬到 source 所在阶段。
+   */
+  const onCanvasConnect = (payload: {
+    sourceTaskId: string
+    targetTaskId: string
+    kind?: 'reorder' | 'error'
+  }) => {
+    const { sourceTaskId, targetTaskId, kind } = payload || ({} as any)
+    if (!sourceTaskId || !targetTaskId || sourceTaskId === targetTaskId) return
+
+    const locate = (taskId: string): [number, number] => {
+      for (let si = 0; si < stages.value.length; si++) {
+        const ti = (stages.value[si].tasks || []).findIndex((task) => task.id === taskId)
+        if (ti >= 0) return [si, ti]
+      }
+      return [-1, -1]
+    }
+
+    const [sourceStageIndex, sourceTaskIndex] = locate(sourceTaskId)
+    const [targetStageIndex, targetTaskIndex] = locate(targetTaskId)
+    if (sourceStageIndex < 0 || targetStageIndex < 0) return
+
+    const sourceStage = stages.value[sourceStageIndex]
+    const targetStage = stages.value[targetStageIndex]
+    const sourceTask = sourceStage.tasks[sourceTaskIndex]
+    const targetTask = targetStage.tasks[targetTaskIndex]
+
+    // ---- 红点拖出来的：配「失败后跳转」，不动顺序 ----
+    if (kind === 'error') {
+      const flatIndex = (si: number, ti: number) => {
+        let n = 0
+        for (let s = 0; s < si; s++) n += stages.value[s].tasks?.length || 0
+        return n + ti
+      }
+      if (flatIndex(targetStageIndex, targetTaskIndex) <= flatIndex(sourceStageIndex, sourceTaskIndex)) {
+        ElMessage.warning('「失败后跳转」只能指向排在这一步后面的任务')
+        return
+      }
+      sourceTask.onErrorTaskId = targetTask.id
+      markDirty()
+      ElMessage.success(
+        '「' +
+          (sourceTask.title || sourceTask.type) +
+          '」失败后将跳转到「' +
+          (targetTask.title || targetTask.type) +
+          '」'
+      )
+      return
+    }
+
+    // ---- 蓝点拖出来的：接线（只表达先后，不搬动任务） ----
+    // 任务永远留在它自己的阶段里 —— 早先的实现会把目标任务 splice 到源任务的阶段里，
+    // 跨阶段一拖阶段就被「合并」掉了，用户的结构被连线破坏。
+    // 现在的语义：连线 = 把目标接进执行链；顺序由「阶段顺序 + 阶段内顺序」决定。
+    const flatIndexOf = (si: number, ti: number) => {
+      let n = 0
+      for (let s = 0; s < si; s++) n += stages.value[s].tasks?.length || 0
+      return n + ti
+    }
+    if (
+      flatIndexOf(targetStageIndex, targetTaskIndex) <= flatIndexOf(sourceStageIndex, sourceTaskIndex)
+    ) {
+      ElMessage.warning('只能连到排在这一步后面的任务（任务不会跨阶段搬家）')
+      return
+    }
+
+    const wasUnlinked = targetTask.linked === false
+    targetTask.linked = true
+    // 从新卡片往外拖线同样是「接线」：源也一起激活
+    sourceTask.linked = true
+    markDirty()
+    if (wasUnlinked) {
+      ElMessage.success('已把「' + (targetTask.title || targetTask.type) + '」接进执行流程')
+    } else {
+      // 两步本来就在同一条链上：连线是自动画的，再拖一次不会改变顺序
+      ElMessage.info('这两步本来就在同一条执行链上（点连线可以断开）')
+    }
   }
 
   /* ---------------- 生命周期：底部终端要跟着侧边栏宽度走 ---------------- */
@@ -1744,16 +2362,71 @@
     align-items: center;
   }
 
-  /* 保存按钮旁边的「定时任务」入口，右键角标显示当前 cron */
-  .btn-badge {
-    margin-left: 6px;
-    padding: 0 6px;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 11px;
-    line-height: 16px;
-    color: var(--g-text-2);
+  /* 画布 / 列表切换：分段控件（两个 icon + 文字，当前项白底 + 主色） */
+  .view-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 2px;
+    padding: 2px;
     background: var(--g-fill-hover);
+    border-radius: 100px;
+  }
+
+  .view-switch button {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    height: 26px;
+    padding: 0 11px;
+    font-family: var(--g-font);
+    font-size: 12px;
+    color: var(--g-text-2);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: 100px;
+    transition:
+      color 0.14s ease,
+      background 0.14s ease,
+      box-shadow 0.14s ease;
+  }
+
+  .view-switch button:hover {
+    color: var(--g-text);
+  }
+
+  .view-switch button.is-active {
+    color: var(--g-blue);
+    background: var(--g-surface);
+    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.18);
+  }
+
+  /* 按钮角标：日志按钮显示行数、定时任务按钮显示当前 cron；
+     没有内容时也显示「暂无 / 未设置」，按钮里不留空白。
+     颜色变量都带兜底值 —— 少一个变量定义就会整块「看不见」。 */
+  .btn-badge {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    height: 18px;
+    margin-left: 6px;
+    padding: 0 7px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 18px;
+    color: var(--g-text-2, var(--art-gray-600, #5f6368));
+    background: var(--g-fill-hover, var(--art-gray-200, #f1f3f4));
     border-radius: 4px;
+    white-space: nowrap;
+    opacity: 1;
+  }
+
+  /* 没内容时压暗，但仍然要显示出来（虚线框 + 浅字） */
+  .btn-badge.is-muted {
+    color: var(--g-text-3, var(--art-gray-500, #909399));
+    background: transparent;
+    border: 1px dashed var(--g-line, var(--art-card-border, #dcdfe6));
   }
 
   /* ---------------- 触发方式与执行设置（抽屉） ----------------
@@ -1776,22 +2449,6 @@
   .schedule-drawer .setting-block,
   .drawer-body > .setting-block {
     margin-bottom: 0;
-  }
-
-  /* 开关本身不放文字（开关里塞字会把滑块挤小、窄屏更难拖），
-     状态用旁边的文案表达 */
-  .switch-field {
-    display: inline-flex;
-    flex: 0 0 auto;
-    gap: 6px;
-    align-items: center;
-    cursor: pointer;
-  }
-
-  .switch-field-label {
-    font-size: 12.5px;
-    white-space: nowrap;
-    color: var(--g-text-2);
   }
 
   .detail-remark {
@@ -1904,11 +2561,16 @@
     flex: 0 0 auto;
     gap: 2px;
     align-items: center;
+  }
+
+  /* 操作按钮平时半透明、hover 才实心；但启停开关是「状态指示」，
+     不能被父级 opacity 一起压暗 —— 所以透明度只加在按钮上。 */
+  .stage-head-right :deep(.el-button) {
     opacity: 0.55;
     transition: opacity 0.2s;
   }
 
-  .stage-card:hover .stage-head-right {
+  .stage-card:hover .stage-head-right :deep(.el-button) {
     opacity: 1;
   }
 
@@ -2000,6 +2662,42 @@
     color: var(--g-amber);
   }
 
+  /* 阶段启停开关：开态跟着环节色走（证书蓝 / 部署绿 / 通知黄） */
+  .stage-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    margin-right: 4px;
+  }
+
+  .stage-switch :deep(.el-switch) {
+    --el-switch-on-color: var(--stage-color, var(--g-blue));
+  }
+
+  /* 「整段已停用」标记：灰底小字，不抢标题 */
+  .stage-off-tag {
+    padding: 1px 6px;
+    font-size: 11px;
+    color: var(--g-text-3);
+    background: var(--g-fill-hover);
+    border-radius: 100px;
+  }
+
+  /* 整段停用：卡片降饱和 + 虚线边，和「某一步停用」区分开 */
+  .stage-card.is-off {
+    background: var(--g-fill);
+    border-style: dashed;
+  }
+
+  .stage-card.is-off .stage-title {
+    color: var(--g-text-3);
+  }
+
+  .stage-card.is-off .stage-index {
+    color: var(--g-text-3);
+    background: var(--g-fill-hover);
+  }
+
   /* 暗色模式：环节色是 JS 内联的固定值，深底上要提亮才看得清 */
   .dark .stage-index,
   .dark .stage-icon,
@@ -2045,6 +2743,37 @@
 
   .task-card.is-running {
     border-color: var(--g-amber);
+  }
+
+  /* 跳过的步骤（证书未到期 / 已存在 / 刚申请过）：蓝色虚线，别和失败混淆 */
+  .task-card.is-skipped {
+    border-style: dashed;
+    border-color: var(--g-blue);
+  }
+
+  /* 停用的步骤：整卡变淡 + 图标去色，一眼看出这次不会执行它 */
+  .task-card.is-disabled {
+    opacity: 0.62;
+    background: var(--g-fill-hover);
+    border-style: dashed;
+  }
+
+  .task-card.is-disabled .task-icon {
+    filter: grayscale(1);
+  }
+
+  .task-card.is-disabled:hover {
+    opacity: 0.85;
+  }
+
+  .task-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+  }
+
+  .task-switch :deep(.el-switch) {
+    --el-switch-on-color: var(--g-green);
   }
 
   .task-head {
@@ -2217,6 +2946,15 @@
     border-color: var(--g-blue);
   }
 
+  /* 满 5 个任务：占位卡变灰且不可点，和画布底部的提示条保持一致的语义 */
+  .task-add.is-limit,
+  .task-add.is-limit:hover {
+    color: var(--g-text-3);
+    cursor: not-allowed;
+    background: var(--g-fill);
+    border-color: var(--g-line);
+  }
+
   .task-add-icon {
     font-size: 20px;
   }
@@ -2229,23 +2967,6 @@
   .task-add-hint {
     font-size: 11px;
     color: var(--g-text-3);
-  }
-
-  .stage-add {
-    margin-top: 14px;
-  }
-
-  .stage-add :deep(.el-button) {
-    height: 40px;
-    color: var(--g-blue);
-    background: transparent;
-    border: 1px dashed var(--g-line);
-    border-radius: 12px;
-  }
-
-  .stage-add :deep(.el-button:hover) {
-    background: var(--g-blue-50);
-    border-color: var(--g-blue);
   }
 
   /* ---------------- 触发方式与执行设置 ---------------- */

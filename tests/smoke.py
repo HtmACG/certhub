@@ -14,9 +14,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 import threading
 import time
 import traceback
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -91,6 +93,7 @@ def _mock_handler(seen: list):
                 "auth": self.headers.get("Authorization") or "",
                 "has_cert": b"BEGIN CERTIFICATE" in body or b"BEGIN+CERTIFICATE" in body,
                 "has_key": b"PRIVATE KEY" in body or b"PRIVATE+KEY" in body,
+                "body": body.decode("latin-1"),
             })
 
         def _send(self, code, payload, ctype="application/json"):
@@ -103,20 +106,37 @@ def _mock_handler(seen: list):
 
         def do_GET(self):
             self._record()
-            if urlparse(self.path).path == "/webapi/auth.cgi":
-                q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
-                if q.get("account") == "dsm-user" and q.get("passwd") == "dsm-pass":
-                    self._send(200, json.dumps({"success": True, "data": {"sid": "SID"}}))
-                else:
-                    self._send(200, json.dumps({"success": False, "error": {"code": 400}}))
-                return
+            path = urlparse(self.path).path
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            if path in ("/webapi/auth.cgi", "/webapi/entry.cgi"):
+                api = q.get("api") or ""
+                method = q.get("method") or ""
+                if api == "SYNO.API.Auth" or (not api and path == "/webapi/auth.cgi"):
+                    if q.get("account") == "dsm-user" and q.get("passwd") == "dsm-pass":
+                        self._send(200, json.dumps(
+                            {"success": True, "data": {"sid": "SID", "synotoken": "SYNOTOKEN"}}))
+                    else:
+                        self._send(200, json.dumps({"success": False, "error": {"code": 400}}))
+                    return
+                if api == "SYNO.Core.Certificate.CRT" and method == "list":
+                    # 证书库里已经有一张同名证书，导入时要带 id 覆盖它
+                    self._send(200, json.dumps({"success": True, "data": {"certificates": [
+                        {"id": 7, "desc": "panel-smoke.local",
+                         "subject": {"common_name": "panel-smoke.local"}}]}}))
+                    return
+                if api == "SYNO.Core.Certificate":
+                    self._send(200, json.dumps({"success": True, "data": {}}))
+                    return
             self._send(404, "{}")
 
         def do_POST(self):
             self._record()
             p = urlparse(self.path).path
             if p == "/webapi/entry.cgi":
-                self._send(200, json.dumps({"success": True, "data": {}}))
+                q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+                # 证书导入要回一个 id，后面的 set_default 才有目标
+                data = {"id": 7} if q.get("method") == "import" else {}
+                self._send(200, json.dumps({"success": True, "data": data}))
             elif p == "/cgi-bin/authLogin.cgi":
                 self._send(200, "<QDoc><authPassed><![CDATA[1]]></authPassed>"
                                 "<authSid><![CDATA[QSID]]></authSid></QDoc>", "text/xml")
@@ -362,14 +382,25 @@ def section_panel_deploy(api: Api) -> None:
               str([(t["title"], t["status"], t.get("message")) for t in tasks]))
 
         check("DSM 登录带上了授权里的账号密码",
-              any(s["path"] == "/webapi/auth.cgi" and s["query"].get("account") == "dsm-user"
+              any(s["query"].get("api") in (None, "SYNO.API.Auth")
+                  and s["query"].get("account") == "dsm-user"
                   and s["query"].get("passwd") == "dsm-pass" for s in seen))
+        imports = [s for s in seen
+                   if s["query"].get("api") == "SYNO.Core.Certificate"
+                   and s["query"].get("method") == "import"]
+        check("DSM 用 SYNO.Core.Certificate 的 import 接口（.CRT 上没有 import，会回 103）",
+              bool(imports), [s["query"].get("api") for s in seen])
         check("DSM 上传了证书与私钥",
-              any(s["path"] == "/webapi/entry.cgi" and s["has_cert"] and s["has_key"]
-                  for s in seen))
+              bool(imports) and imports[0]["has_cert"] and imports[0]["has_key"],
+              imports[0]["body"][:160] if imports else "没有 import 请求")
+        check("DSM 导入带上要覆盖的证书 id",
+              bool(imports) and 'name="id"' in imports[0]["body"],
+              imports[0]["body"][:200] if imports else "")
         check("DSM 任务里的 asDefault 覆盖生效",
-              any(s["path"] == "/webapi/entry.cgi" and s["query"].get("as_default") == "true"
-                  for s in seen))
+              any(s["query"].get("api") == "SYNO.Core.Certificate"
+                  and s["query"].get("method") == "set_default"
+                  and s["query"].get("id") == "7" for s in seen),
+              [s["query"].get("method") for s in seen])
         check("QTS 登录并上传证书",
               any(s["path"] == "/cgi-bin/authLogin.cgi" for s in seen)
               and any(s["path"] == "/cgi-bin/sslUtils.cgi" and s["has_cert"] for s in seen))
@@ -1193,7 +1224,8 @@ def section_network(api: Api) -> None:
 TEST_DOMAINS = {
     "smoke.local", "smoke-s3.local", "pipeline.example.com", "site-a.com", "site-b.com",
     "auto-match.local", "panel-smoke.local", "deploy-smoke.local", "eab.smoke.local",
-    "localhost",
+    "localhost", "group-smoke.local", "trustasia-smoke.local", "switch-smoke.local",
+    "skip-smoke.local",
 }
 
 
@@ -1267,8 +1299,8 @@ def section_cert_apply_inputs(api: Api) -> None:
     check("CA 选项含 Let's Encrypt / Google / ZeroSSL",
           {"letsencrypt", "google", "zerossl"} <= set(providers), str(providers))
     eab_when = (inputs["eabAccessId"].get("showWhen") or {}).get("values") or []
-    check("EAB 授权只在需要它的 CA 下显示",
-          set(eab_when) == {"google", "custom"}, str(eab_when))
+    check("EAB 授权只在需要它的 CA 下显示（Google / 自定义 / FreeSSL）",
+          set(eab_when) == {"google", "custom", "litessl"}, str(eab_when))
     check("目录地址只在自定义 CA 下显示",
           (inputs["directory"].get("showWhen") or {}).get("value") == "custom")
     check("DNS 授权只在 DNS 验证下显示",
@@ -1400,6 +1432,99 @@ def section_cert_apply_inputs(api: Api) -> None:
         _drop_pipeline(api, pid2)
         if eid2:
             api.delete(f"/api/access/{eid2}")
+
+def section_freessl(api: Api) -> None:
+    """FreeSSL（LiteSSL）接入：ACME v2 + EAB，纯元数据与文案校验，不联网。"""
+    print("\n== FreeSSL / LiteSSL（亚洲诚信 ACME）==")
+    _backend()
+    from app.plugins import ACCESS_TYPES, ACME_PROVIDERS, TASK_PLUGIN_MAP
+    from app.routers import access as access_router
+    from app.services import acme
+
+    provider = ACME_PROVIDERS.get("litessl") or {}
+    check("注册了 FreeSSL / LiteSSL 这个 CA", bool(provider), str(sorted(ACME_PROVIDERS)))
+    check("目录地址是现行的 acme.litessl.com（老 acme.freessl.cn 已下线）",
+          provider.get("directory") == "https://acme.litessl.com/acme/v2/directory",
+          str(provider.get("directory")))
+    check("标记为需要 EAB（官方 meta.externalAccountRequired=true）",
+          bool(provider.get("eab")), str(provider.get("eab")))
+
+    cert_inputs = {item["key"]: item for item in TASK_PLUGIN_MAP["CertApply"]["inputs"]}
+    providers = [o.get("value") for o in cert_inputs["provider"].get("options") or []]
+    check("申请任务里能选到 FreeSSL / LiteSSL", "litessl" in providers, str(providers))
+    check("选 FreeSSL 时才出现 EAB 凭据字段",
+          "litessl" in ((cert_inputs["eabAccessId"].get("showWhen") or {}).get("values") or []),
+          str(cert_inputs["eabAccessId"].get("showWhen")))
+
+    eab_inputs = {i["key"]: i for i in ACCESS_TYPES["eab"]["inputs"]}
+    eab_providers = [o.get("value") for o in eab_inputs["provider"].get("options") or []]
+    check("EAB 授权里能选 FreeSSL 作为所属 CA", "litessl" in eab_providers, str(eab_providers))
+    check("EAB 凭据可以在线校验（FreeSSL 目录已登记）",
+          access_router._EAB_DIRECTORIES.get("litessl") == provider.get("directory"),
+          str(access_router._EAB_DIRECTORIES))
+
+    zh, raw = acme.friendly_problem({
+        "type": "urn:ietf:params:acme:error:malformed",
+        "detail": "The bound account does not exist",
+    })
+    check("FreeSSL 的 EAB 报错翻成中文结论",
+          zh.startswith("EAB 凭据对不上") and zh == zh.strip(), zh[:80])
+    check("原始英文只留在 detail 里", raw == "The bound account does not exist", raw)
+
+    # 引擎必须跟注册表用同一份目录地址（历史坑：引擎自己抄了一份，新增 CA 就报
+    # 「自定义 ACME 需要填写目录地址」）
+    from app.services import engine as engine_mod
+
+    mismatched = []
+    for key, meta in ACME_PROVIDERS.items():
+        expected = str(meta.get("directory") or "").strip()
+        if not expected:
+            continue
+        got = engine_mod._ca_directory(key, {})
+        if got != expected:
+            mismatched.append((key, expected, got))
+    check("每个内置 CA 的目录地址，引擎都能解析到（不另抄一份）",
+          not mismatched, str(mismatched))
+    check("引擎认识 FreeSSL / LiteSSL 的名字与 EAB 要求",
+          engine_mod._ca_name("litessl") == "FreeSSL / LiteSSL"
+          and engine_mod._ca_needs_eab("litessl") is True,
+          f"{engine_mod._ca_name('litessl')} / {engine_mod._ca_needs_eab('litessl')}")
+    check("自定义 ACME 仍以任务里填的目录为准",
+          engine_mod._ca_directory("custom", {"directory": " https://acme.example.com/dir "})
+          == "https://acme.example.com/dir",
+          engine_mod._ca_directory("custom", {"directory": " https://acme.example.com/dir "}))
+
+    # EAB 值清洗：带标签 / 换行 / 中文说明的值不能让 base64 报错裸奔给用户
+    same = acme.normalize_eab_value("HMAC Key: AbCdEfGh1234567890+/=", "EAB HMAC Key")
+    check("EAB 值里的标签前缀被去掉",
+          same == "AbCdEfGh1234567890+/=", same)
+    wrapped = acme.normalize_eab_value("  AbCdEf\nGh1234 567890+/=  ", "EAB HMAC Key")
+    check("EAB 值里的换行 / 空格被去掉", wrapped == "AbCdEfGh1234567890+/=", wrapped)
+    extracted = acme.normalize_eab_value(
+        "亚洲诚信控制台的密钥，请复制后面的值 AbCdEfGh1234567890+/=",
+        "EAB HMAC Key")
+    check("夹在说明文字里的 EAB 值能自动抠出来",
+          extracted == "AbCdEfGh1234567890+/=", extracted)
+    pair = acme.normalize_eab_pair(
+        "Key ID: kid-abc-123, HMAC Key: AbCdEfGh1234567890+/=",
+        "Key ID: kid-abc-123, HMAC Key: AbCdEfGh1234567890+/=")
+    check("整段粘贴时按标签各取各的值",
+          pair == ("kid-abc-123", "AbCdEfGh1234567890+/="), str(pair))
+    try:
+        acme.normalize_eab_value("亚洲诚信证书自动化ACME账户管理凭证密钥", "EAB HMAC Key")
+        check("纯中文的 EAB 值会给中文结论", False, "没有报错")
+    except acme.AcmeError as exc:
+        check("纯中文的 EAB 值会给中文结论",
+              "HMAC Key" in str(exc) and "中文" in str(exc), str(exc)[:120])
+    try:
+        acme.normalize_eab_value("kid-中文", "EAB Key ID")
+        check("Key ID 里出现中文时也会提示", False, "没有报错")
+    except acme.AcmeError as exc:
+        check("Key ID 里出现中文时也会提示", "Key ID" in str(exc), str(exc)[:120])
+
+    logo = Path(__file__).resolve().parent.parent / "frontend" / "public" / "logos" / "issuer" / "litessl.svg"
+    check("FreeSSL / LiteSSL 有本地 logo（不依赖在线 CDN）", logo.exists(), str(logo))
+
 
 def section_access_resources(api: Api) -> None:
     """授权资源自动拉取：有 key 就把对端资源全拉回来（宝塔站点为例）。"""
@@ -1537,6 +1662,165 @@ def section_synology_config() -> None:
         check("非法两步验证密钥给中文报错", False, "没有抛错")
     except Exception as exc:  # noqa: BLE001
         check("非法两步验证密钥给中文报错", "两步验证密钥不合法" in str(exc), str(exc))
+
+    # 和 certd 一致：设备ID 靠「输一次 6 位验证码」换，长期免验证码
+    from app.services.deploy import synology_fetch_device_id  # noqa: PLC0415
+
+    device_field = inputs.get("deviceId") or {}
+    check("群晖授权有「设备ID」字段（受信设备令牌）",
+          device_field.get("component") == "password"
+          and (device_field.get("action") or {}).get("type") == "synology-device-id",
+          str(device_field))
+    check("群晖授权有「设备名」字段（DSM 信任设备列表里显示的名字）",
+          inputs.get("deviceName", {}).get("default") == "CertHub",
+          str(inputs.get("deviceName")))
+
+    try:
+        synology_fetch_device_id({"url": "https://127.0.0.1:5001", "username": "u",
+                                  "password": "p"}, "12")
+        check("设备ID 校验验证码位数", False, "没有抛错")
+    except Exception as exc:  # noqa: BLE001
+        check("设备ID 校验验证码位数", "6 位数字验证码" in str(exc), str(exc))
+    try:
+        synology_fetch_device_id({"username": "u", "password": "p"}, "123456")
+        check("设备ID 缺地址时给中文提示", False, "没有抛错")
+    except Exception as exc:  # noqa: BLE001
+        check("设备ID 缺地址时给中文提示", "未配置 DSM 地址" in str(exc), str(exc))
+
+
+def section_synology_login_flow() -> None:
+    """群晖登录（mock DSM）：请求形态对齐 certd（device_id / OTP / 纯密码三条腿）。"""
+    print("\n== 群晖登录形态（对齐 certd，mock DSM）==")
+    _backend()
+    import threading  # noqa: PLC0415
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer  # noqa: PLC0415
+    from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+
+    import pyotp  # noqa: PLC0415
+
+    from app.services import deploy  # noqa: PLC0415
+
+    secret = pyotp.random_base32()
+    seen: list[dict] = []
+
+    class _Dsm(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, status, payload):
+            raw = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            path = urlparse(self.path).path
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            q["__path"] = path
+            seen.append(q)
+            # certd 对 DSM 7 走 entry.cgi；auth.cgi 这里故意 404，顺便验证换地址的兜底
+            if path != "/webapi/entry.cgi":
+                self._send(404, {"success": False, "error": {"code": 105}})
+                return
+            if q.get("passwd") != "right":
+                self._send(200, {"success": False, "error": {"code": 400}})
+                return
+            if q.get("device_id"):
+                if q["device_id"] == "DID-OK":
+                    self._send(200, {"success": True,
+                                     "data": {"sid": "SID-DEVICE", "synotoken": "TOKEN"}})
+                else:
+                    self._send(200, {"success": False, "error": {"code": 403}})
+                return
+            if q.get("otp_code"):
+                if not pyotp.TOTP(secret).verify(q["otp_code"], valid_window=1):
+                    self._send(200, {"success": False, "error": {"code": 404}})
+                    return
+                data = {"sid": "SID-OTP", "synotoken": "TOKEN"}
+                # 只有 enable_device_token=yes（certd 的写法）才会回 did
+                if q.get("enable_device_token") == "yes":
+                    data["did"] = "DID-OK"
+                self._send(200, {"success": True, "data": data})
+                return
+            if q.get("session"):
+                self._send(200, {"success": True,
+                                 "data": {"sid": "SID-PLAIN", "synotoken": "TOKEN"}})
+                return
+            self._send(200, {"success": False, "error": {"code": 403}})
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Dsm)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    cfg = {"url": base, "username": "u", "password": "right", "deviceName": "certd"}
+    try:
+        # ① 获取设备ID：enable_device_token=yes + device_name（certd 的 doLoginWithOTPCode）
+        seen.clear()
+        code = pyotp.TOTP(secret).now()
+        result = deploy.synology_fetch_device_id(cfg, code)
+        req = seen[-1]
+        check("群晖取设备ID：返回 did", result.get("deviceId") == "DID-OK", result)
+        check("群晖取设备ID：带 enable_device_token=yes（certd 写法）",
+              req.get("enable_device_token") == "yes", req)
+        check("群晖取设备ID：带 device_name", req.get("device_name") == "certd", req)
+
+        # ② 设备ID 登录：device_id + session=Certd + enable_syno_token=yes，不带 otp
+        seen.clear()
+        session = deploy._synology_login(dict(cfg, deviceId="DID-OK", twoFactor=True))
+        req = seen[-1]
+        check("群晖设备ID 登录成功", session["sid"] == "SID-DEVICE", session)
+        check("群晖设备ID 登录：session=Certd", req.get("session") == "Certd", req)
+        check("群晖设备ID 登录：enable_syno_token=yes",
+              req.get("enable_syno_token") == "yes", req)
+        check("群晖设备ID 登录：不发 otp_code", "otp_code" not in req, req)
+        check("群晖设备ID 登录：带回 synotoken", session.get("synotoken") == "TOKEN", session)
+
+        # ③ OTP 登录（没设备ID）：顺手换回 did
+        seen.clear()
+        session = deploy._synology_login(dict(cfg, twoFactor=True, otpSecret=secret))
+        check("群晖 OTP 登录成功", session["sid"] == "SID-OTP", session)
+        check("群晖 OTP 登录：带 enable_device_token=yes",
+              seen[-1].get("enable_device_token") == "yes", seen[-1])
+        check("群晖 OTP 登录：顺手拿回设备 ID", session.get("device_token") == "DID-OK", session)
+
+        # ④ 纯密码登录
+        seen.clear()
+        session = deploy._synology_login(dict(cfg, twoFactor=False))
+        check("群晖纯密码登录成功", session["sid"] == "SID-PLAIN", session)
+        check("群晖纯密码登录：session=Certd", seen[-1].get("session") == "Certd", seen[-1])
+
+        # ⑤ 设备 ID 失效 → 自动回退验证密钥
+        session = deploy._synology_login(dict(cfg, twoFactor=True, deviceId="DID-BAD",
+                                              otpSecret=secret))
+        check("群晖设备ID 失效自动回退验证码", session["sid"] == "SID-OTP", session)
+
+        # ⑥ 密码错 → 中文结论
+        try:
+            deploy._synology_login(dict(cfg, password="wrong", twoFactor=False))
+            check("群晖密码错给中文结论", False, "没有抛错")
+        except Exception as exc:  # noqa: BLE001
+            check("群晖密码错给中文结论", "账号或密码错误" in str(exc), str(exc))
+    finally:
+        server.shutdown()
+
+
+def section_synology_device_id_api(api: Api) -> None:
+    """群晖「获取设备ID」接口：参数校验要给中文结论（不真的连 DSM）。"""
+    print("\n== 群晖获取设备ID 接口 ==")
+    res = api.post("/api/access/synology/device-id",
+                   {"config": {"url": "", "username": ""}, "otpCode": "123456"})
+    check("缺 DSM 地址时拒绝并提示", not ok(res) and "DSM 地址" in msg(res), msg(res))
+
+    res = api.post("/api/access/synology/device-id",
+                   {"config": {"url": "https://127.0.0.1:5001", "username": "u",
+                               "password": "p"}, "otpCode": "1"})
+    check("验证码不是 6 位时拒绝并提示", not ok(res) and "6 位" in msg(res), msg(res))
+
+    res = api.post("/api/access/synology/device-id",
+                   {"config": {"url": "https://127.0.0.1:59999", "username": "u",
+                               "password": "p"}, "otpCode": "123456"})
+    check("连不上 DSM 时给中文结论", not ok(res) and "连不上" in msg(res), msg(res))
 
 
 def section_access_type_binding(api: Api) -> None:
@@ -1836,6 +2120,891 @@ def section_storage_deploy(api: Api) -> None:
         server.shutdown()
 
 
+def section_dns_records(api: Api) -> None:
+    """DNS 记录页：手动 CNAME 与自动验证记录共存，靠 source 区分、自动的只读。"""
+    print("\n== DNS 记录（CNAME + 自动验证记录）==")
+    listed = api.get("/api/dns/cname/list?current=1&size=50")
+    check("DNS 记录列表可读", ok(listed), msg(listed))
+    rows = (listed.get("data") or {}).get("records") or []
+    check("列表项带来源与记录类型字段",
+          all("source" in row and "recordType" in row for row in rows),
+          str(sorted((rows[0] if rows else {}).keys())))
+
+    rid = 0
+    try:
+        res = api.post("/api/dns/cname", {"domain": "smoke-cname.example.com",
+                                          "recordValue": "abc123.cname.example.net",
+                                          "accessId": 0, "remark": "__smoke__"})
+        rid = (res.get("data") or {}).get("id") or 0
+        check("手动 CNAME 记录创建", ok(res) and rid > 0, msg(res))
+        row = res.get("data") or {}
+        check("手动记录标成 manual / CNAME",
+              row.get("source") == "manual" and row.get("recordType") == "CNAME", str(row)[:200])
+
+        only_manual = api.get("/api/dns/cname/list?current=1&size=50&source=manual")
+        ids = [r["id"] for r in ((only_manual.get("data") or {}).get("records") or [])]
+        check("按来源筛选只出手动记录", rid in ids, str(ids[:10]))
+        only_acme = api.get("/api/dns/cname/list?current=1&size=50&source=acme")
+        acme_ids = [r["id"] for r in ((only_acme.get("data") or {}).get("records") or [])]
+        check("按来源筛选 acme 不含手动记录", rid not in acme_ids, str(acme_ids[:10]))
+
+        res = api.put(f"/api/dns/cname/{rid}", {"domain": "smoke-cname.example.com",
+                                                "recordValue": "def456.cname.example.net",
+                                                "accessId": 0, "remark": "__smoke__"})
+        check("手动记录可编辑", ok(res) and (res.get("data") or {}).get("recordValue")
+              == "def456.cname.example.net", msg(res))
+    finally:
+        if rid:
+            api.delete(f"/api/dns/cname/{rid}?remote=false")
+    check("手动记录已清理", rid not in [
+        r["id"] for r in ((api.get("/api/dns/cname/list?current=1&size=50")
+                           .get("data") or {}).get("records") or [])])
+
+
+def _wait_group_run(api: Api, run_id: int, tries: int = 90) -> dict:
+    """等一次分组执行结束（分组在后台线程里串行跑，还要等每条流水线跑完）。"""
+    detail: dict = {}
+    for _ in range(tries):
+        detail = api.get(f"/api/pipeline-group/run/{run_id}").get("data") or {}
+        status = detail.get("status") or ""
+        if status and status != "running":
+            return detail
+        time.sleep(2)
+    return detail
+
+
+def _group_stages(tasks: list[dict]) -> dict:
+    return {"stages": [{"id": "s1", "title": "申请", "tasks": tasks}], "triggers": []}
+
+
+def section_pipeline_group(api: Api) -> None:
+    """流水线分组：按顺序「试一试」，某条失败就跳它配置的「失败后执行」。"""
+    print("\n== 流水线分组（失败后转备用）==")
+    pids: list[int] = []
+    gids: list[int] = []
+    try:
+        bad = (api.post("/api/pipeline", {
+            "title": "__smoke_group_bad__", "remark": "smoke",
+            "content": _group_stages([{"id": "t1", "type": "CertApply", "title": "主 CA",
+                                       "input": {}, "continueOnError": False}]),
+        }).get("data") or {}).get("id") or 0
+        pids.append(bad)
+        good = (api.post("/api/pipeline", {
+            "title": "__smoke_group_good__", "remark": "smoke",
+            "content": _group_stages([{"id": "t1", "type": "CertApplySelfSigned", "title": "备用自签",
+                                       "input": {"domains": ["group-smoke.local"], "days": 30},
+                                       "continueOnError": False}]),
+        }).get("data") or {}).get("id") or 0
+        pids.append(good)
+        check("分组用的两条流水线创建成功", bad > 0 and good > 0, f"{bad} / {good}")
+        if not (bad and good):
+            return
+
+        res = api.post("/api/pipeline-group", {
+            "name": "__smoke_group__", "remark": "smoke", "enabled": True,
+            "items": [{"pipelineId": bad, "onFailurePipelineId": good},
+                      {"pipelineId": good, "onFailurePipelineId": 0}],
+        })
+        gid = (res.get("data") or {}).get("id") or 0
+        gids.append(gid)
+        check("分组创建", ok(res) and gid > 0, msg(res))
+
+        listed = api.get("/api/pipeline-group/list?current=1&size=50")
+        row = next((r for r in (listed.get("data") or {}).get("records") or []
+                    if r["id"] == gid), None)
+        check("分组列表带回成员标题与「失败后执行」标题",
+              row is not None
+              and bool(row["items"][0].get("pipelineTitle"))
+              and bool(row["items"][0].get("onFailurePipelineTitle")),
+              str(row)[:240])
+
+        res = api.post(f"/api/pipeline-group/{gid}/run")
+        run_id = (res.get("data") or {}).get("runId") or 0
+        check("分组运行提交", ok(res) and run_id > 0, msg(res))
+        detail = _wait_group_run(api, run_id)
+        steps = detail.get("steps") or []
+        check("第一条失败后自动执行备用流水线",
+              len(steps) >= 2 and steps[0].get("status") == "failed"
+              and steps[1].get("pipelineId") == good,
+              str([(s.get("pipelineId"), s.get("status")) for s in steps]))
+        check("备用流水线成功后整个分组判成功",
+              detail.get("status") == "success", str(detail.get("status")))
+        check("每一步都带自己的执行历史",
+              bool(steps) and all(s.get("historyId") for s in steps), str(steps)[:240])
+
+        # 没配置「失败后执行」的分组：第一条失败就直接判分组失败
+        res = api.post("/api/pipeline-group", {
+            "name": "__smoke_group_plain__", "remark": "smoke", "enabled": True,
+            "items": [{"pipelineId": bad, "onFailurePipelineId": 0}],
+        })
+        gid2 = (res.get("data") or {}).get("id") or 0
+        gids.append(gid2)
+        run2 = (api.post(f"/api/pipeline-group/{gid2}/run").get("data") or {}).get("runId") or 0
+        detail2 = _wait_group_run(api, run2)
+        check("没有备用流水线时分组直接判失败",
+              detail2.get("status") == "failed" and len(detail2.get("steps") or []) == 1,
+              str(detail2)[:200])
+
+        check("分组名称必填",
+              not ok(api.post("/api/pipeline-group", {
+                  "name": "  ", "remark": "", "enabled": True,
+                  "items": [{"pipelineId": good, "onFailurePipelineId": 0}]})),
+              "空名称被接受了")
+        check("「失败后执行」不能选自己",
+              not ok(api.post("/api/pipeline-group", {
+                  "name": "__smoke_group_bad2__", "remark": "", "enabled": True,
+                  "items": [{"pipelineId": good, "onFailurePipelineId": good}]})),
+              "自引用被接受了")
+        check("不存在的流水线被拒绝",
+              not ok(api.post("/api/pipeline-group", {
+                  "name": "__smoke_group_bad3__", "remark": "", "enabled": True,
+                  "items": [{"pipelineId": 99999999, "onFailurePipelineId": 0}]})),
+              "不存在的流水线被接受了")
+    finally:
+        for gid in gids:
+            if gid:
+                api.delete(f"/api/pipeline-group/{gid}")
+        for pid in pids:
+            _drop_pipeline(api, pid)
+    check("分组已清理", all(
+        r["id"] not in gids
+        for r in (api.get("/api/pipeline-group/list?current=1&size=50")
+                  .get("data") or {}).get("records") or []))
+
+
+
+# ---------------------------------------------------------------- 亚洲诚信（TrustAsia CertCloud）
+def _trustasia_mock(mode: str = "ok") -> tuple[ThreadingHTTPServer, list, dict]:
+    """模拟 CertCloud OpenAPI v3：下单 → 查询订单 → 通知验证完成 → 取证书。
+
+    mode="ok" 正常签发；mode="failed" 让订单直接变成 failed，用来验证报错文案。
+    """
+    _backend()
+    from cryptography.hazmat.primitives import serialization
+
+    from app.services import certutil
+
+    seen: list[dict] = []
+    state: dict = {"orders": {}, "dcvCompleted": set(), "polls": {}}
+    leaf, _key = certutil.self_signed(["trustasia-smoke.local"], 90, "rsa2048")
+    leaf_pem = leaf.public_bytes(serialization.Encoding.PEM).decode()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def _json(self, payload: dict, status: int = 200, request_id: str = ""):
+            body = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            if request_id:
+                self.send_header("X-CC-Request-ID", request_id)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _handle(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length else b""
+            parsed = urlparse(self.path)
+            path = parsed.path
+            headers = {k.lower(): v for k, v in self.headers.items()}
+            body: dict = {}
+            if raw:
+                try:
+                    body = json.loads(raw.decode("utf-8", "ignore"))
+                except Exception:  # noqa: BLE001
+                    body = {"__raw__": raw.decode("utf-8", "ignore")}
+            seen.append({"method": self.command, "path": path, "headers": headers, "body": body})
+
+            # 鉴权：两个头缺一个就按官方约定回 401 + 追踪 ID
+            if not headers.get("x-cc-key-id") or not headers.get("x-cc-auth-key"):
+                self._json({"code": "unauthenticated_request"}, 401, "mock-req-id")
+                return
+
+            if path == "/openapi/v3/ping":
+                data = b"Everything is fine, please enjoy it."
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            if path == "/openapi/v3/certs" and self.command == "GET":
+                self._json({"code": "success", "data": {"total": 3}})
+                return
+
+            parts = [p for p in path.split("/") if p]
+            # /openapi/v3/orders/{product_id}
+            if len(parts) == 4 and parts[2] == "orders" and self.command == "POST":
+                cert = body.get("certificate") or {}
+                domains = [cert.get("common_name")] + [
+                    d for d in (cert.get("dns_names") or []) if d != cert.get("common_name")]
+                order_id = "MOCK" + str(len(state["orders"]) + 1)
+                state["orders"][order_id] = {"domains": domains, "product": parts[3]}
+                state["polls"][order_id] = 0
+                self._json({"code": "success", "data": {
+                    "id": order_id,
+                    "status": "domain_verifing",
+                    "certificate": {"id": "C" + order_id},
+                    "dcv_val": [{
+                        "domain": d,
+                        "auth_path": "mock-trustasia-" + d.replace("*", "wildcard"),
+                        "auth_val": "verify-" + d,
+                        "verified": False,
+                        "dcv_method": body.get("dcv_method") or "dns",
+                    } for d in domains],
+                }})
+                return
+
+            # /openapi/v3/orders/{id}/dcv-completed
+            if len(parts) == 5 and parts[2] == "orders" and parts[4] == "dcv-completed" \
+                    and self.command == "PUT":
+                state["dcvCompleted"].add(parts[3])
+                self._json({"code": "success", "data": {"id": parts[3]}})
+                return
+
+            # /openapi/v3/orders/{id}
+            if len(parts) == 4 and parts[2] == "orders" and self.command == "GET":
+                order_id = parts[3]
+                order = state["orders"].get(order_id) or {"domains": ["trustasia-smoke.local"]}
+                state["polls"][order_id] = state["polls"].get(order_id, 0) + 1
+                if mode == "failed":
+                    self._json({"code": "success", "data": {
+                        "id": order_id, "status": "failed", "status_desc": "mock 拒绝签发",
+                        "certificate": {"id": "C" + order_id}, "dcv_val": [],
+                    }})
+                    return
+                done = state["polls"][order_id] >= 2
+                payload = {
+                    "id": order_id,
+                    "status": "issued" if done else "issuing",
+                    "certificate": {"id": "C" + order_id, "pem": leaf_pem if done else ""},
+                    "dcv_method": "dns",
+                }
+                if not done:
+                    payload["dcv_val"] = [{
+                        "domain": order["domains"][0],
+                        "auth_path": "mock-trustasia-" + order["domains"][0],
+                        "auth_val": "verify-" + order["domains"][0],
+                        "verified": True, "dcv_method": "dns",
+                    }]
+                self._json({"code": "success", "data": payload})
+                return
+
+            # /openapi/v3/certs/{id}
+            if len(parts) == 4 and parts[2] == "certs" and self.command == "GET":
+                self._json({"code": "success", "data": {
+                    "id": parts[3], "pem": leaf_pem, "ica_pem": "",
+                }})
+                return
+
+            self._json({"code": "resource_not_found", "message": "mock: " + path}, 404)
+
+        do_GET = _handle
+        do_POST = _handle
+        do_PUT = _handle
+        do_DELETE = _handle
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, seen, state
+
+
+def section_skip_reuse(api: Api) -> None:
+    """申请步骤的跳过判断：未到期 / 已存在 / 刚申请过 → 只跳过这一步，后面继续跑。"""
+    print("\n== 证书未到期 / 已存在 / 刚申请过：跳过申请并继续后续步骤 ==")
+    pid = 0
+    domain = "skip-smoke.local"
+
+    def build(apply_input: dict) -> dict:
+        apply_input = {"domains": [domain], "days": 30, **apply_input}
+        return {"stages": [
+            {"id": "s1", "title": "申请", "tasks": [
+                {"id": "t1", "type": "CertApplySelfSigned", "title": "自签",
+                 "input": apply_input, "continueOnError": False}]},
+            {"id": "s2", "title": "部署", "tasks": [
+                {"id": "t2", "type": "DeployToLocal", "title": "复制到本机目录",
+                 "input": {"dir": "./data/deploy"}, "continueOnError": True}]},
+        ], "triggers": []}
+
+    def run_once() -> dict:
+        return _run_and_wait(api, pid, tries=40)
+
+    def drop_certs() -> int:
+        """先清掉这个测试域名已有的证书，否则「第一次执行」会被跳过判断挡住。"""
+        removed = 0
+        listed = api.get("/api/cert/list?page=1&size=100").get("data") or {}
+        for row in listed.get("records") or []:
+            if domain in (row.get("domains") or []):
+                api.delete(f"/api/cert/{row['id']}")
+                removed += 1
+        return removed
+
+    def task_map(detail: dict) -> dict:
+        tasks = (detail or {}).get("tasks") or []
+        if isinstance(tasks, str):
+            tasks = json.loads(tasks or "[]")
+        return {t.get("taskId"): t.get("status") for t in tasks}
+
+    try:
+        checked = drop_certs()
+        if checked:
+            print(f"  （清理 {checked} 张上次留下的 {domain} 证书）")
+        res = api.post("/api/pipeline", {"title": "__smoke_skip__", "remark": "smoke",
+                                         "content": build({})})
+        pid = (res.get("data") or {}).get("id") or 0
+        check("跳过判断用的流水线创建", ok(res) and pid > 0, msg(res))
+        if not pid:
+            return
+
+        first = run_once()
+        check("第一次执行正常签发并部署",
+              task_map(first) == {"t1": "success", "t2": "success"}, str(task_map(first)))
+
+        # 第二次：证书还没到期 → 跳过申请，但部署照跑
+        second = run_once()
+        states = task_map(second)
+        check("证书未到期时跳过申请步骤（状态 skipped）", states.get("t1") == "skipped", str(states))
+        check("跳过后继续执行后面的部署步骤", states.get("t2") == "success", str(states))
+        check("整条流水线仍算成功（跳过不是失败）",
+              (second or {}).get("status") == "success", str((second or {}).get("status")))
+        log_text = (second or {}).get("log") or ""
+        check("日志写清跳过原因并说明继续执行",
+              "跳过证书申请" in log_text and "继续执行后面的步骤" in log_text,
+              log_text[-200:])
+        check("跳过后把证书库里的证书交给后续步骤",
+              "后续步骤将使用证书库里这张证书" in log_text, log_text[-260:])
+
+        certs = api.get("/api/cert/list?page=1&size=100").get("data") or {}
+        hits = [r for r in certs.get("records") or [] if domain in (r.get("domains") or [])]
+        check("重复执行没有重复签发（证书库里仍只有一张）", len(hits) == 1, str(len(hits)))
+
+        # 强制续期：必须重新申请
+        api.put(f"/api/pipeline/{pid}", {"title": "__smoke_skip__", "remark": "smoke",
+                                         "content": build({"forceUpdate": True})})
+        forced = run_once()
+        check("打开「强制续期」后重新申请",
+              task_map(forced).get("t1") == "success", str(task_map(forced)))
+        certs = api.get("/api/cert/list?page=1&size=100").get("data") or {}
+        hits = [r for r in certs.get("records") or [] if domain in (r.get("domains") or [])]
+        check("强制续期后证书库多了一张", len(hits) == 2, str(len(hits)))
+
+        # 关掉「已存在就跳过」、提前续期天数调小 → 未到续期时间，仍然跳过
+        api.put(f"/api/pipeline/{pid}", {"title": "__smoke_skip__", "remark": "smoke",
+                                         "content": build({"renewDays": 5,
+                                                           "skipIfCertificateExists": False,
+                                                           "skipRecentMinutes": 0})})
+        not_due = run_once()
+        states = task_map(not_due)
+        check("未到提前续期天数时也会跳过申请", states.get("t1") == "skipped", str(states))
+        check("这种跳过同样不阻断部署步骤", states.get("t2") == "success", str(states))
+
+        # 提前续期天数调大 → 达到阈值，正常申请
+        api.put(f"/api/pipeline/{pid}", {"title": "__smoke_skip__", "remark": "smoke",
+                                         "content": build({"renewDays": 90,
+                                                           "skipIfCertificateExists": False,
+                                                           "skipRecentMinutes": 0})})
+        due = run_once()
+        check("剩余天数低于提前续期天数时正常申请",
+              task_map(due).get("t1") == "success", str(task_map(due)))
+        certs = api.get("/api/cert/list?page=1&size=100").get("data") or {}
+        hits = [r for r in certs.get("records") or [] if domain in (r.get("domains") or [])]
+        check("到续期时间后确实又签了一张", len(hits) == 3, str(len(hits)))
+    finally:
+        if pid:
+            _drop_pipeline(api, pid)
+        drop_certs()
+
+
+def section_task_switch(api: Api) -> None:
+    """阶段里的单步开关：关掉的步骤运行时要跳过，列表统计也不能把它算进去。"""
+    print("\n== 步骤单独启停（任务级开关）==")
+    pid = 0
+    pid2 = 0
+    try:
+        stages = {"stages": [{"id": "s1", "title": "申请", "tasks": [
+            # 关掉的任务故意选一个必失败的（CertApply 没填域名），跳过它流水线才能成功
+            {"id": "t1", "type": "CertApply", "title": "__停用的申请__",
+             "input": {}, "continueOnError": False, "enabled": False},
+            {"id": "t2", "type": "CertApplySelfSigned", "title": "__启用的自签__",
+             "input": {"domains": ["switch-smoke.local"], "days": 30},
+             "continueOnError": False, "enabled": True},
+        ]}], "triggers": []}
+        res = api.post("/api/pipeline", {"title": "__smoke_switch__", "remark": "smoke",
+                                         "content": stages})
+        pid = (res.get("data") or {}).get("id") or 0
+        check("带停用步骤的流水线创建", ok(res) and pid > 0, msg(res))
+        if pid:
+            listed = api.get("/api/pipeline/list?current=1&size=100").get("data") or {}
+            row = next((r for r in listed.get("records") or [] if r["id"] == pid), None) or {}
+            check("列表统计只算启用的步骤（stepCount=1 / taskCount=2 / 停用=1）",
+                  row.get("stepCount") == 1 and row.get("taskCount") == 2
+                  and row.get("stepDisabledCount") == 1,
+                  str({k: row.get(k) for k in ("stepCount", "taskCount", "stepDisabledCount")}))
+
+            detail = _run_and_wait(api, pid, tries=40)
+            check("停用的步骤不影响流水线：整体成功",
+                  (detail or {}).get("status") == "success", str((detail or {}).get("status")))
+            tasks = (detail or {}).get("tasks") or []
+            if isinstance(tasks, str):
+                tasks = json.loads(tasks or "[]")
+            by_id = {t.get("taskId"): t for t in tasks}
+            check("停用的步骤标记为 disabled 且没执行",
+                  (by_id.get("t1") or {}).get("status") == "disabled",
+                  str(by_id.get("t1")))
+            check("启用的步骤照常执行成功",
+                  (by_id.get("t2") or {}).get("status") == "success",
+                  str(by_id.get("t2")))
+            log_text = (detail or {}).get("log") or ""
+            check("日志里写明哪一步被跳过",
+                  "已停用，跳过这一步" in log_text, log_text[-160:])
+
+        # 停用的部署任务不该出现在「申请 + 部署」标签里
+        stages2 = {"stages": [{"id": "s1", "title": "申请", "tasks": [
+            {"id": "t1", "type": "CertApplySelfSigned", "title": "自签",
+             "input": {"domains": ["switch-smoke.local"], "days": 30},
+             "continueOnError": False, "enabled": True},
+            {"id": "t2", "type": "DeployToLocal", "title": "复制到本机",
+             "input": {"dir": "./data/deploy"}, "continueOnError": True, "enabled": False},
+        ]}], "triggers": []}
+        res = api.post("/api/pipeline", {"title": "__smoke_switch2__", "remark": "smoke",
+                                         "content": stages2})
+        pid2 = (res.get("data") or {}).get("id") or 0
+        if pid2:
+            detail2 = api.get(f"/api/pipeline/{pid2}").get("data") or {}
+            check("停用的部署步骤不计入「申请 / 部署」分类标签",
+                  detail2.get("kinds") == ["cert"], str(detail2.get("kinds")))
+            check("详情里能拿到每个任务（含 enabled 标记）",
+                  all("enabled" in t for t in
+                      (detail2.get("content") or {}).get("stages", [{}])[0].get("tasks", [])),
+                  str((detail2.get("content") or {}).get("stages")))
+    finally:
+        for item in (pid, pid2):
+            if item:
+                _drop_pipeline(api, item)
+
+
+
+# ---------------------------------------------------------------- EAB 一次性（FreeSSL/LiteSSL）
+def _acme_mock_single_use_eab(seen: list) -> ThreadingHTTPServer:
+    """最小 ACME 服务器：只实现 new-nonce / new-account，用来模拟「一次性 EAB」。
+
+    第一次用 EAB 注册成功并把它标记为已用；再拿同一份 EAB 注册会回
+    externalAccountRequired + External account binding has already been used
+    （FreeSSL / LiteSSL 就是这个行为）。
+    """
+    import base64 as _b64
+
+    state = {'used': set(), 'accounts': set()}
+
+    def _b64d(text: str) -> bytes:
+        pad = '=' * (-len(text) % 4)
+        return _b64.urlsafe_b64decode(text + pad)
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def _json(self, payload: dict, status: int = 200, headers: dict | None = None):
+            body = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Replay-Nonce', 'mocknonce')
+            for key, value in (headers or {}).items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _handle(self):
+            length = int(self.headers.get('Content-Length') or 0)
+            raw = self.rfile.read(length) if length else b''
+            parsed = urlparse(self.path)
+            body: dict = {}
+            if raw:
+                try:
+                    body = json.loads(raw.decode('utf-8', 'ignore'))
+                except Exception:  # noqa: BLE001
+                    body = {}
+            seen.append({'method': self.command, 'path': parsed.path, 'body': body})
+
+            if parsed.path.endswith('/directory'):
+                base = 'http://127.0.0.1:%d/acme/v2' % server.server_address[1]
+                self._json({'newNonce': base + '/new-nonce',
+                            'newAccount': base + '/new-account',
+                            'meta': {'externalAccountRequired': True}})
+                return
+            if parsed.path.endswith('/new-nonce'):
+                self.send_response(200)
+                self.send_header('Replay-Nonce', 'mocknonce')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return
+            if parsed.path.endswith('/new-account'):
+                try:
+                    protected = json.loads(_b64d(body.get('protected', '')).decode())
+                    payload = json.loads(_b64d(body.get('payload', '')).decode())
+                except Exception:  # noqa: BLE001
+                    self._json({'type': 'urn:ietf:params:acme:error:malformed',
+                                'detail': 'bad jws'}, 400)
+                    return
+                jwk = protected.get('jwk') or {}
+                account_id = jwk.get('x') or jwk.get('n') or 'unknown'
+                kid = protected.get('kid') or ''
+                eab = payload.get('externalAccountBinding')
+                if eab:
+                    eab_protected = json.loads(_b64d(eab.get('protected', '')).decode())
+                    eab_kid = eab_protected.get('kid') or ''
+                    if eab_kid in state['used']:
+                        self._json({'type': 'urn:ietf:params:acme:error:externalAccountRequired',
+                                    'detail': 'External account binding has already been used'}, 400)
+                        return
+                    state['used'].add(eab_kid)
+                    state['accounts'].add(account_id)
+                    base = 'http://127.0.0.1:%d/acme/v2' % server.server_address[1]
+                    self._json({'status': 'valid'}, 201,
+                               {'Location': base + '/account/' + account_id[:12]})
+                    return
+                # 没有 EAB：只有已注册过的账户能过（复用账户场景）
+                known = account_id in state['accounts'] or (kid and account_id in state['accounts'])
+                if known:
+                    self._json({'status': 'valid'}, 200,
+                               {'Location': kid or ('http://127.0.0.1:%d/acme/v2/account/%s' % (
+                                   server.server_address[1], account_id[:12]))})
+                    return
+                self._json({'type': 'urn:ietf:params:acme:error:externalAccountRequired',
+                            'detail': 'external account binding required'}, 400)
+                return
+            self._json({'type': 'urn:ietf:params:acme:error:malformed',
+                        'detail': 'not implemented'}, 404)
+
+        do_GET = _handle
+        do_HEAD = _handle
+        do_POST = _handle
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def section_eab_single_use(api: Api) -> None:
+    """一次性 EAB（FreeSSL / LiteSSL）：注册一次后必须复用账户，不能再拿 EAB 注册。"""
+    print("\n== 一次性 EAB：注册一次、之后复用账户 ==")
+    _backend()
+    from app.services import acme
+
+    seen: list[dict] = []
+    server = _acme_mock_single_use_eab(seen)
+    directory = 'http://127.0.0.1:%d/acme/v2/directory' % server.server_address[1]
+    try:
+        first = acme.register_eab_account('mock-kid-1', 'bW9jay1obWFjLWtleQ==', directory,
+                                          email='mock@example.com')
+        check('首次用 EAB 能注册账户',
+              '注册账户' in first['message'] and bool(first['accountKeyPem']), first['message'])
+        check('注册结果带回账户私钥与账户地址',
+              'PRIVATE KEY' in first['accountKeyPem'] and bool(first['accountUrl']),
+              str(first['accountUrl'])[:60])
+
+        eab_posts = [it for it in seen
+                     if it['path'].endswith('/new-account')
+                     and it['body'].get('payload', '') and 'externalAccountBinding' in it['body'].get('payload', '')]
+        # payload 是 base64，直接看请求体里有没有 EAB 字段名（base64 里不会出现明文，改用计数）
+        eab_used = len([it for it in seen if it['path'].endswith('/new-account')])
+        check('第一次注册真的提交了 EAB 绑定', eab_used == 1, str(eab_used))
+
+        second = acme.register_eab_account('mock-kid-1', 'bW9jay1obWFjLWtleQ==', directory,
+                                           email='mock@example.com',
+                                           account_key_pem=first['accountKeyPem'])
+        check('复用已注册账户时不再提交 EAB',
+              second['reused'] and '复用' in second['message'], second['message'])
+        check('复用只发了一次 new-account（没有二次消耗 EAB）',
+              len([it for it in seen if it['path'].endswith('/new-account')]) == 2,
+              str(len([it for it in seen if it['path'].endswith('/new-account')])))
+
+        try:
+            acme.register_eab_account('mock-kid-1', 'bW9jay1obWFjLWtleQ==', directory,
+                                      email='mock@example.com')
+            check('同一份 EAB 第二次注册会被拒绝', False, '没有报错')
+        except acme.AcmeError as exc:
+            check('同一份 EAB 第二次注册会被拒绝，并提示去轮换',
+                  'EAB' in str(exc) and ('已经用过' in str(exc) or '轮换' in str(exc)),
+                  str(exc)[:120])
+    finally:
+        server.shutdown()
+
+def section_trustasia(api: Api) -> None:
+    """TrustAsia（亚洲诚信）证书申请：下单 → 写验证记录 → 通知验证 → 取回证书。"""
+    print("\n== 亚洲诚信（TrustAsia CertCloud）==")
+    _backend()
+    import shutil
+
+    from app.services import trustasia
+
+    server, seen, _state = _trustasia_mock()
+    base = "http://127.0.0.1:%d/openapi/v3" % server.server_address[1]
+    cfg = {"keyId": "mock-key-id", "authKey": "mock-auth-key", "apiBase": base}
+    aid = pid = 0
+    web_root = Path(tempfile.mkdtemp(prefix="trustasia-http-"))
+    try:
+        # 1) 连通性与鉴权头
+        message = trustasia.test_connection(cfg)
+        check("ping 返回官方文案", "Everything is fine" in message, message)
+        ping_calls = [it for it in seen if it["path"].endswith("/ping")]
+        check("鉴权头放在 X-CC-Key-ID / X-CC-Auth-Key",
+              bool(ping_calls) and all(it["headers"].get("x-cc-key-id") == "mock-key-id"
+                                       and it["headers"].get("x-cc-auth-key") == "mock-auth-key"
+                                       for it in ping_calls),
+              str(ping_calls[0]["headers"] if ping_calls else {}))
+        no_auth = ""
+        try:
+            trustasia.test_connection({"apiBase": base})
+        except trustasia.TrustAsiaError as exc:
+            no_auth = str(exc)
+        check("缺密钥时直接说该填什么", "Key ID" in no_auth and "API Key" in no_auth,
+              no_auth[:120])
+        denied = ""
+        try:
+            trustasia.test_connection({"keyId": "k", "authKey": "a",
+                                       "apiBase": "http://127.0.0.1:1/openapi/v3"})
+        except trustasia.TrustAsiaError as exc:
+            denied = str(exc)
+        check("连不上接口时只给一句中文", denied.startswith("连接 TrustAsia 接口失败"),
+              denied[:120])
+
+        # 2) 完整申请流程（DNS TXT）
+        records: list[tuple] = []
+        logs: list[str] = []
+        result = trustasia.apply_certificate(
+            cfg, domains=["trustasia-smoke.local"], log=logs.append,
+            product_id="trustasia_ssl_dv_v2", dcv_method="dns",
+            key_type="rsa2048", validity_months=3, poll_seconds=2, timeout_seconds=60,
+            dcv_handler=lambda rtype, name, value: records.append((rtype, name, value)),
+        )
+        check("申请成功并取回证书", "BEGIN CERTIFICATE" in result.get("certificate", ""),
+              str(result.get("certificate", ""))[:120])
+        check("私钥由本地生成并返回", "PRIVATE KEY" in result.get("privateKey", ""),
+              str(result.get("privateKey", ""))[:40])
+        order_calls = [it for it in seen if it["method"] == "POST" and "/orders/" in it["path"]]
+        check("下单走 POST /orders/{product_id}",
+              bool(order_calls) and order_calls[0]["path"].endswith("/trustasia_ssl_dv_v2"),
+              str([it["path"] for it in order_calls]))
+        order_body = order_calls[0]["body"] if order_calls else {}
+        cert_part = order_body.get("certificate") or {}
+        check("订单带 CSR / 主域名 / SAN",
+              str(cert_part.get("csr", "")).startswith("-----BEGIN CERTIFICATE REQUEST")
+              and cert_part.get("common_name") == "trustasia-smoke.local"
+              and cert_part.get("dns_names") == ["trustasia-smoke.local"],
+              str({k: str(v)[:32] for k, v in cert_part.items()}))
+        check("订单带验证方式与订单有效期（月）",
+              order_body.get("dcv_method") == "dns" and order_body.get("validity_months") == 3,
+              str({k: order_body.get(k) for k in ("dcv_method", "validity_months")}))
+        check("订单带防重复的备用订单 ID", bool(order_body.get("alternative_order_id")),
+              str(order_body.get("alternative_order_id")))
+        check("按 dcv_val 写了 TXT 验证记录",
+              bool(records) and records[0][0] == "TXT" and records[0][2].startswith("verify-"),
+              str(records))
+        check("写完记录后通知 CA 验证完成（PUT dcv-completed）",
+              any(it["method"] == "PUT" and it["path"].endswith("/dcv-completed") for it in seen),
+              str([it["path"] for it in seen if it["method"] == "PUT"]))
+
+        # 2b) CA 只给相对主机记录时，前缀要跟着 CA 走（别退回 _acme-challenge）
+        _backend()
+        from app.services import engine as engine_mod
+
+        captured: dict = {}
+
+        class _FakeProvider:
+            record_prefix = "_acme-challenge"
+
+            def add_txt(self, domain, value):
+                captured["prefix"] = self.record_prefix
+                captured["domain"] = domain
+
+            def remove_txt(self, domain, value):
+                pass
+
+            def resolve_root(self, domain):
+                return domain
+
+            def full_name(self, root, host):
+                return host + "." + root
+
+            def relative_host(self, root, name):
+                return name
+
+            def record_name(self, domain):
+                return domain
+
+            def close(self):
+                pass
+
+        class _FakeEngine:
+            user_id = 0
+            pipeline_id = 0
+
+            def log(self, message, task=None):
+                pass
+
+            def _access(self, access_id):
+                return "aliyun", {}
+
+            def _sub_domain_roots(self):
+                return []
+
+            def _remember_dns(self, provider, domain, value, access_id=0, source="acme"):
+                return domain
+
+            def _forget_dns(self, record_name, error=""):
+                pass
+
+            def _record_prefix(self, name, base):
+                return engine_mod.PipelineRunner._record_prefix(name, base)
+
+        import app.services.dns as dns_service
+
+        _orig = dns_service.create_dns_provider
+        dns_service.create_dns_provider = lambda *a, **k: _FakeProvider()
+        try:
+            writer_add, _writer_clean = engine_mod.PipelineRunner._make_dcv_writer(
+                _FakeEngine(), "example.com", 1, {})
+            writer_add("TXT", "_dnsauth", "abc123")
+        finally:
+            dns_service.create_dns_provider = _orig
+        check("CA 只给相对记录名时，TXT 前缀按 CA 给的来",
+              captured.get("prefix") == "_dnsauth" and captured.get("domain") == "example.com",
+              str(captured))
+
+        # 3) CNAME 验证
+        cname_records: list[tuple] = []
+        result2 = trustasia.apply_certificate(
+            cfg, domains=["trustasia-smoke.local"], log=lambda m: None,
+            product_id="trustasia_ssl_dv_sans_v2", dcv_method="cname",
+            poll_seconds=2, timeout_seconds=60,
+            dcv_handler=lambda rtype, name, value: cname_records.append((rtype, name, value)),
+        )
+        check("CNAME 验证写成 CNAME 记录",
+              bool(cname_records) and cname_records[0][0] == "CNAME", str(cname_records))
+        check("CNAME 流程同样取回证书", "BEGIN CERTIFICATE" in result2.get("certificate", ""),
+              str(result2.get("certificate", ""))[:80])
+
+        # 4) 本地校验：产品能力不匹配时先拦下来
+        bad_cases = {
+            "单域名产品拒绝泛域名": lambda: trustasia.apply_certificate(
+                cfg, domains=["*.trustasia-smoke.local"], log=lambda m: None,
+                product_id="trustasia_ssl_dv_v2", dcv_method="dns", poll_seconds=2),
+            "OV 产品缺组织信息时提示该填什么": lambda: trustasia.apply_certificate(
+                cfg, domains=["trustasia-smoke.local"], log=lambda m: None,
+                product_id="trustasia_ssl_ov_v2", dcv_method="dns", poll_seconds=2),
+            "产品不支持该验证方式时拒绝": lambda: trustasia.apply_certificate(
+                cfg, domains=["trustasia-smoke.local"], log=lambda m: None,
+                product_id="trustasia_ssl_dv_wildcard_v2", dcv_method="file", poll_seconds=2),
+        }
+        for name, case in bad_cases.items():
+            try:
+                case()
+                check(name, False, "没有报错")
+            except trustasia.TrustAsiaError as exc:
+                check(name, bool(str(exc)), str(exc)[:120])
+
+        # 5) CA 拒签时的报错文案
+        bad_server, _bad_seen, _bad_state = _trustasia_mock("failed")
+        try:
+            trustasia.apply_certificate(
+                {"keyId": "k", "authKey": "a",
+                 "apiBase": "http://127.0.0.1:%d/openapi/v3" % bad_server.server_address[1]},
+                domains=["trustasia-smoke.local"], log=lambda m: None,
+                product_id="trustasia_ssl_dv_v2", dcv_method="dns",
+                poll_seconds=1, timeout_seconds=30, dcv_handler=lambda *a: None)
+            check("订单失败时判为失败", False, "没有报错")
+        except trustasia.TrustAsiaError as exc:
+            check("订单失败时判为失败且文案是中文",
+                  "未签发" in str(exc) and "Traceback" not in str(exc), str(exc)[:120])
+        finally:
+            bad_server.shutdown()
+
+        # 6) 走接口：授权 + 测试按钮 + 整条流水线（文件验证，不依赖真实 DNS 账号）
+        res = api.post("/api/access", {"category": "cloud", "type": "trustasia",
+                                       "name": "__smoke_trustasia__",
+                                       "config": {"keyId": "mock-key-id", "authKey": "mock-auth-key",
+                                                  "environment": "prod", "apiBase": base},
+                                       "remark": "smoke"})
+        aid = (res.get("data") or {}).get("id") or 0
+        check("TrustAsia 授权创建（Key ID + API Key）", ok(res) and aid > 0, msg(res))
+        if aid:
+            tested = api.post(f"/api/access/{aid}/test")
+            tested_data = tested.get("data") or {}
+            check("授权「测试」真的调用 /ping",
+                  ok(tested) and tested_data.get("success") is True
+                  and "Everything is fine" in str(tested_data.get("message")),
+                  msg(tested))
+            empty = api.post("/api/access", {"category": "cloud", "type": "trustasia",
+                                             "name": "__smoke_trustasia_empty__",
+                                             "config": {}, "remark": ""})
+            check("缺 Key ID / API Key 时拒绝保存并在提示里点名",
+                  not ok(empty) and ("Key ID" in (empty.get("msg") or "")
+                                     or "API Key" in (empty.get("msg") or "")), msg(empty))
+
+            stages = {"stages": [{"id": "s1", "title": "申请", "tasks": [
+                {"id": "t1", "type": "CertApplyTrustAsia", "title": "TrustAsia 证书",
+                 "input": {"domains": ["trustasia-smoke.local"], "accessId": aid,
+                           "productId": "trustasia_ssl_dv_v2", "dcvMethod": "file",
+                           "httpUploadType": "local", "httpWebRoot": str(web_root),
+                           "keyType": "rsa2048", "validityMonths": 3,
+                           "pollInterval": 2, "timeout": 60},
+                 "continueOnError": False}]}], "triggers": []}
+            res = api.post("/api/pipeline", {"title": "__smoke_trustasia__", "remark": "smoke",
+                                             "content": stages})
+            pid = (res.get("data") or {}).get("id") or 0
+            check("TrustAsia 流水线创建", ok(res) and pid > 0, msg(res))
+            if pid:
+                detail = _run_and_wait(api, pid, tries=60)
+                check("TrustAsia 流水线签发成功",
+                      (detail or {}).get("status") == "success", str((detail or {}).get("status")))
+                written = [str(p) for p in web_root.rglob("*") if p.is_file()]
+                check("文件验证的验证文件已写进网站根目录", bool(written), str(written[:3]))
+                certs = api.get("/api/cert/list?page=1&size=50").get("data") or {}
+                hit = [r for r in certs.get("records") or []
+                       if "trustasia-smoke.local" in (r.get("domains") or [])]
+                check("签发的证书进了证书库", bool(hit), str(certs.get("total")))
+
+        # 7) 插件元数据
+        from app.plugins import ACCESS_TYPES, TASK_PLUGIN_MAP
+
+        plugin = TASK_PLUGIN_MAP.get("CertApplyTrustAsia")
+        check("插件注册表里有 TrustAsia 申请任务", plugin is not None)
+        check("TrustAsia 授权归到云厂商分类",
+              (ACCESS_TYPES.get("trustasia") or {}).get("category") == "cloud",
+              str((ACCESS_TYPES.get("trustasia") or {}).get("category")))
+        check("TrustAsia 有本地 logo",
+              (ACCESS_TYPES.get("trustasia") or {}).get("logoFile") == "/logos/access/trustasia.svg",
+              str((ACCESS_TYPES.get("trustasia") or {}).get("logoFile")))
+        inputs = {item["key"]: item for item in (plugin or {}).get("inputs") or []}
+        check("申请任务字段齐全（域名 / 产品 / 验证方式 / DNS 授权）",
+              {"domains", "productId", "dcvMethod", "dnsAccessId"} <= set(inputs),
+              str(sorted(inputs)))
+        check("授权字段只允许 TrustAsia 类型",
+              inputs.get("accessId", {}).get("accessTypes") == ["trustasia"],
+              str(inputs.get("accessId", {}).get("accessTypes")))
+        products = [o.get("value") for o in inputs.get("productId", {}).get("options") or []]
+        check("产品下拉覆盖 DV / OV / EV 共 8 种",
+              len(products) == 8 and {"trustasia_ssl_dv_v2", "trustasia_ssl_ov_v2",
+                                      "trustasia_ssl_ev_v2"} <= set(products), str(products))
+        overview = api.get("/api/dashboard/overview").get("data") or {}
+        check("「支持的证书」列出 TrustAsia",
+              any(item.get("key") == "CertApplyTrustAsia"
+                  for item in overview.get("supportedCerts") or []),
+              str([i.get("key") for i in overview.get("supportedCerts") or []][:14]))
+    finally:
+        server.shutdown()
+        shutil.rmtree(web_root, ignore_errors=True)
+        if pid:
+            _drop_pipeline(api, pid)
+        if aid:
+            api.delete(f"/api/access/{aid}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://127.0.0.1:8000")
@@ -2074,14 +3243,23 @@ def main() -> int:
     section_more_deploy()
     section_cdn_deploy_pipeline(api)
     section_cert_apply_inputs(api)
+    section_freessl(api)
+    section_eab_single_use(api)
     section_jdcloud_split()
     section_signature()
     section_ssh_presets()
     section_storage_deploy(api)
     section_synology_config()
+    section_synology_login_flow()
+    section_synology_device_id_api(api)
     section_access_type_binding(api)
     section_access_resources(api)
     section_network(api)
+    section_dns_records(api)
+    section_pipeline_group(api)
+    section_task_switch(api)
+    section_skip_reuse(api)
+    section_trustasia(api)
 
     # 收尾：按测试域名清掉本轮产出的证书，库里不留 smoke.local 这类垃圾
     removed = purge_test_certs(api)

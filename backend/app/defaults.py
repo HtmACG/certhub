@@ -25,6 +25,9 @@ DEFAULT_SETTINGS: dict[str, dict] = {
         "loginFailLimit": 5,
         "lockMinutes": 10,
         "force2fa": False,
+        # 密码输错几次之后开始要求图形验证码（默认开启，失败 1 次就要）
+        "captchaEnabled": True,
+        "captchaAfter": 1,
     },
     "notify": {
         "expireDays": 15,

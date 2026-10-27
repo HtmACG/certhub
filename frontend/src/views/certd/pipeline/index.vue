@@ -9,6 +9,33 @@
 -->
 <template>
   <div class="certd-pipeline art-full-height g-scope">
+    <!--
+      「流水线」和「流水线分组」本来是侧边栏两个入口，按需求合并成一个页面两个页签。
+      分组不是列表的筛选条件，而是另一套对象（把几条流水线编成一组按顺序试），
+      所以用页签而不是筛选器。
+    -->
+    <div class="page-switch" role="tablist" aria-label="流水线 / 分组">
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === 'pipeline'"
+        :class="{ 'is-active': activeTab === 'pipeline' }"
+        @click="switchTab('pipeline')"
+      >
+        <ArtSvgIcon icon="ri:node-tree" />流水线
+      </button>
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === 'group'"
+        :class="{ 'is-active': activeTab === 'group' }"
+        @click="switchTab('group')"
+      >
+        <ArtSvgIcon icon="ri:stack-line" />分组
+      </button>
+    </div>
+
+    <template v-if="activeTab === 'pipeline'">
     <ArtSearchBar
       v-model="searchForm"
       :items="searchItems"
@@ -60,7 +87,6 @@
               {{ row.title }}
             </ElLink>
             <div class="cell-tags">
-              <ElTag v-if="row.disabled" size="small" type="info" effect="plain">已停用</ElTag>
               <ElTag
                 v-for="kind in kindsOf(row)"
                 :key="kind.key"
@@ -75,6 +101,20 @@
               {{ row.domains.join(' , ') }}
             </div>
           </div>
+        </template>
+
+        <template #enabled="{ row }">
+          <ElTooltip
+            :content="row.disabled ? '已停用：定时任务与 Webhook 都不会执行，点一下启用' : '已启用：按定时任务 / Webhook 正常触发，点一下停用'"
+          >
+            <ElSwitch
+              :model-value="!row.disabled"
+              size="small"
+              :loading="togglingId === row.id"
+              :before-change="() => toggleRowEnabled(row)"
+            />
+          </ElTooltip>
+          <div class="cell-sub">{{ row.disabled ? '已停用' : '已启用' }}</div>
         </template>
 
         <template #lastStatus="{ row }">
@@ -219,6 +259,10 @@
         @close="logVisible = false"
       />
     </ElDrawer>
+    </template>
+
+    <!-- 分组：原「流水线分组」页整页搬进来，自己带搜索栏和表格 -->
+    <PipelineGroup v-else />
   </div>
 </template>
 
@@ -240,11 +284,25 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { CRON_PRESETS, STAGE_KIND_META, certStatusMeta, runStatusMeta } from '@/utils/certd'
   import LogPanel from '../components/log-panel.vue'
+  import PipelineGroup from './group.vue'
 
   defineOptions({ name: 'CertdPipeline' })
 
   const router = useRouter()
   const route = useRoute()
+
+  // 页签：流水线（默认）/ 分组（原独立页面）
+  const activeTab = ref<'pipeline' | 'group'>(route.query.tab === 'group' ? 'group' : 'pipeline')
+
+  /**
+   * 切换页签时把 tab 写回地址栏：
+   * 老的 /certd/pipeline-group 会重定向到 ?tab=group，刷新后也要停在同一页。
+   */
+  const switchTab = (tab: 'pipeline' | 'group') => {
+    if (activeTab.value === tab) return
+    activeTab.value = tab
+    router.replace({ path: route.path, query: tab === 'group' ? { tab: 'group' } : {} })
+  }
 
   const searchForm = ref<Record<string, any>>({ keyword: undefined, status: undefined })
   const selectedIds = ref<number[]>([])
@@ -292,6 +350,8 @@
       columnsFactory: () => [
         { type: 'selection', width: 48 },
         { prop: 'title', label: '流水线 / 域名', minWidth: 240, useSlot: true },
+        // 启用 / 停用直接在这里开关（以前放在流水线编辑页顶部，勾完还得保存一次）
+        { prop: 'enabled', label: '启用', width: 96, useSlot: true },
         { prop: 'lastStatus', label: '最近执行', width: 150, useSlot: true },
         { prop: 'cert', label: '证书有效期', width: 150, useSlot: true },
         { prop: 'trigger', label: '触发方式', width: 150, useSlot: true },
@@ -387,6 +447,30 @@
     logHistoryId.value = result?.historyId || null
     logVisible.value = true
     refreshData()
+  }
+
+  /** 表格里「启用」开关正在切的那一行（只转它自己的圈） */
+  const togglingId = ref(0)
+
+  /**
+   * 表格里直接启停一条流水线。
+   * 用 before-change 返回 Promise：成功才真正切换，失败时开关自己回弹，
+   * 不会出现「界面显示已启用、库里还是停用」的假状态。
+   */
+  const toggleRowEnabled = async (row: PipelineItem) => {
+    if (togglingId.value === row.id) return false
+    togglingId.value = row.id
+    try {
+      const result = await togglePipeline(row.id)
+      const disabled = Boolean(result?.disabled)
+      ;(row as any).disabled = disabled
+      ElMessage.success(disabled ? '已停用' : '已启用')
+      return true
+    } catch {
+      return false
+    } finally {
+      togglingId.value = 0
+    }
   }
 
   const handleRowCommand = async (command: string, row: PipelineItem) => {
@@ -515,6 +599,59 @@
 </script>
 
 <style scoped>
+  /* 页签：与详情页「画布 / 列表」保持同一套视觉，切页不换语言 */
+  .page-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 2px;
+    align-self: flex-start;
+    padding: 2px;
+    margin-bottom: 12px;
+    background: var(--g-fill-hover, var(--art-gray-200));
+    border-radius: 100px;
+  }
+
+  .page-switch button {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    height: 26px;
+    padding: 0 12px;
+    font-family: var(--g-font, inherit);
+    font-size: 12px;
+    color: var(--g-text-2, var(--art-gray-600));
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: 100px;
+    transition:
+      color 0.14s ease,
+      background 0.14s ease,
+      box-shadow 0.14s ease;
+  }
+
+  .page-switch button:hover {
+    color: var(--g-text, var(--art-gray-900));
+  }
+
+  .page-switch button.is-active {
+    color: var(--g-blue, var(--el-color-primary));
+    background: var(--g-surface, #fff);
+    box-shadow: 0 1px 3px rgb(60 64 67 / 14%);
+  }
+
+  /*
+   * 分组页自带 art-full-height（height: var(--art-full-height) = 整页高度），
+   * 嵌在页签下面会多撑出「页签条」那 30px。这里改成占满剩余空间：
+   * 写 height:auto 是不够的 —— 高度变成内容驱动后，表格没有可用高度，
+   * el-table 的 empty 块只分到 60px，空状态插画会被裁成一条。
+   */
+  .certd-pipeline :deep(.certd-group) {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+
   .cell-title {
     min-width: 0;
   }

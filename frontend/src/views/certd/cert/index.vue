@@ -3,7 +3,7 @@
   =========================================================
   一个页面解决「看、导、查、下」：
   · 列表按剩余有效期上色，快到期的排到眼前；
-  · 点域名打开详情抽屉：概览 / SAN / 指纹 / 证书 PEM / 私钥（小眼睛控制）；
+  · 点域名打开详情抽屉：概览 / SAN / 指纹 / 证书 PEM / 私钥（明文展示，可一键复制）；
   · 导出下拉支持 pem / der / pfx / p7b / jks / nginx 六种格式；
   · 手工证书也能导入（证书 + 私钥必须成对，后端会校验）。
 -->
@@ -155,14 +155,10 @@
         <div class="pem-block">
           <div class="pem-head">
             <span>私钥 PEM</span>
-            <div class="flex items-center gap-2">
-              <ElButton link type="primary" @click="keyVisible = !keyVisible">
-                {{ keyVisible ? '隐藏' : '显示' }}
-              </ElButton>
-              <ElButton v-if="keyVisible" link @click="copyText(detail.keyPem)">复制</ElButton>
-            </div>
+            <ElButton link type="primary" @click="copyText(detail.keyPem)">复制</ElButton>
           </div>
-          <pre class="pem-body">{{ keyVisible ? detail.keyPem : maskPem(detail.keyPem) }}</pre>
+          <!-- 铁律：凭据不打码。私钥明文展示，要不要看由用户自己决定，不做「隐藏 / 显示」开关 -->
+          <pre class="pem-body is-key">{{ detail.keyPem || '（这张证书没有私钥：导入时未提供私钥）' }}</pre>
         </div>
 
         <div class="export-wrap">
@@ -329,7 +325,6 @@
   const detailVisible = ref(false)
   const detailLoading = ref(false)
   const detail = ref<any>(null)
-  const keyVisible = ref(false)
   const exportFormat = ref('pem')
   const exportPassword = ref('')
   /** PFX 的 Windows 兼容参数（空 = 最新服务器默认） */
@@ -338,21 +333,12 @@
   const openDetail = async (row: CertItem) => {
     detailVisible.value = true
     detailLoading.value = true
-    keyVisible.value = false
     detail.value = null
     try {
       detail.value = await fetchCertDetail(row.id)
     } finally {
       detailLoading.value = false
     }
-  }
-
-  const maskPem = (pem: string) => {
-    if (!pem) return ''
-    const lines = pem.split('\n')
-    const head = lines.slice(0, 2).join('\n')
-    const tail = lines.slice(-2).join('\n')
-    return head + '\n' + '········ 已隐藏，点「显示」查看完整私钥 ········\n' + tail
   }
 
   const copyText = async (text: string) => {
@@ -523,6 +509,11 @@
     white-space: pre-wrap;
     word-break: break-all;
     color: var(--art-gray-700);
+  }
+
+  /* 私钥块：明文展示，用底色和证书 PEM 区分开（颜色走主题变量，暗色不白底白字） */
+  .pem-body.is-key {
+    background: var(--art-gray-100);
   }
 
   .export-wrap {

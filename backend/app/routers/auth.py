@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import time
 
 import pyotp
 from fastapi import APIRouter, Depends, Request
@@ -14,6 +15,7 @@ from ..db import get_db
 from ..deps import audit, fail, get_bind_user, get_current_user, ok, site_name
 from ..models import Setting, User
 from ..security import create_token, decode_token, hash_password, validate_password, verify_password
+from ..services import captcha
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -22,6 +24,9 @@ class LoginParams(BaseModel):
     userName: str
     password: str
     code: str = ""
+    #: 图形验证码（密码错误达到阈值后必填）
+    captchaToken: str = ""
+    captchaCode: str = ""
 
 
 class RegisterParams(BaseModel):
@@ -39,13 +44,75 @@ def _security_setting(db: Session) -> dict:
         return {}
 
 
+#: 不存在的账号也要能计数，否则「拿别人的用户名试密码」这条路绕过了验证码。
+#: 进程内字典够用：键是 用户名|IP，值 (失败次数, 最后失败时间)。
+_anon_fails: dict[str, tuple[int, float]] = {}
+_ANON_TTL = 3600
+
+
+def _anon_key(username: str, ip: str) -> str:
+    return f"{(username or '').strip().lower()}|{ip}"
+
+
+def _anon_count(username: str, ip: str) -> int:
+    key = _anon_key(username, ip)
+    count, at = _anon_fails.get(key, (0, 0.0))
+    if at and time.time() - at > _ANON_TTL:
+        _anon_fails.pop(key, None)
+        return 0
+    return count
+
+
+def _anon_bump(username: str, ip: str) -> int:
+    key = _anon_key(username, ip)
+    count = _anon_count(username, ip) + 1
+    _anon_fails[key] = (count, time.time())
+    # 简单的容量保护，别让字典无限涨
+    if len(_anon_fails) > 5000:
+        for k in list(_anon_fails)[:1000]:
+            _anon_fails.pop(k, None)
+    return count
+
+
+def _captcha_policy(db: Session) -> tuple[bool, int]:
+    """(是否启用图形验证码, 失败几次后开始要求)"""
+    sec = _security_setting(db)
+    enabled = bool(sec.get("captchaEnabled", True))
+    try:
+        after = int(sec.get("captchaAfter", 1))
+    except (TypeError, ValueError):
+        after = 1
+    return enabled, max(1, after)
+
+
+@router.get("/captcha")
+def get_captcha(db: Session = Depends(get_db)):
+    """登录页的图形验证码。免登录：还没登录的人才需要它。"""
+    enabled, _ = _captcha_policy(db)
+    return ok({**captcha.issue(), "enabled": enabled})
+
+
 @router.post("/login")
 def login(params: LoginParams, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == params.userName).first()
     ip = request.client.host if request.client else ""
 
+    # ---- 图形验证码：密码错过几次之后，先过这一关再看密码 ----
+    captcha_enabled, captcha_after = _captcha_policy(db)
+    fails = (user.login_fail_count or 0) if user else _anon_count(params.userName, ip)
+    if captcha_enabled and fails >= captcha_after:
+        if not params.captchaCode.strip() or not params.captchaToken:
+            return {"code": 400, "msg": "请输入图形验证码",
+                    "data": {"needCaptcha": True}}
+        if not captcha.verify(params.captchaToken, params.captchaCode):
+            return {"code": 400, "msg": "图形验证码错误，请重新输入",
+                    "data": {"needCaptcha": True}}
+
     if not user:
-        return fail("账号或密码错误")
+        _anon_bump(params.userName, ip)
+        # 密码错 → 告诉前端「下次要带验证码」，前端立刻把输入框露出来
+        return {"code": 400, "msg": "账号或密码错误",
+                "data": {"needCaptcha": captcha_enabled}}
 
     if user.locked_until and user.locked_until > dt.datetime.now():
         left = int((user.locked_until - dt.datetime.now()).total_seconds() // 60) + 1
@@ -59,7 +126,8 @@ def login(params: LoginParams, request: Request, db: Session = Depends(get_db)):
             user.locked_until = dt.datetime.now() + dt.timedelta(minutes=int(sec.get("lockMinutes") or 10))
             user.login_fail_count = 0
         db.commit()
-        return fail("账号或密码错误")
+        return {"code": 400, "msg": "账号或密码错误",
+                "data": {"needCaptcha": captcha_enabled}}
 
     if user.status != 1:
         return fail("账号已被禁用，请联系管理员")

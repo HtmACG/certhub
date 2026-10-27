@@ -57,6 +57,12 @@ def _content_kinds(content: dict) -> list[str]:
     kinds: list[str] = []
     for stage in content.get("stages") or []:
         for task in stage.get("tasks") or []:
+            # 停用的步骤运行时会跳过，不该出现在「申请 + 部署」这类标签里
+            if task.get("enabled") is False:
+                continue
+            # 画布上没连线的步骤同样不会执行
+            if task.get("linked") is False:
+                continue
             task_type = str(task.get("type", ""))
             if task_type == "Notify":
                 kind = "notify"
@@ -74,6 +80,11 @@ def _serialize(p: Pipeline, detail: bool = False, last_status: str = "") -> dict
         content = json.loads(p.content or "{}")
     except Exception:
         content = {}
+    stages = content.get("stages") or []
+    # 阶段开关（stage.enabled === false）关掉后整段不跑，里面的任务既不算「会执行的步骤」，
+    # 也不算「未连线」—— 统一按停用计，列表页的数字才对得上实际执行。
+    live_stages = [s for s in stages if s.get("enabled") is not False]
+    off_stages = [s for s in stages if s.get("enabled") is False]
     data = {
         "id": p.id, "title": p.title, "remark": p.remark or "",
         "disabled": bool(p.disabled), "type": p.type,
@@ -84,8 +95,22 @@ def _serialize(p: Pipeline, detail: bool = False, last_status: str = "") -> dict
         "createTime": _fmt(p.create_time),
         "updateTime": _fmt(p.update_time),
         "running": is_running(p.id),
-        "stageCount": len(content.get("stages") or []),
-        "stepCount": sum(len(stage.get("tasks") or []) for stage in (content.get("stages") or [])),
+        "stageCount": len(stages),
+        "stepCount": sum(
+            1 for stage in live_stages
+            for task in stage.get("tasks") or []
+            if task.get("enabled") is not False and task.get("linked") is not False),
+        #: 停用的步骤数（界面上单独提示，别让「4 个任务」和实际执行对不上）
+        "stepDisabledCount": (
+            sum(1 for stage in live_stages
+                for task in stage.get("tasks") or [] if task.get("enabled") is False)
+            + sum(len(stage.get("tasks") or []) for stage in off_stages)),
+        #: 画布上没连线的步骤数：不连线就不会执行，列表里也要能看出差别
+        "stepUnlinkedCount": sum(
+            1 for stage in live_stages
+            for task in stage.get("tasks") or []
+            if task.get("enabled") is not False and task.get("linked") is False),
+        "taskCount": sum(len(stage.get("tasks") or []) for stage in stages),
         "triggerCount": len(content.get("triggers") or []),
         # 卡片式列表用：域名标签 + 上次执行结果 + 流程分类
         "domains": _content_domains(content),
@@ -121,6 +146,20 @@ def _check_content(content: dict) -> str:
         for task in stage.get("tasks") or []:
             if task.get("type") not in TASK_PLUGIN_MAP:
                 return f"未知任务类型：{task.get('type')}"
+    # 「失败后跳转」只能指向排在后面的任务：执行顺序是线性展开的，往前跳会成环
+    ordered: list[dict] = []
+    for stage in stages:
+        ordered.extend(stage.get("tasks") or [])
+    pos = {str(t.get("id")): i for i, t in enumerate(ordered) if t.get("id")}
+    for i, task in enumerate(ordered):
+        target = str(task.get("onErrorTaskId") or "")
+        if not target:
+            continue
+        if target not in pos:
+            return f"「{task.get('title') or task.get('type')}」的失败后跳转目标不存在"
+        if pos[target] <= i:
+            return (f"「{task.get('title') or task.get('type')}」的失败后跳转"
+                    f"只能指向它后面的任务")
     for tr in content.get("triggers") or []:
         if tr.get("type") == "timer" and tr.get("enabled", True):
             if not tr.get("cron"):
@@ -341,6 +380,42 @@ def run(pipeline_id: int, user: User = Depends(get_current_user),
         return fail(str(exc))
     audit(db, user, "运行流水线", p.title)
     # 返回 historyId：前端据此直接打开实时日志，不用去列表里猜哪条是新记录
+    return ok({"historyId": history_id})
+
+
+class StageRunParams(BaseModel):
+    stageId: str = ""
+
+
+@router.post("/{pipeline_id}/stage/run")
+def run_stage(pipeline_id: int, params: StageRunParams,
+              user: User = Depends(get_current_user),
+              db: Session = Depends(get_db)):
+    """只单独运行某一个阶段（阶段卡片上的「执行」按钮），返回 historyId。"""
+    p = db.get(Pipeline, pipeline_id)
+    if not p or p.user_id != user.id:
+        return fail("流水线不存在")
+    try:
+        content = json.loads(p.content or "{}")
+    except Exception:
+        return fail("流水线配置格式错误")
+    stage = next((s for s in (content.get("stages") or [])
+                  if str(s.get("id") or "") == str(params.stageId)), None)
+    if not stage:
+        return fail("阶段不存在或已被删除")
+    if not stage.get("tasks"):
+        return fail("该阶段还没有任务，无法单独运行")
+    # 阶段开关关掉后整段跳过。这里提前拦，给一句能看懂的提示，
+    # 而不是让引擎跑起来再记一条「失败的执行历史」。
+    if stage.get("enabled") is False:
+        return fail("该阶段已停用，请先启用再单独运行")
+    try:
+        history_id = run_pipeline_async(p.id, "manual", user.id,
+                                        only_stage_id=params.stageId)
+    except Exception as exc:
+        return fail(str(exc))
+    audit(db, user, "单独运行阶段",
+          f"{p.title} / {stage.get('title') or '未命名'}")
     return ok({"historyId": history_id})
 
 
