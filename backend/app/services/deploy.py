@@ -384,18 +384,28 @@ def deploy_to_baota(ctx: CertContext, config: dict, log: Callable) -> None:
     api_key = config.get("apiKey") or ""
     ts = str(int(time.time()))
     token = hashlib.md5((ts + hashlib.md5(api_key.encode()).hexdigest()).encode()).hexdigest()
-    site = ctx.render(config.get("siteName") or ctx.domain)
-    log(f"部署到宝塔站点：{site}")
-    resp = _panel_request("POST", f"{url}/site?action=SetSSL", timeout=60, data={
-        "request_time": ts, "request_token": token,
-        "siteName": site, "type": "1", "csr": ctx.crt, "key": ctx.key,
-    })
-    try:
-        data = resp.json()
-    except Exception:
-        raise DeployError(f"宝塔返回异常（HTTP {resp.status_code}）：{resp.text[:300]}")
-    if not data.get("status"):
-        raise DeployError(f"宝塔部署失败：{data.get('msg')}")
+    sites = _as_domain_list(config.get("siteName")) or [ctx.domain]
+    sites = list(dict.fromkeys(ctx.render(str(site)).strip() for site in sites if str(site).strip()))
+    if not sites:
+        raise DeployError("宝塔部署需要至少选择一个站点")
+    errors: list[str] = []
+    for site in sites:
+        log(f"部署到宝塔站点：{site}")
+        try:
+            resp = _panel_request("POST", f"{url}/site?action=SetSSL", timeout=60, data={
+                "request_time": ts, "request_token": token,
+                "siteName": site, "type": "1", "csr": ctx.crt, "key": ctx.key,
+            })
+            data = resp.json()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{site}: {exc}")
+            continue
+        if not data.get("status"):
+            errors.append(f"{site}: {data.get('msg') or '未知错误'}")
+            continue
+        log(f"宝塔站点 {site} 部署完成")
+    if errors:
+        raise DeployError("部分宝塔站点部署失败：" + "；".join(errors))
     log("宝塔部署完成")
 
 
@@ -406,8 +416,10 @@ def deploy_to_1panel(ctx: CertContext, config: dict, log: Callable) -> None:
     ts = str(int(time.time()))
     token = hashlib.md5((api_key + ts).encode()).hexdigest()
     headers = {"1Panel-Token": token, "1Panel-Timestamp": ts}
-    website_id = config.get("websiteId")
-    log(f"上传证书到 1Panel 网站 {website_id}")
+    website_ids = _as_domain_list(config.get("websiteId"))
+    website_ids = list(dict.fromkeys(str(item).strip() for item in website_ids
+                                     if str(item).strip()))
+    log("上传证书到 1Panel")
     resp = _panel_request("POST", f"{url}/api/v2/websites/ssl/upload", timeout=60,
                           headers=headers, json={
         "cert": ctx.crt, "key": ctx.key, "sslName": ctx.domain, "type": "paste",
@@ -419,12 +431,23 @@ def deploy_to_1panel(ctx: CertContext, config: dict, log: Callable) -> None:
     if resp.status_code >= 400 or data.get("code") not in (200, 0):
         raise DeployError(f"1Panel 上传证书失败：{data.get('message') or resp.text[:300]}")
     ssl_id = (data.get("data") or {}).get("id")
-    resp = _panel_request("POST", f"{url}/api/v2/websites/{website_id}/https", timeout=60,
-                          headers=headers, json={
-        "websiteSSLId": ssl_id, "enable": True,
-    })
-    if resp.status_code >= 400:
-        raise DeployError(f"1Panel 绑定证书失败：{resp.text[:300]}")
+    if not ssl_id:
+        raise DeployError("1Panel 上传证书成功但没有返回证书 ID")
+    if not website_ids:
+        log("未选择网站，仅上传证书")
+        return
+    errors: list[str] = []
+    for website_id in website_ids:
+        resp = _panel_request("POST", f"{url}/api/v2/websites/{website_id}/https", timeout=60,
+                              headers=headers, json={
+            "websiteSSLId": ssl_id, "enable": True,
+        })
+        if resp.status_code >= 400:
+            errors.append(f"网站 {website_id}: HTTP {resp.status_code} {resp.text[:200]}")
+            continue
+        log(f"1Panel 网站 {website_id} 证书绑定成功")
+    if errors:
+        raise DeployError("部分 1Panel 网站部署失败：" + "；".join(errors))
     log("1Panel 部署完成")
 
 

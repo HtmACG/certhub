@@ -406,13 +406,13 @@ endpoint 和几个参数：
 | 分类 | 数量 | 共同点 | 代码位置 |
 | --- | --- | --- | --- |
 | 对象存储 | 8 | 都是「PUT 一个文件」，差别在签名算法与 endpoint | `deploy_ext.py` |
-| 主机 | 7 | 都是「传文件 + 执行重载命令」 | `deploy.py` / `deploy_ext.py` |
+| 主机 | 9 | 都是「传文件 + 执行重载命令」 | `deploy.py` / `deploy_ext.py` |
 | 面板 | 8 | 调各自 HTTP 接口或 SSH | `deploy.py` / `deploy_ext.py` / `deploy_more.py` |
-| 集群 | 1 | K8s Secret（API Server + Bearer Token） | `deploy_ext.py` |
-| 云 CDN | 21 | 上传证书 + 绑定域名 | `deploy.py` / `deploy_ext.py` / `deploy_cn.py` / `deploy_more.py` |
-| 其它 | 3 | Webhook / 邮件 / 远程脚本 | `deploy.py` / `deploy_ext.py` |
+| 集群 | 2 | K8s Secret / Ingress | `deploy_ext.py` |
+| 云 CDN | 25 | 上传证书 + 绑定域名 | `deploy.py` / `deploy_ext.py` / `deploy_cn.py` / `deploy_more.py` |
+| 其它 | 5 | Webhook / 邮件 / 远程脚本 / 等待 / 备份 | `deploy.py` / `deploy_ext.py` |
 
-合计 **48 个部署插件**，与概览页「支持的证书 → 证书部署」里的数字一致。
+合计 **57 个部署插件**，与概览页「支持的证书 → 证书部署」里的数字一致。
 
 ### 对象存储（8）
 
@@ -430,7 +430,7 @@ endpoint 和几个参数：
 内网 endpoint（127./10./192.168./172.16-31.）会自动绕开系统代理，否则宿主机配了
 `HTTP_PROXY` 时连本地 MinIO 会报一个看不出原因的 502。
 
-### 主机（7）
+### 主机（9）
 
 远程主机（自定义路径/命令）、本机目录、Nginx、Apache、HAProxy、Tomcat、IIS。
 
@@ -439,16 +439,18 @@ endpoint 和几个参数：
 - **IIS** 没有「证书文件」的概念，插件上传 PFX 后用 PowerShell `Import-PfxCertificate` 导入
   `LocalMachine\My`，再 `netsh http update sslcert` 绑定站点。
 
-### 面板（8）与集群（1）
+### 面板（8）与集群（2）
 
 宝塔、1Panel、群晖 DSM、威联通 QTS、Proxmox VE、Nginx Proxy Manager、OpenWrt / iStoreOS，
 以及**长亭雷池 WAF**（更新控制台与防护站点的证书）；
-Kubernetes 单列一类：写 `kubernetes.io/tls` Secret，可顺带给 Ingress 打时间戳注解触发重载
+**宝塔站点 / 1Panel 网站 / NPM 代理主机都支持多选**：一个任务可以同时把证书装到多个站点，
+按证书域名自动匹配时会把所有命中项一次性选中；
+Kubernetes 单列一类：写 `kubernetes.io/tls` Secret，或直接改写 Ingress 的 `spec.tls`
 （Nginx Ingress 只监听 Ingress 变化，只改 Secret 有时候要等十几分钟才生效）。
 
-### 云 CDN（21）
+### 云 CDN（25）
 
-阿里云 CDN / DCDN / 直播 / 点播 / SLB 证书库、腾讯云 CDN、七牛云、火山引擎
+阿里云 CDN / DCDN / 直播 / 点播 / SLB 证书库、腾讯云 CDN / EdgeOne、七牛云、火山引擎
 证书中心 / CDN / 直播、AWS CloudFront、Fastly，以及国内一批中小 CDN：
 
 | 插件 | 接口 | 鉴权方式 |
@@ -462,6 +464,7 @@ Kubernetes 单列一类：写 `kubernetes.io/tls` Secret，可顺带给 Ingress 
 | 白山云 | `cdn.api.baishan.com` | token 走 query |
 | 又拍云 CDN / USS | `console.upyun.com` | 控制台账号登录换 Cookie |
 | 腾讯云 CLB | `ssl.tencentcloudapi.com` + `clb.tencentcloudapi.com` | TC3-HMAC-SHA256；先 `UploadCertificate` 再 `ModifyCertificate` |
+| 腾讯云 EdgeOne | `ssl.tencentcloudapi.com` + `teo.tencentcloudapi.com` | TC3-HMAC-SHA256；先 `UploadCertificate` 拿 CertId，再按站点 `ModifyHostsCertificate` |
 
 这几家都是「先上传/创建证书，再绑定到域名」的两步流程，差异只在签名与字段名：
 
@@ -472,6 +475,10 @@ Kubernetes 单列一类：写 `kubernetes.io/tls` Secret，可顺带给 Ingress 
   `/v1/domain/{domain}/httpType`，不能直接把证书内容塞给 CDN 接口（会报证书已存在）；
 - **多吉云** 绑定完会顺手删掉「已过期且没绑定域名」的旧证书，避免证书列表越堆越长；
 - **易盾 / 括彩云 / 我爱云 / 白山云** 需要先在控制台建好站点或证书，插件按证书 ID / 域名 ID 覆盖内容。
+- **腾讯云 EdgeOne** 与 CDN 共用同一个「腾讯云授权」，但接口不同：先把证书传到 SSL 证书中心拿
+  `CertId`，再用 `DescribeZones` + `DescribeAccelerationDomains` 反查域名所属站点，
+  最后按站点调 `ModifyHostsCertificate`（`Mode=sslcert`、`ServerCertInfo=[{CertId}]`）。
+  用户只需要选加速域名，不用手抄 ZoneId。
 
 ### 验证状态
 
@@ -492,6 +499,7 @@ Kubernetes 单列一类：写 `kubernetes.io/tls` Secret，可顺带给 Ingress 
 | 阿里云 DCDN / 直播 / 点播 / SLB | ◐ | action 已探测存在（返回 `InvalidAccessKeyId.NotFound` 而非 `InvalidAction`） |
 | 火山引擎 CDN / 直播 | ◐ | 同上 |
 | 腾讯云 CDN | ✅ | `UpdateDomainConfig` 已修正（原来写的 `UpdateCertificate` 不存在） |
+| 腾讯云 EdgeOne | ✅ | 本地 mock 断言 SSL `UploadCertificate` + teo `ModifyHostsCertificate`（Mode / ZoneId / Hosts / CertId）以及按站点分组；无真实 EO 账号 |
 | AWS CloudFront / Fastly | ○ | 流程为「上传证书 → 回写配置」，无账号未验证 |
 | NPM / K8s Secret / OpenWrt / IIS | ○ | 按官方接口实现，未连真机 |
 | 邮件 / 脚本 / Webhook | ✅ | 本地可验证 |

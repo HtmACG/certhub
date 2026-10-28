@@ -34,7 +34,7 @@ ACCESS_TYPES: dict[str, dict[str, Any]] = {
     "tencentcloud": {
         "name": "腾讯云 / DNSPod",
         "category": "cloud",
-        "desc": "腾讯云 DNS 解析、CDN 证书部署",
+        "desc": "腾讯云 DNS 解析、CDN / EdgeOne 证书部署",
         "inputs": [
             f("secretId", "SecretId", required=True),
             f("secretKey", "SecretKey", "password", required=True),
@@ -738,6 +738,7 @@ _DEPLOY_VISUAL: dict[str, tuple[str, str]] = {
     "DeployToAliyunVod": ("thesvg-color:alibabacloud", "#ff6a00"),
     "DeployToAliyunSlb": ("thesvg-color:alibabacloud", "#ff6a00"),
     "DeployToTencentCdn": ("thesvg-color:tencentcloud", "#006eff"),
+    "DeployToTencentEdgeOne": ("thesvg-color:tencentcloud", "#006eff"),
     "DeployToQiniu": ("thesvg-color:qiniu", "#07beff"),
     "DeployToVolcengine": ("thesvg-color:volcengine", "#1664ff"),
     "DeployToVolcengineCdn": ("thesvg-color:volcengine", "#1664ff"),
@@ -808,6 +809,7 @@ _DEPLOY_LOGO_BRAND: dict[str, str] = {
     "DeployToAwsCloudfront": "aws",
     "DeployToCloudflareR2": "r2",
     "DeployToFastly": "fastly",
+    "DeployToTencentEdgeOne": "tencentcloud",
 }
 
 #: 插件的简称（历史字段：前端早期用它画「品牌色底 + 首字母」的文字牌，
@@ -824,6 +826,7 @@ _DEPLOY_SHORT: dict[str, str] = {
     "DeployToWoaiCdn": "我",
     "DeployToBaishanCdn": "白",
     "DeployToBaiduCdn": "百",
+    "DeployToTencentEdgeOne": "腾",
     "DeployToFtp": "F",
     "DeployRunCommand": "CMD",
     "DeployWait": "等",
@@ -979,8 +982,10 @@ _EXT_DEPLOY_PLUGINS: list[dict] = [
     _deploy("DeployToNpm", "部署到 Nginx Proxy Manager",
             "上传证书并绑定到代理主机", [
                 _acc("NPM 授权", "panel"),
-                f("proxyHostId", "代理主机 ID", required=False,
-                  helper="留空则只上传证书，不绑定"),
+                f("proxyHostId", "代理主机（可多选）", "tags", required=False,
+                  helper="选好授权后会自动拉取 NPM 代理主机，按证书域名选中匹配项；"
+                         "可多选，留空则只上传证书不绑定",
+                  remote="npmProxyHosts", remoteFrom="accessId", autoMatchDomains=True),
                 f("certName", "证书名称", default="{domain}-{timestamp}"),
             ], "面板"),
     _deploy("DeployToK8sSecret", "部署到 K8s Secret",
@@ -1617,6 +1622,25 @@ TASK_PLUGINS: list[dict[str, Any]] = [
         "outputs": [],
     },
     {
+        "type": "DeployToTencentEdgeOne",
+        "category": "云 CDN",
+        "name": "部署到腾讯云 EdgeOne",
+        "group": "deploy",
+        "icon": "cloud",
+        "desc": "上传证书到腾讯云 SSL，并绑定到 EdgeOne 站点的加速域名（与腾讯云 CDN 共用授权）",
+        "inputs": [
+            f("accessId", "腾讯云授权", "access", accessCategory="cloud", required=True),
+            f("domain", "EdgeOne 加速域名", "tags", required=True,
+              helper="自动拉取账号下所有 EdgeOne 站点的加速域名，支持多选并按证书域名自动选中",
+              remote="edgeoneDomains", remoteFrom="accessId", autoMatchDomains=True),
+            f("certName", "证书名称", default="{domain}-{timestamp}",
+              helper="上传到腾讯云 SSL 证书中心时使用的名称"),
+            f("certId", "已有证书 ID", default="",
+              helper="留空则上传新证书；填了就直接复用 SSL 证书中心的 CertId"),
+        ],
+        "outputs": [],
+    },
+    {
         "type": "DeployToQiniu",
         "category": "云 CDN",
         "name": "部署到七牛云",
@@ -1641,11 +1665,11 @@ TASK_PLUGINS: list[dict[str, Any]] = [
             f("accessId", "宝塔授权", "access", accessCategory="panel", required=True),
             f("autoMatch", "自动匹配站点", "switch", default=True,
               helper="按证书域名自动匹配宝塔里的站点；关掉后手动选"),
-            # 站点点名始终显示：选了授权就自动去面板拉站点，并按证书域名把匹配到的那个选出来，
-            # 用户不用去宝塔后台抄一遍站点名（见前端 PluginField 的 autoMatchDomains 处理）
-            f("siteName", "站点名称", "select", required=False,
-              helper="选好授权后会自动拉取宝塔站点，并按证书域名选中匹配的那个；"
-                     "想换站点直接改这里即可",
+            # 站点名支持多选：一个证书要同时装到多个宝塔站点时，不用建多条任务。
+            # 选项由「宝塔授权」自动拉取，会带上站点下的域名，便于区分同名站点。
+            f("siteName", "站点名称（可多选）", "tags", required=False,
+              helper="选好授权后会自动拉取宝塔站点（含站点域名），按证书域名选中匹配项；"
+                     "可多选，留空则使用证书主域名",
               remote="sites", remoteFrom="accessId", autoMatchDomains=True),
         ],
         "outputs": [],
@@ -1661,8 +1685,9 @@ TASK_PLUGINS: list[dict[str, Any]] = [
             f("accessId", "1Panel 授权", "access", accessCategory="panel", required=True),
             f("autoMatch", "自动匹配网站", "switch", default=True,
               helper="按证书域名自动匹配 1Panel 里的网站；关掉后手动选"),
-            f("websiteId", "网站", "select", required=False,
-              helper="选好授权后会自动拉取 1Panel 网站，并按证书域名选中匹配的那个",
+            f("websiteId", "网站（可多选）", "tags", required=False,
+              helper="选好授权后会自动拉取 1Panel 网站，按证书域名选中匹配项；"
+                     "可多选，留空则只上传证书不绑定",
               remote="sites", remoteFrom="accessId", autoMatchDomains=True),
         ],
         "outputs": [],
@@ -1817,7 +1842,7 @@ _DEPLOY_ACCESS_TYPES: dict[str, list[str]] = {
     "DeployToAliyunDcdn": ["aliyun"], "DeployToAliyunLive": ["aliyun"],
     "DeployToAliyunVod": ["aliyun"], "DeployToAliyunSlb": ["aliyun"],
     "DeployToTencentCdn": ["tencentcloud"], "DeployToTencentCos": ["tencentcloud"],
-    "DeployToTencentClb": ["tencentcloud"],
+    "DeployToTencentClb": ["tencentcloud"], "DeployToTencentEdgeOne": ["tencentcloud"],
     "DeployToHuaweiObs": ["huawei"],
     "DeployToVolcengine": ["volcengine"], "DeployToVolcengineTos": ["volcengine"],
     "DeployToVolcengineCdn": ["volcengine"], "DeployToVolcengineLive": ["volcengine"],

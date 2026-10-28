@@ -51,6 +51,7 @@ from .deploy import (
     CertContext,
     DeployError,
     _aliyun_rpc,
+    _as_domain_list,
     _cloud_error,
     _cloud_request,
     _panel_request,
@@ -536,23 +537,31 @@ def deploy_to_npm(ctx: CertContext, config: dict, log: Callable) -> None:
     cert_id = (resp.json() or {}).get("id")
     log(f"证书 ID：{cert_id}")
 
-    host_id = config.get("proxyHostId")
-    if not host_id:
-        log("未配置代理主机 ID，仅上传证书")
+    host_ids = _as_domain_list(config.get("proxyHostId"))
+    host_ids = list(dict.fromkeys(str(item).strip() for item in host_ids if str(item).strip()))
+    if not host_ids:
+        log("未选择代理主机，仅上传证书")
         return
 
-    resp = _panel_request("GET", f"{base}/api/nginx/proxy-hosts/{host_id}", timeout=30,
-                          verify=verify, headers=headers)
-    if resp.status_code >= 400:
-        raise DeployError(f"读取 NPM 代理主机 {host_id} 失败：{_cloud_error(resp)}")
-    host = resp.json() or {}
-    host["certificate_id"] = cert_id
-    host["ssl_forced"] = True
-    resp = _panel_request("PUT", f"{base}/api/nginx/proxy-hosts/{host_id}", timeout=60,
-                          verify=verify, headers=headers, json=host)
-    if resp.status_code >= 400:
-        raise DeployError(f"绑定证书到代理主机失败：{_cloud_error(resp)}")
-    log(f"已绑定到代理主机 {host_id}")
+    errors: list[str] = []
+    for host_id in host_ids:
+        resp = _panel_request("GET", f"{base}/api/nginx/proxy-hosts/{host_id}", timeout=30,
+                              verify=verify, headers=headers)
+        if resp.status_code >= 400:
+            errors.append(f"代理主机 {host_id}: 读取失败 {_cloud_error(resp)}")
+            continue
+        host = resp.json() or {}
+        host["certificate_id"] = cert_id
+        host["ssl_forced"] = True
+        resp = _panel_request("PUT", f"{base}/api/nginx/proxy-hosts/{host_id}", timeout=60,
+                              verify=verify, headers=headers, json=host)
+        if resp.status_code >= 400:
+            errors.append(f"代理主机 {host_id}: 绑定失败 {_cloud_error(resp)}")
+            continue
+        log(f"已绑定到代理主机 {host_id}")
+    if errors:
+        raise DeployError("部分 NPM 代理主机部署失败：" + "；".join(errors))
+    log("NPM 部署完成")
 
 
 @_register("DeployToK8sSecret")

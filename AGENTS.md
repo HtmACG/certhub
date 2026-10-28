@@ -508,6 +508,12 @@ cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
 
 - 后端在字段元数据上声明 `remote="sites" | "cdnDomains"` + `remoteFrom="accessId"`
   + **`autoMatchDomains=True`**；加新插件照抄这三件套即可，前端不用改。
+- **面板站点要支持多选**：宝塔 `siteName`、1Panel `websiteId`、NPM `proxyHostId` 一律用
+  `component="tags"`（后端 handler 同时兼容老数据的单个字符串；1Panel 证书只上传一次，
+  再循环绑定多个网站）。引擎 `_auto_match_resource` 会拿**所有证书 SAN** 去匹配，
+  多选字段把所有命中项一次性选中，不要压回单个。
+- NPM 代理主机用 `remote="npmProxyHosts"` 拉取（`resources.npm_proxy_hosts`），
+  与站点/加速域名共用同一套「自动匹配 + 多选」逻辑。
 - 前端 `plugin-field.vue` 负责：选好授权后立刻拉对端资源 → 按
   「证书申请任务的 domains」匹配（`*.x.com` 去掉 `*.` 后按后缀比）→ 自动选中并
   显示「按证书域名自动匹配：xxx」；匹配不到提示「可以从列表里手动选择」；

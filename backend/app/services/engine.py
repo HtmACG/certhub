@@ -279,6 +279,7 @@ class PipelineRunner:
     _AUTO_MATCH: dict[str, tuple[str, str]] = {
         "DeployToBaota": ("siteName", "sites"),
         "DeployTo1Panel": ("websiteId", "sites"),
+        "DeployToNpm": ("proxyHostId", "npmProxyHosts"),
         "DeployToAliyunCdn": ("domain", "cdnDomains"),
         "DeployToTencentCdn": ("domain", "cdnDomains"),
         "DeployToCtyunCdn": ("domains", "cdnDomains"),
@@ -288,12 +289,13 @@ class PipelineRunner:
         "DeployToUpyun": ("domains", "cdnDomains"),
     }
 
-    def _auto_match_resource(self, task_type: str, config: dict, domain: str,
-                             task: dict) -> None:
+    def _auto_match_resource(self, task_type: str, config: dict,
+                             domains: list[str] | str, task: dict) -> None:
         """自动匹配对端资源：选好授权后按证书域名去对端找出对应的站点/加速域名。
 
         和 certd 一样：任务上默认勾「自动匹配」，命中就把站点/域名填进去；
         没命中直接报错并告诉用户关掉自动匹配手动选，而不是让部署接口报一个看不懂的错。
+        多域名证书会拿**所有 SAN** 去匹配：站点/域名是多选字段时，把所有命中的都选上。
         """
         spec = self._AUTO_MATCH.get(task_type)
         if not spec or not config.get("autoMatch"):
@@ -313,9 +315,12 @@ class PipelineRunner:
         if not items:
             raise PipelineError("自动匹配失败：该授权下没有可用资源，可关掉自动匹配手动选择")
 
-        plain = domain.lstrip("*.").lower()
-        chosen = None
-        for item in items:
+        domain_list = ([domains] if isinstance(domains, str) else list(domains or []))
+        domain_list = [str(item).strip() for item in domain_list if str(item).strip()] or [""]
+        domain_text = "、".join(domain_list)
+        plain_domains = [item.lstrip("*.").lower() for item in domain_list]
+
+        def _hit(item: dict) -> bool:
             texts = [str(item.get("value") or ""), str(item.get("extra") or ""),
                      str(item.get("label") or "")]
             for text in texts:
@@ -323,22 +328,40 @@ class PipelineRunner:
                     part = part.strip().lower()
                     if not part:
                         continue
-                    if part == plain or part.endswith("." + plain) or plain.endswith("." + part):
-                        chosen = item
-                        break
-                if chosen:
-                    break
-            if chosen:
-                break
-        if not chosen:
+                    for plain in plain_domains:
+                        if (part == plain or part.endswith("." + plain)
+                                or plain.endswith("." + part)):
+                            return True
+            return False
+
+        # 多选字段（tags）把所有命中的资源都选上；单选字段仍然只取第一个。
+        # 宝塔站点 / 1Panel 网站 / NPM 代理主机改成可多选后，这里也必须跟着多选，
+        # 否则「自动匹配」会把用户选中的一批资源又压回一个。
+        matches: list[dict] = []
+        seen: set[str] = set()
+        for item in items:
+            if not _hit(item):
+                continue
+            value = str(item.get("value") or "")
+            if value and value not in seen:
+                seen.add(value)
+                matches.append(item)
+        if not matches:
             raise PipelineError(
-                f"自动匹配失败：{access_type} 授权下没有与「{domain}」匹配的资源，"
+                f"自动匹配失败：{access_type} 授权下没有与「{domain_text}」匹配的资源，"
                 "可关掉「自动匹配」手动选择")
-        if isinstance(config.get(field), list):
-            config[field] = [str(chosen["value"])]
+
+        from ..plugins import TASK_PLUGIN_MAP
+
+        plugin = TASK_PLUGIN_MAP.get(task_type) or {}
+        field_meta = next((i for i in plugin.get("inputs") or [] if i.get("key") == field), {})
+        if field_meta.get("component") == "tags":
+            config[field] = [str(item.get("value")) for item in matches]
+            labels = "、".join(str(item.get("label") or item.get("value")) for item in matches)
         else:
-            config[field] = chosen["value"]
-        self.log(f"自动匹配：{domain} → {chosen.get('label') or chosen.get('value')}", task)
+            config[field] = str(matches[0].get("value"))
+            labels = str(matches[0].get("label") or matches[0].get("value"))
+        self.log(f"自动匹配：{domain_text} → {labels}", task)
 
     def _sub_domain_roots(self) -> list[str]:
         """当前用户登记的子域名托管列表。
@@ -1031,7 +1054,7 @@ class PipelineRunner:
             if not ctx:
                 raise PipelineError("没有可部署的证书，请先执行证书申请任务")
             config = self._merge_access(cfg, task)
-            self._auto_match_resource(task_type, config, ctx.domain, task)
+            self._auto_match_resource(task_type, config, ctx.domains or [ctx.domain], task)
             handler = deploy.DEPLOY_HANDLERS[task_type]
             handler(ctx, config, lambda m: self.log(m, task))
             return {}

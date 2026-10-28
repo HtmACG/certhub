@@ -80,7 +80,9 @@ def _baota_site_items(rows: list) -> list[dict]:
             extra_parts.extend(str(item) for item in extra if item)
         elif isinstance(extra, str) and extra and extra != "1":
             extra_parts.append(extra)
-        items.append({"label": str(name), "value": str(name), "extra": ",".join(extra_parts)})
+        # 站点名可能和域名不一致，标签里把域名/备注一起显示：多选时用户能分清是哪个站。
+        label = f"{name}（{', '.join(extra_parts)}）" if extra_parts else str(name)
+        items.append({"label": label, "value": str(name), "extra": ",".join(extra_parts)})
     return items
 
 
@@ -280,6 +282,66 @@ def tencent_cdn_domains(config: dict) -> tuple[list[dict], str]:
     return _items([name for name in names if name], "腾讯云 CDN"), ""
 
 
+def tencent_edgeone_domains(config: dict) -> tuple[list[dict], str]:
+    """腾讯云 EdgeOne 全部站点的加速域名（带站点名，方便在多站点间区分）。"""
+    from . import deploy_more
+    from .deploy import DeployError
+
+    try:
+        rows = deploy_more.tencent_edgeone_domain_rows(config)
+    except DeployError as exc:
+        # EdgeOne 的错误已经被翻成中文结论，原样给用户看
+        return [], str(exc)
+    items = [
+        {
+            "label": f"{row['domain']}（EdgeOne · {row['zoneName']}）",
+            "value": row["domain"],
+            "extra": row["zoneId"],
+        }
+        for row in rows
+        if row.get("domain")
+    ]
+    if not items:
+        return [], "腾讯云 EdgeOne 账号下没有查到加速域名（请先在控制台添加站点和加速域名）"
+    return items, ""
+
+
+# ---------------------------------------------------------------- NPM
+def npm_proxy_hosts(config: dict) -> tuple[list[dict], str]:
+    """Nginx Proxy Manager 的代理主机（含域名列表）→ 下拉项，供多选绑定。"""
+    base = (config.get("url") or "").rstrip("/")
+    if not base:
+        raise ResourceError("NPM 授权缺少面板地址")
+    verify = not config.get("insecure", True)
+    login = _get_json("POST", f"{base}/api/tokens", json={
+        "identity": config.get("email") or "",
+        "secret": config.get("password") or "",
+    }, verify=verify)
+    token = (login or {}).get("token")
+    if not token:
+        raise ResourceError("NPM 登录失败：未返回 token")
+    rows = _get_json("GET", f"{base}/api/nginx/proxy-hosts",
+                     headers={"Authorization": f"Bearer {token}"}, verify=verify)
+    if isinstance(rows, dict):
+        rows = rows.get("data") or []
+    items: list[dict] = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        host_id = row.get("id")
+        if host_id is None:
+            continue
+        domains = row.get("domain_names") or []
+        if isinstance(domains, str):
+            domains = [domains]
+        domains = [str(domain).strip() for domain in domains if str(domain).strip()]
+        label = f"#{host_id}" + ((" " + ", ".join(domains)) if domains else "")
+        items.append({"label": label, "value": str(host_id), "extra": ", ".join(domains)})
+    if not items:
+        return [], "NPM 里没有查到代理主机（请先在 NPM 添加 Proxy Host）"
+    return items, ""
+
+
 # ---------------------------------------------------------------- 调度
 #: kind → {授权类型: 解析器}
 _RESOLVERS: dict[str, dict[str, Callable[[dict], tuple[list[dict], str]]]] = {
@@ -302,6 +364,12 @@ _RESOLVERS: dict[str, dict[str, Callable[[dict], tuple[list[dict], str]]]] = {
         "jdcloud": jdcloud_cdn_domains,
         "upyun": upyun_cdn_domains,
         "baiducloud": baiducloud_cdn_domains,
+    },
+    "edgeoneDomains": {
+        "tencentcloud": tencent_edgeone_domains,
+    },
+    "npmProxyHosts": {
+        "npm": npm_proxy_hosts,
     },
 }
 

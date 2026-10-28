@@ -935,10 +935,10 @@ def section_cdn_deploy_pipeline(api: Api) -> None:
         server.shutdown()
 
 def section_more_deploy() -> None:
-    """雷池 / 又拍云 / 腾讯云 CLB 部署插件：mock 或假凭据探测。"""
-    print("\n== 雷池 / 又拍云 / 腾讯云 CLB ==")
+    """雷池 / 又拍云 / 腾讯云 CLB、EdgeOne 部署插件：mock 或假凭据探测。"""
+    print("\n== 雷池 / 又拍云 / 腾讯云 CLB / EdgeOne ==")
     _backend()
-    from app.services import deploy, deploy_more  # noqa: F401
+    from app.services import deploy, deploy_more, resources  # noqa: F401
 
     ctx = deploy.CertContext(
         domain="more.example.com",
@@ -1077,6 +1077,205 @@ def section_more_deploy() -> None:
               err_probe[:160])
         check("腾讯云 CLB 报错不含 InvalidAction", "InvalidAction" not in err_probe,
               err_probe[:160])
+
+    # ---------------- 腾讯云 EdgeOne（mock SSL + teo 全链路）
+    calls: dict[str, list[dict]] = {}
+
+    def fake_edgeone_call(config, host, service, version, action, body=None, timeout=30):
+        calls.setdefault(action, []).append(body or {})
+        if action == "UploadCertificate":
+            return {"CertificateId": "cert-smoke"}
+        if action == "DescribeZones":
+            return {"Zones": [{"ZoneId": "zone-a", "ZoneName": "example.com"},
+                              {"ZoneId": "zone-b", "ZoneName": "example.net"}],
+                    "TotalCount": 2}
+        if action == "DescribeAccelerationDomains":
+            zone = (body or {}).get("ZoneId")
+            domains = {"zone-a": ["cdn.example.com"],
+                       "zone-b": ["static.example.net"]}.get(zone, [])
+            return {"AccelerationDomains": [{"DomainName": d} for d in domains],
+                    "TotalCount": len(domains)}
+        if action == "ModifyHostsCertificate":
+            return {"RequestId": "req-smoke"}
+        return {}
+
+    original_call = deploy_more.call_api
+    deploy_more.call_api = fake_edgeone_call
+    try:
+        good, err = run("DeployToTencentEdgeOne", {
+            **fake, "domain": ["cdn.example.com", "static.example.net"],
+            "certName": "smoke-{domain}"})
+        check("腾讯云 EdgeOne 部署成功", good, err)
+        modify = calls.get("ModifyHostsCertificate") or []
+        check("EdgeOne 按站点分组下发证书", len(modify) == 2, str(modify))
+        zone_hosts = {(b.get("ZoneId"), tuple(b.get("Hosts") or [])) for b in modify}
+        check("EdgeOne 每个站点只带自己的域名",
+              zone_hosts == {("zone-a", ("cdn.example.com",)),
+                             ("zone-b", ("static.example.net",))}, str(zone_hosts))
+        first = modify[0] if modify else {}
+        check("EdgeOne 使用 sslcert + ServerCertInfo.CertId",
+              first.get("Mode") == "sslcert"
+              and (first.get("ServerCertInfo") or [{}])[0].get("CertId") == "cert-smoke",
+              str(first))
+        check("EdgeOne 先上传证书到 SSL 证书中心",
+              bool(calls.get("UploadCertificate")), str(list(calls)))
+        items, error = resources.resolve("tencentcloud",
+                                         {"secretId": "AKIDsmoke", "secretKey": "sk"},
+                                         "edgeoneDomains")
+        check("EdgeOne 加速域名可自动拉取（带站点名）",
+              not error and len(items) == 2
+              and all("EdgeOne" in str(i.get("label")) for i in items),
+              f"{error} / {items}")
+    finally:
+        deploy_more.call_api = original_call
+
+    calls.clear()
+    deploy_more.call_api = fake_edgeone_call
+    try:
+        good, err = run("DeployToTencentEdgeOne", {
+            **fake, "domain": ["not-found.example.com"], "certName": "smoke"})
+        check("EdgeOne 域名不存在时给中文结论",
+              not good and "找不到加速域名" in err, err[:200])
+    finally:
+        deploy_more.call_api = original_call
+
+def section_panel_multi() -> None:
+    """宝塔 / 1Panel / NPM 站点多选：一个任务部署到多个站点或代理主机。"""
+    print("\n== 面板站点多选（宝塔 / 1Panel / NPM）==")
+    _backend()
+    from app.services import deploy, deploy_ext, resources
+    from app.services.engine import PipelineRunner
+
+    ctx = deploy.CertContext(
+        domain="www.example.com",
+        crt="-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----\n",
+        key="-----BEGIN PRIVATE KEY-----\nMOCKKEY\n-----END PRIVATE KEY-----\n",
+        expires_time="2027-01-01 00:00:00",
+        domains=["www.example.com", "api.example.com"],
+    )
+
+    class Resp:
+        def __init__(self, data=None, status_code=200, text=""):
+            self._data = data if data is not None else {}
+            self.status_code = status_code
+            self.text = text or str(self._data)
+
+        def json(self):
+            return self._data
+
+    # 宝塔：多选站点 → 逐个 SetSSL
+    calls: list[dict] = []
+
+    def fake_baota(method, url, **kwargs):
+        calls.append(kwargs.get("data") or {})
+        return Resp({"status": True})
+
+    original = deploy._panel_request
+    deploy._panel_request = fake_baota
+    try:
+        deploy.deploy_to_baota(ctx, {"url": "http://panel", "apiKey": "k",
+                                     "siteName": ["site-a", "site-b"]}, lambda m: None)
+        check("宝塔站点可多选并逐个部署",
+              [c.get("siteName") for c in calls] == ["site-a", "site-b"], str(calls))
+    finally:
+        deploy._panel_request = original
+
+    # 1Panel：上传一次证书，绑定多个网站
+    one_calls: list[str] = []
+
+    def fake_one(method, url, **kwargs):
+        one_calls.append(url)
+        if url.endswith("/websites/ssl/upload"):
+            return Resp({"code": 200, "data": {"id": 99}})
+        return Resp({"code": 200})
+
+    original = deploy._panel_request
+    deploy._panel_request = fake_one
+    try:
+        deploy.deploy_to_1panel(ctx, {"url": "http://panel", "apiKey": "k",
+                                      "websiteId": ["101", "102"]}, lambda m: None)
+        check("1Panel 网站可多选（证书只上传一次）",
+              len([u for u in one_calls if u.endswith("/websites/ssl/upload")]) == 1
+              and len([u for u in one_calls if u.endswith("/https")]) == 2,
+              str(one_calls))
+    finally:
+        deploy._panel_request = original
+
+    # NPM：上传一次证书，绑定多个代理主机
+    npm_calls: list[tuple[str, str]] = []
+
+    def fake_npm(method, url, **kwargs):
+        npm_calls.append((method, url))
+        if url.endswith("/api/tokens"):
+            return Resp({"token": "t"})
+        if url.endswith("/api/nginx/certificates"):
+            return Resp({"id": 55})
+        return Resp({"id": 1, "domain_names": ["www.example.com"]})
+
+    original = deploy_ext._panel_request
+    deploy_ext._panel_request = fake_npm
+    try:
+        deploy_ext.deploy_to_npm(ctx, {"url": "http://npm", "email": "a@b.c",
+                                       "password": "p", "proxyHostId": ["1", "2"]},
+                                 lambda m: None)
+        check("NPM 代理主机可多选并逐个绑定",
+              len([c for c in npm_calls if c[0] == "PUT"]) == 2, str(npm_calls))
+    finally:
+        deploy_ext._panel_request = original
+
+    # NPM 资源自动拉取
+    original_json = resources._get_json
+
+    def fake_json(method, url, **kwargs):
+        if url.endswith("/api/tokens"):
+            return {"token": "t"}
+        return [{"id": 1, "domain_names": ["www.example.com"]},
+                {"id": 2, "domain_names": ["api.example.com"]}]
+
+    resources._get_json = fake_json
+    try:
+        items, error = resources.resolve("npm", {"url": "http://npm"}, "npmProxyHosts")
+        check("NPM 代理主机可自动拉取",
+              not error and [i["value"] for i in items] == ["1", "2"], f"{error} / {items}")
+    finally:
+        resources._get_json = original_json
+
+    # 引擎自动匹配：多域名证书把所有命中的 tag 选项都选上
+    logs: list[str] = []
+
+    class Stub:
+        _AUTO_MATCH = PipelineRunner._AUTO_MATCH
+
+        def _access(self, aid):
+            return "baota", {}
+
+        def log(self, msg, task=None):
+            logs.append(msg)
+
+    original_resolve = resources.resolve
+    resources.resolve = lambda access_type, cfg, kind: (
+        [{"label": "site-a", "value": "site-a", "extra": "www.example.com"},
+         {"label": "site-b", "value": "site-b", "extra": "api.example.com"},
+         {"label": "other", "value": "other", "extra": "other.com"}], "")
+    try:
+        cfg = {"autoMatch": True, "accessId": 1}
+        PipelineRunner._auto_match_resource(Stub(), "DeployToBaota", cfg,
+                                            ["www.example.com", "api.example.com"], {})
+        check("多域名自动匹配会选中全部站点",
+              cfg.get("siteName") == ["site-a", "site-b"], str(cfg))
+    finally:
+        resources.resolve = original_resolve
+
+    # 元数据：三个字段都必须是可多选的 tags + remote
+    from app.plugins import TASK_PLUGIN_MAP
+
+    for plugin_type, field in (("DeployToBaota", "siteName"),
+                               ("DeployTo1Panel", "websiteId"),
+                               ("DeployToNpm", "proxyHostId")):
+        meta = next((i for i in TASK_PLUGIN_MAP[plugin_type]["inputs"] if i["key"] == field), {})
+        check(f"{plugin_type}.{field} 是多选字段",
+              meta.get("component") == "tags" and bool(meta.get("remote")), str(meta))
+
 
 def _proxy_mock() -> tuple[ThreadingHTTPServer, list]:
     """假装一个 HTTP 代理：请求行里是绝对 URL（http://host/path），记下来再回 200。"""
@@ -3241,6 +3440,7 @@ def main() -> int:
     section_plugin_registry()
     section_cdn_deploy()
     section_more_deploy()
+    section_panel_multi()
     section_cdn_deploy_pipeline(api)
     section_cert_apply_inputs(api)
     section_freessl(api)

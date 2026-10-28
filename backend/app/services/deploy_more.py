@@ -233,6 +233,124 @@ def deploy_to_tencent_clb(ctx: CertContext, config: dict, log: Callable) -> None
     log(f"腾讯云 CLB 监听器 {listener_id} 证书绑定成功")
 
 
+# ================================================================ 腾讯云 EdgeOne
+TEO_HOST = "teo.tencentcloudapi.com"
+TEO_SERVICE = "teo"
+TEO_VERSION = "2022-09-01"
+
+#: 腾讯云 EdgeOne 常见错误码 → 一句中文结论（原始错误仍附在括号里，便于排障）
+_TEO_ERROR_HINTS = {
+    "AuthFailure.SecretIdNotFound":
+        "腾讯云鉴权失败：SecretId 不存在，请检查授权里的 SecretId / SecretKey",
+    "AuthFailure.SignatureFailure":
+        "腾讯云鉴权失败：SecretKey 不正确，请检查授权里的 SecretId / SecretKey",
+    "UnauthorizedOperation.CamUnauthorized":
+        "腾讯云子账号没有 EdgeOne 权限，请到 CAM 给这个子账号授权 QcloudTEOFullAccess",
+    "UnauthorizedOperation.NoPermission":
+        "腾讯云子账号没有 EdgeOne 权限，请到 CAM 给这个子账号授权 QcloudTEOFullAccess",
+    "ResourceUnavailable.ZoneNotFound": "EdgeOne 站点不存在或不属于这个账号",
+    "ResourceUnavailable.HostNotFound": "EdgeOne 里找不到这个加速域名（请先在控制台添加）",
+    "FailedOperation.CertificateNotFound": "SSL 证书中心里找不到这个证书 ID",
+    "FailedOperation.CertificateHasExpired": "证书已过期，EdgeOne 拒绝下发",
+    "InvalidParameter.CertNotMatchDomain": "证书与域名不匹配（证书 SAN 里没有这个域名）",
+}
+
+
+def _teo_call(config: dict, action: str, body: dict | None = None) -> dict:
+    """调用 EdgeOne（teo）接口；错误翻成中文结论，别把英文 code 原样甩给用户。"""
+    try:
+        return call_api(config, TEO_HOST, TEO_SERVICE, TEO_VERSION, action, body)
+    except TencentSslError as exc:
+        text = str(exc)
+        for code, hint in _TEO_ERROR_HINTS.items():
+            if code in text:
+                raise DeployError(f"{hint}（{text}）") from exc
+        raise DeployError(text) from exc
+
+
+def _teo_list(config: dict, action: str, body: dict, key: str, page_size: int) -> list[dict]:
+    """EdgeOne 列表接口统一分页：Some 接口默认只返回 20 条，这里必须翻完。"""
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        payload = dict(body or {})
+        payload["Offset"] = offset
+        payload["Limit"] = page_size
+        data = _teo_call(config, action, payload)
+        batch = data.get(key) or []
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += len(batch)
+    return rows
+
+
+def tencent_edgeone_domain_rows(config: dict) -> list[dict]:
+    """列出账号下所有 EdgeOne 站点的加速域名。
+
+    返回 ``[{"domain": ..., "zoneId": ..., "zoneName": ...}]``。
+    站点少的时候一次拉完最省事；站点/域名都按 100/200 分页，不会只拿到第一页。
+    """
+    zones = _teo_list(config, "DescribeZones", {}, "Zones", 100)
+    rows: list[dict] = []
+    for zone in zones:
+        zone_id = str(zone.get("ZoneId") or zone.get("Id") or "").strip()
+        if not zone_id:
+            continue
+        zone_name = str(zone.get("ZoneName") or zone.get("Name") or zone_id).strip()
+        for item in _teo_list(config, "DescribeAccelerationDomains",
+                              {"ZoneId": zone_id}, "AccelerationDomains", 200):
+            domain = str(item.get("DomainName") or "").strip()
+            if domain:
+                rows.append({"domain": domain, "zoneId": zone_id, "zoneName": zone_name})
+    return rows
+
+
+@_register("DeployToTencentEdgeOne")
+def deploy_to_tencent_edgeone(ctx: CertContext, config: dict, log: Callable) -> None:
+    """腾讯云 EdgeOne：先把证书传到 SSL 证书中心，再按站点分组调 ModifyHostsCertificate。
+
+    EdgeOne 的接口只认 SSL 证书 ID（ServerCertInfo.CertId），不能像 CDN 那样
+    直接内联证书内容；一个 ZoneId 下可以一次改多个 Hosts，所以按站点分组下发。
+    站点由加速域名反查（DescribeZones + DescribeAccelerationDomains），
+    用户只需要选域名，不必再去抄 ZoneId。
+    """
+    domains = _as_list(config.get("domain")) or [ctx.domain]
+    domains = [ctx.render(domain) for domain in domains]
+    if not domains:
+        raise DeployError("腾讯云 EdgeOne 部署需要填写加速域名")
+
+    cert_id = str(config.get("certId") or "").strip()
+    if cert_id:
+        log(f"复用腾讯云 SSL 证书 ID={cert_id}")
+    else:
+        alias = ctx.render(config.get("certName") or "certd-{domain}-{timestamp}")
+        cert_id = tencent_upload_cert(config, alias, ctx.crt, ctx.key)
+        log(f"证书已上传到腾讯云 SSL 证书中心，CertId={cert_id}")
+
+    rows = tencent_edgeone_domain_rows(config)
+    zone_of = {row["domain"]: row for row in rows}
+    missing = [domain for domain in domains if domain not in zone_of]
+    if missing:
+        raise DeployError("EdgeOne 里找不到加速域名：" + "、".join(missing)
+                          + "（请先在 EdgeOne 控制台添加站点和加速域名）")
+
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for domain in domains:
+        row = zone_of[domain]
+        grouped.setdefault((row["zoneId"], row["zoneName"]), []).append(domain)
+
+    for (zone_id, zone_name), hosts in grouped.items():
+        result = _teo_call(config, "ModifyHostsCertificate", {
+            "ZoneId": zone_id,
+            "Hosts": hosts,
+            "Mode": "sslcert",
+            "ServerCertInfo": [{"CertId": cert_id}],
+        })
+        log(f"EdgeOne 站点「{zone_name}」域名 {', '.join(hosts)} 证书部署成功"
+            f"（RequestId={result.get('RequestId') or '-'}）")
+
+
 from . import deploy as _deploy  # noqa: E402
 
 _deploy.DEPLOY_HANDLERS.update(HANDLERS)
