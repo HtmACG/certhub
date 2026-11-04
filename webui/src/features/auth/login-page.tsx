@@ -9,12 +9,6 @@ import { useSiteConfig } from '@/lib/site'
 import { bind2fa, fetch2faSecretForBind, fetchCaptcha, login, type ApiErrorLike } from '@/lib/auth-api'
 import { cn } from '@/lib/utils'
 
-const FEATURES = [
-  '一条流水线里编排申请、部署、通知三个阶段',
-  'DNS / 主机 / 面板 / 云厂商凭据统一放在授权里',
-  '每次运行都有独立日志，失败在哪一步一眼能看见',
-]
-
 export function LoginPage() {
   const navigate = useNavigate()
   const { signIn, user, refresh } = useAuth()
@@ -161,29 +155,13 @@ export function LoginPage() {
           </div>
         </div>
 
-        <div className="relative max-w-md space-y-5">
-          <h1 className="text-balance text-2xl font-semibold leading-snug tracking-tight">
-            证书到期之前自动续期，续期之后自动部署。
+        <div className="relative max-w-md space-y-4">
+          <h1 className="max-w-sm text-balance text-xl font-semibold leading-snug tracking-tight">
+            证书签发、部署与续期，一条流水线跑完。
           </h1>
           <p className={cn('text-sm leading-relaxed', background ? 'text-white/75' : 'text-muted-foreground')}>
-            不用记每个面板的路径。把签发、部署、提醒串成一条流水线，剩下的交给定时任务。
+            按阶段编排任务，定时自动执行；支持 ACME 与云厂商免费证书，部署到 70+ 平台。
           </p>
-          <ul className="space-y-2.5">
-            {FEATURES.map((feature) => (
-              <li
-                key={feature}
-                className={cn('flex items-start gap-2 text-sm', background ? 'text-white/75' : 'text-muted-foreground')}
-              >
-                <span
-                  className={cn(
-                    'mt-1.5 size-1.5 shrink-0 rounded-full',
-                    background ? 'bg-white/50' : 'bg-foreground/40',
-                  )}
-                />
-                {feature}
-              </li>
-            ))}
-          </ul>
         </div>
 
         <p className={cn('relative text-xs', background ? 'text-white/60' : 'text-muted-foreground')}>

@@ -163,12 +163,12 @@ function Sidebar({ onNavigate, site }: { onNavigate?: () => void; site?: { name?
   })).filter((group) => group.items.length > 0)
 
   return (
-    <div className="flex h-full w-[248px] flex-col border-r bg-sidebar">
+    <div className="flex h-full w-[232px] flex-col border-r bg-sidebar">
       <Brand site={site} />
-      <nav className="scrollbar-thin flex-1 space-y-5 overflow-y-auto px-3 pb-4">
+      <nav className="scrollbar-thin flex-1 space-y-4 overflow-y-auto px-3 pb-4">
         {groups.map((group) => (
-          <div key={group.label} className="space-y-1">
-            <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+          <div key={group.label} className="space-y-0.5">
+            <p className="px-2 pb-1 text-[11px] font-medium text-muted-foreground/70">
               {group.label}
             </p>
             {group.items.map((item) => (
@@ -179,7 +179,7 @@ function Sidebar({ onNavigate, site }: { onNavigate?: () => void; site?: { name?
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors',
+                    'flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors',
                     isActive
                       ? 'bg-sidebar-accent font-medium text-foreground'
                       : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground',
@@ -194,15 +194,11 @@ function Sidebar({ onNavigate, site }: { onNavigate?: () => void; site?: { name?
         ))}
       </nav>
       <div className="border-t px-4 py-3">
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
-          CertHub · 开源证书自动化
-          <br />
-          本地部署，无付费与授权限制
-        </p>
+        <p className="text-[11px] text-muted-foreground">CertHub v1.0.0 · GPL-3.0</p>
         <NavLink
           to="/about"
           onClick={onNavigate}
-          className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+          className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground"
         >
           <Info className="size-3.5" />
           关于 / 更新记录
@@ -219,14 +215,14 @@ function Breadcrumb({ pathname }: { pathname: string }) {
 
   return (
     <nav aria-label="面包屑" className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-      {group && <span className="shrink-0">{group.label}</span>}
-      <span className="shrink-0 text-muted-foreground/50">/</span>
+      {group && <span className="hidden shrink-0 sm:inline">{group.label}</span>}
+      <span className="hidden shrink-0 text-muted-foreground/50 sm:inline">/</span>
       {detail ? (
         <>
-          <NavLink to="/pipelines" className="shrink-0 hover:text-foreground">
+          <NavLink to="/pipelines" className="hidden shrink-0 hover:text-foreground sm:inline">
             {nav?.label}
           </NavLink>
-          <span className="shrink-0 text-muted-foreground/50">/</span>
+          <span className="hidden shrink-0 text-muted-foreground/50 sm:inline">/</span>
           <span className="truncate text-foreground">{detail}</span>
         </>
       ) : (
@@ -322,7 +318,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
-          <header className="flex h-14 items-center gap-3 px-4 lg:px-6">
+          <header className="flex h-12 items-center gap-2 px-3 sm:gap-3 sm:px-4 lg:px-6">
             <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => setMobileOpen(true)}>
               <Menu />
             </Button>
@@ -398,7 +394,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div
             ref={tabBarRef}
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
-            className="tabbar-scroll-hidden scrollbar-none flex h-10 items-center gap-1 overflow-x-auto overflow-y-hidden px-2"
+            className="tabbar-scroll-hidden scrollbar-none flex h-9 items-center gap-1 overflow-x-auto overflow-y-hidden px-2"
           >
             {tabs.map((tab, index) => {
               const active = tab.path === activePath
@@ -446,7 +442,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main
           className={cn(
-            'min-w-0 flex-1 px-4 py-5 lg:px-6 lg:py-6',
+            'min-w-0 flex-1 px-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4 sm:py-5 lg:px-6 lg:py-6',
             // 流水线编辑页是工作台，铺满整宽；其它页面保持居中的阅读宽度
             /^\/pipelines\/\d+/.test(activePath) ? 'w-full max-w-none' : 'mx-auto w-full max-w-[1440px]',
           )}

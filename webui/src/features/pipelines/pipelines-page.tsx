@@ -263,6 +263,78 @@ export function PipelinesPage() {
             }
           />
         ) : (
+          <>
+            <div className="divide-y md:hidden">
+              {records.map((item) => {
+                const certDays = daysLeftOf(item.certExpiresTime)
+                return (
+                  <div key={item.id} className="flex gap-3 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-3.5 shrink-0 cursor-pointer accent-primary"
+                      checked={selected.includes(item.id)}
+                      onChange={() => toggleOne(item.id)}
+                      aria-label={`选择 ${item.title}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <Link to={`/pipelines/${item.id}`} className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {item.title}
+                        </Link>
+                        <Switch
+                          checked={!item.disabled}
+                          onChange={() => toggle.mutate(item)}
+                          label={item.disabled ? '启用' : '停用'}
+                        />
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {item.remark || item.certDomains?.join(', ') || '—'}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <StatusBadge status={item.lastStatus} />
+                        {certDays !== null && (
+                          <Badge variant={daysTone(certDays)}>{certDays <= 0 ? '已过期' : `剩 ${certDays} 天`}</Badge>
+                        )}
+                        <KindBadges kinds={item.kinds} />
+                      </div>
+                      <div className="mt-2 flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => run.mutate(item.id)}
+                          disabled={run.isPending || item.running}
+                        >
+                          <Play />
+                          运行
+                        </Button>
+                        <Button variant="ghost" size="xs" asChild>
+                          <Link to={`/pipelines/${item.id}`}>
+                            <Pencil />
+                            编辑
+                          </Link>
+                        </Button>
+                        <Button variant="ghost" size="xs" onClick={() => copy.mutate(item.id)}>
+                          <Copy />
+                          复制
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          className="ml-auto text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            if (confirm(`删除流水线「${item.title}」？运行历史会保留。`)) remove.mutate(item.id)
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -387,6 +459,8 @@ export function PipelinesPage() {
               })}
             </TableBody>
           </Table>
+            </div>
+          </>
         )}
 
         {!!list.data?.total && (
