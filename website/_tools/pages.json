@@ -1,0 +1,10 @@
+[
+  { "file": "dashboard", "name": "工作台", "url": "/#/", "wait": 3200 },
+  { "file": "pipelines", "name": "证书流水线", "url": "/#/pipelines", "wait": 2600 },
+  { "file": "canvas", "name": "流水线画布", "url": "/#/pipelines/7", "wait": 4200 },
+  { "file": "certs", "name": "证书库", "url": "/#/certs", "wait": 2600 },
+  { "file": "monitor", "name": "站点监控", "url": "/#/monitor", "wait": 2600 },
+  { "file": "history", "name": "执行历史", "url": "/#/history", "wait": 2600 },
+  { "file": "access", "name": "授权管理", "url": "/#/access", "wait": 2600 },
+  { "file": "notifications", "name": "通知渠道", "url": "/#/notifications", "wait": 2600 }
+]

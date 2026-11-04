@@ -19,6 +19,19 @@
    `npm run xxx`、`.bat` / `.sh`。本文件、README、`start.bat`、CI 里**不许出现
    `powershell` / `pwsh` / `PowerShell.exe` 命令**，也不许新增「让后端 `subprocess` 调
    PowerShell」的逻辑。已有的调用见 `backend/app/services/deploy_ext.py`，改动它之前先确认。
+4. **官网 = `website/`（VitePress），唯一一份。**
+   旧的手写 `index.html` + `docs.html` 已经删掉，`F:\certdsystem\website`（GitHub Pages
+   仓库，域名 `certhub.htmacg.com`）现在只放构建产物，**不要再手改那边的 HTML**。
+   - 首页 `website/index.md` 由 `theme/components/` 里的组件拼成；帮助文档在 `website/docs/`
+     （开始使用 / 配置 / 运维 / 开发 四组 13 篇）。
+   - 数量与清单（75 个部署插件、12 种签发来源、10 种通知渠道、41 种授权类型）只在
+     `website/.vitepress/data/ecosystem.ts` 维护，对应后端 `plugins.py` 的注册表；
+     后端加插件要回来补一条，**数字用数组长度算，不要写死**。
+   - 厂商图标与产品截图都放在 `website/public/`，**不许引外链字体或 CDN 图标**（内网会空白）。
+   - 发布：`cd website && npm run deploy`（构建 → 同步到 `../website`，保留 `.git`/`CNAME`/
+     `.nojekyll`，**不自动 commit / push**）。
+   - 文档里要写 `{{ }}` 这类模板语法时用 `<code v-pre>…</code>` 包起来，
+     否则 Vue 当成插值求值，构建直接失败。
 
 ## 一、凭据必须可明文查看（铁律）
 

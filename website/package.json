@@ -1,0 +1,18 @@
+{
+  "name": "certhub-website",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "CertHub 官网与帮助文档（VitePress）",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "deploy": "vitepress build && node _tools/check-links.mjs && node scripts/deploy.mjs",
+    "shots": "node _tools/shot.mjs _tools/pages.json _tmp_shots 1440",
+    "check:links": "node _tools/check-links.mjs"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

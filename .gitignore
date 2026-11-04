@@ -61,3 +61,6 @@ coverage/
 docs/SECURITY.md
 docs/PLUGIN-COVERAGE.md
 *.log.*
+
+# WorkBuddy 本地记忆与会话数据（不对外）
+.workbuddy-ai/

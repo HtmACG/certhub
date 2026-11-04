@@ -1,0 +1,6 @@
+[
+  { "file": "site-home", "name": "首页", "url": "/", "wait": 2500 },
+  { "file": "site-install", "name": "安装部署", "url": "/docs/install.html", "wait": 1800 },
+  { "file": "site-ecosystem", "name": "生态集成", "url": "/ecosystem.html", "wait": 1800 },
+  { "file": "site-concept", "name": "核心概念", "url": "/docs/concept.html", "wait": 1800 }
+]
