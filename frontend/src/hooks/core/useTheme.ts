@@ -35,9 +35,31 @@ import { useSettingStore } from '@/store/modules/setting'
 import { SystemThemeEnum } from '@/enums/appEnum'
 import AppConfig from '@/config'
 import { SystemThemeTypes } from '@/types/store'
-import { getDarkColor, getLightColor, setElementThemeColor } from '@/utils/ui'
 import { usePreferredDark } from '@vueuse/core'
 import { watch } from 'vue'
+
+/**
+ * 清掉「被 JS 内联污染」的 primary 变量。
+ *
+ * Art 模板原来在 <html> 上内联写入 --el-color-primary / -light-N / -dark-N
+ * （setElementThemeColor 直接 setProperty 到 documentElement.style）。
+ * 内联样式优先级最高，会把 shadcn-tokens.scss 里 :root / html.dark 的重映射
+ * 全部盖掉 —— 结果是暗色主题下 --el-color-primary 仍是近黑 #18181b，
+ * 页签选中态、各种「主色文字」在深底上直接看不见。
+ *
+ * shadcn 的规则是「颜色一律来自语义令牌」，所以这里只清空、不写值。
+ */
+function releaseInlinePrimaryVars() {
+  const style = document.documentElement.style
+  const names: string[] = ['--el-color-primary']
+  for (let i = 1; i <= 9; i++) {
+    names.push(`--el-color-primary-light-${i}`, `--el-color-primary-dark-${i}`)
+  }
+  for (let i = 1; i < 16; i++) {
+    names.push(`--el-color-primary-custom-${i}`)
+  }
+  names.forEach((name) => style.removeProperty(name))
+}
 
 export function useTheme() {
   const settingStore = useSettingStore()
@@ -64,7 +86,6 @@ export function useTheme() {
     disableTransitions()
 
     const el = document.getElementsByTagName('html')[0]
-    const isDark = theme === SystemThemeEnum.DARK
 
     if (!themeMode) {
       themeMode = theme
@@ -76,15 +97,13 @@ export function useTheme() {
       el.setAttribute('class', currentTheme.className)
     }
 
-    // 设置按钮颜色加深或变浅
-    const primary = settingStore.systemThemeColor
-
-    for (let i = 1; i <= 9; i++) {
-      document.documentElement.style.setProperty(
-        `--el-color-primary-light-${i}`,
-        isDark ? `${getDarkColor(primary, i / 10)}` : `${getLightColor(primary, i / 10)}`
-      )
-    }
+    /**
+     * 这里原本会按 settingStore.systemThemeColor 现算 primary 的 9 级明暗
+     * 并内联写到 <html> 上。shadcn 的 primary 是语义令牌（浅色近黑、暗色近白），
+     * 不能让「用户选的颜色」直接顶替 primary —— 暗色下就是白底白字。
+     * 所以只清掉历史内联值，颜色全部交给 shadcn-tokens.scss。
+     */
+    releaseInlinePrimaryVars()
 
     // 更新store中的主题设置
     settingStore.setGlopTheme(theme, themeMode)
@@ -148,11 +167,12 @@ export function initializeTheme() {
       el.setAttribute('class', currentTheme.className)
     }
 
-    // 设置主题颜色
-    setElementThemeColor(settingStore.systemThemeColor)
+    // 设置主题颜色（shadcn 语义令牌，颜色不来自 settingStore）
+    releaseInlinePrimaryVars()
 
-    // 设置圆角
-    document.documentElement.style.setProperty('--custom-radius', `${settingStore.customRadius}rem`)
+    // 圆角：由 shadcn 令牌统一控制（--radius → 控件 6px / 卡片 8px）。
+    // 不再写 --custom-radius，避免设置抽屉里的历史值把圆角改回 0。
+    document.documentElement.style.removeProperty('--custom-radius')
   }
 
   // 应用主题

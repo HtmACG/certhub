@@ -27,7 +27,7 @@
           <ElInput
             v-model="keyword"
             class="access-search"
-            placeholder="搜索名称 / 类型 / 备注"
+            :placeholder="$t('certd.access.searchPlaceholder')"
             clearable
           >
             <template #prefix>
@@ -35,7 +35,7 @@
             </template>
           </ElInput>
           <ElButton type="primary" @click="openCreate()">
-            <ArtSvgIcon icon="ri:add-line" class="mr-1" />新增授权
+            <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.access.create') }}
           </ElButton>
         </div>
       </div>
@@ -53,11 +53,11 @@
               @click="removeSelected"
             >
               <ArtSvgIcon icon="ri:delete-bin-line" class="mr-1" />
-              批量删除<template v-if="selectedIds.length">（{{ selectedIds.length }}）</template>
+              {{ $t('certd.common.batchDelete') }}<template v-if="selectedIds.length"> ({{ selectedIds.length }})</template>
             </ElButton>
             <span class="access-count">
-              共 {{ filtered.length }} 个授权<template v-if="keyword || activeCategory">
-                （已筛选）</template
+              {{ $t('certd.access.totalPrefix') }}{{ filtered.length }}{{ $t('certd.access.totalSuffix') }}<template v-if="keyword || activeCategory">
+                {{ $t('certd.access.filtered') }}</template
               >
             </span>
           </ElSpace>
@@ -86,8 +86,9 @@
             />
             <div class="cell-brand-text">
               <div class="cell-name" :title="row.name">{{ row.name }}</div>
-              <div class="cell-remark" :title="row.remark || ''">
-                {{ row.remark || '（无备注）' }}
+              <!-- 没备注就不渲染这一行：8 行「（无备注）」是纯噪音，还拉高了行高 -->
+              <div v-if="row.remark" class="cell-remark" :title="row.remark">
+                {{ row.remark }}
               </div>
             </div>
           </div>
@@ -96,7 +97,7 @@
         <template #typeName="{ row }">
           <div class="cell-type">
             <span class="cell-type-name">{{ row.typeName }}</span>
-            <ElTag size="small" effect="plain" :color="softColor(row.type)">
+            <ElTag size="small" effect="plain">
               {{ accessTypes[row.type]?.categoryName || row.category }}
             </ElTag>
           </div>
@@ -126,10 +127,10 @@
               :loading="testingId === row.id"
               @click="testAccess2(row)"
             >
-              测试
+              {{ $t('certd.access.test') }}
             </ElButton>
-            <ElButton link @click="openEdit(row)">编辑</ElButton>
-            <ElButton link type="danger" @click="remove(row)">删除</ElButton>
+            <ElButton link @click="openEdit(row)">{{ $t('certd.common.edit') }}</ElButton>
+            <ElButton link type="danger" @click="remove(row)">{{ $t('certd.common.delete') }}</ElButton>
           </div>
         </template>
       </ArtTable>
@@ -138,13 +139,13 @@
     <!-- 新增 / 编辑 -->
     <ElDrawer
       v-model="dialogVisible"
-      :title="editingId ? '编辑授权' : '新增授权'"
+      :title="editingId ? $t('certd.access.editTitle') : $t('certd.access.create')"
       size="min(720px, 96vw)"
       destroy-on-close
     >
       <ElForm label-position="top">
-        <ElFormItem v-if="!editingId" label="授权类型">
-          <ElInput v-model="typeKeyword" placeholder="搜索：阿里云 / 宝塔 / SSH …" clearable />
+        <ElFormItem v-if="!editingId" :label="$t('certd.access.typeLabel')">
+          <ElInput v-model="typeKeyword" :placeholder="$t('certd.access.typePh')" clearable />
         </ElFormItem>
         <div v-if="!editingId" class="type-picker">
           <div v-for="group in typeGroups" :key="group.key" class="type-group">
@@ -169,13 +170,13 @@
               </div>
             </div>
           </div>
-          <ElEmpty v-if="!typeGroups.length" description="没有匹配的授权类型" />
+          <ElEmpty v-if="!typeGroups.length" :description="$t('certd.access.emptyType')" />
         </div>
 
         <template v-if="form.type">
           <ElDivider content-position="left">{{ accessTypes[form.type]?.desc }}</ElDivider>
-          <ElFormItem label="授权名称">
-            <ElInput v-model="form.name" placeholder="给这个授权起个名字，例如：阿里云主账号" />
+          <ElFormItem :label="$t('certd.access.nameLabel')">
+            <ElInput v-model="form.name" :placeholder="$t('certd.access.namePh')" />
           </ElFormItem>
           <PluginForm
             v-if="currentType"
@@ -183,16 +184,16 @@
             :fields="currentType.inputs"
             :span="12"
           />
-          <ElFormItem label="备注">
-            <ElInput v-model="form.remark" placeholder="可选" />
+          <ElFormItem :label="$t('certd.table.remark')">
+            <ElInput v-model="form.remark" :placeholder="$t('certd.access.remarkPh')" />
           </ElFormItem>
         </template>
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="dialogVisible = false">取消</ElButton>
+          <ElButton @click="dialogVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
           <ElButton type="primary" :loading="saving" :disabled="!form.type" @click="save">
-            保存
+            {{ $t('certd.common.save') }}
           </ElButton>
         </div>
       </template>
@@ -209,8 +210,10 @@
     updateAccess,
   } from '@/api/certd'
   import type { AccessItem } from '@/api/certd'
+  import type { ColumnOption } from '@/types'
   import { usePluginStore } from '@/store/modules/certd'
   import { ElMessage, ElMessageBox } from 'element-plus'
+  import { $t } from '@/locales'
   import BrandAvatar from '../components/brand-avatar.vue'
   import PluginForm from '../components/plugin-form.vue'
 
@@ -302,8 +305,6 @@
 
   const logoFileOf = (type: string) => accessTypes.value[type]?.logoFile || ''
 
-  const softColor = (type: string) => (accessTypes.value[type]?.categoryColor || '#909399') + '22'
-
   /** 卡片上只预览「非敏感」的标识字段，密钥不铺到表格里 */
   const previewKeys = (item: AccessItem) => {
     const meta = accessTypes.value[item.type]
@@ -330,12 +331,12 @@
     return String(value).slice(0, 24)
   }
 
-  const columns = [
+  const columns: ColumnOption[] = [
     { type: 'selection', width: 48 },
-    { prop: 'name', label: '授权', minWidth: 240, useSlot: true },
-    { prop: 'typeName', label: '类型', width: 200, useSlot: true },
-    { prop: 'summary', label: '关键字段', minWidth: 280, useSlot: true },
-    { prop: 'operation', label: '操作', width: 170, fixed: 'right', useSlot: true },
+    { prop: 'name', label: $t('certd.access.colName'), minWidth: 240, useSlot: true },
+    { prop: 'typeName', label: $t('certd.access.colType'), width: 200, useSlot: true },
+    { prop: 'summary', label: $t('certd.access.colFields'), minWidth: 280, useSlot: true },
+    { prop: 'operation', label: $t('certd.common.actions'), width: 180, fixed: 'right', useSlot: true },
   ]
 
   /* ---------------- 新增 / 编辑 ---------------- */
@@ -438,7 +439,7 @@
 
   const save = async () => {
     if (!form.name.trim()) {
-      ElMessage.warning('请填写授权名称')
+      ElMessage.warning($t('certd.access.nameRequired'))
       return
     }
     // 保存前 trim：粘贴密钥最常带首尾空格，会导致签名失败且极难排查
@@ -457,10 +458,10 @@
     try {
       if (editingId.value) {
         await updateAccess(editingId.value, payload)
-        ElMessage.success('已保存')
+        ElMessage.success($t('certd.common.saved'))
       } else {
         await createAccess(payload)
-        ElMessage.success('已添加')
+        ElMessage.success($t('certd.common.added'))
       }
       dialogVisible.value = false
       load()
@@ -477,9 +478,12 @@
     try {
       const result = await testAccess(item.id)
       if (result?.success) {
-        ElMessage.success(result.message || '连接成功')
+        ElMessage.success(result.message || $t('certd.access.testOk'))
       } else {
-        ElMessageBox.alert(result?.message || '连接失败', '测试结果', { type: 'warning' })
+        ElMessageBox.alert(result?.message || $t('certd.access.testFail'), $t('certd.access.testResult'), {
+        type: 'warning',
+        confirmButtonText: $t('certd.common.confirm'),
+      })
       }
     } finally {
       testingId.value = 0
@@ -488,12 +492,12 @@
 
   const remove = async (item: AccessItem) => {
     await ElMessageBox.confirm(
-      '删除后引用该授权的流水线任务会失效，确定删除「' + item.name + '」吗？',
-      '删除授权',
-      { type: 'warning' }
+      $t('certd.access.confirmDelete', { name: item.name }),
+      $t('certd.access.deleteTitle'),
+      { type: 'warning', confirmButtonText: $t('certd.common.confirm'), cancelButtonText: $t('certd.common.cancel') }
     )
     await deleteAccess(item.id)
-    ElMessage.success('已删除')
+    ElMessage.success($t('certd.common.deleted'))
     load()
   }
 
@@ -501,9 +505,9 @@
     const ids = [...selectedIds.value]
     if (!ids.length) return
     await ElMessageBox.confirm(
-      `删除后引用这些授权的流水线任务会失效，确定删除选中的 ${ids.length} 个授权吗？`,
-      '批量删除授权',
-      { type: 'warning' }
+      $t('certd.access.confirmBatchDelete', { n: ids.length }),
+      $t('certd.access.batchDeleteTitle'),
+      { type: 'warning', confirmButtonText: $t('certd.common.confirm'), cancelButtonText: $t('certd.common.cancel') }
     )
     removing.value = true
     try {
@@ -511,7 +515,7 @@
       for (const id of ids) {
         await deleteAccess(id)
       }
-      ElMessage.success(`已删除 ${ids.length} 个授权`)
+      ElMessage.success($t('certd.access.batchDeleted', { n: ids.length }))
       load()
     } finally {
       removing.value = false
@@ -541,23 +545,38 @@
 
   .access-tab {
     display: flex;
-    gap: 4px;
+    gap: 6px;
     align-items: center;
-    padding: 5px 12px;
+    height: 30px;
+    padding: 0 10px;
     font-size: 13px;
+    font-weight: 500;
+    color: var(--muted-foreground);
     cursor: pointer;
-    border-radius: 999px;
-    background: var(--art-gray-100);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
   }
 
+  .access-tab:hover {
+    color: var(--foreground);
+    background: var(--accent);
+  }
+
+  /* 选中态对齐 shadcn 的「选中导航项」：近黑底 + 反白字（暗色自动反转为浅底深字） */
   .access-tab.is-active {
-    color: #fff;
-    background: var(--theme-color);
+    color: var(--primary-foreground);
+    background: var(--primary);
+    border-color: transparent;
   }
 
   .access-tab-count {
     font-size: 11px;
-    opacity: 0.85;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
   }
 
   .access-tools {
@@ -673,13 +692,20 @@
     align-items: center;
     padding: 6px 8px;
     cursor: pointer;
-    border: 1px solid var(--art-card-border);
-    border-radius: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    transition:
+      border-color 0.14s ease,
+      background-color 0.14s ease;
+  }
+
+  .type-item:hover {
+    background: var(--accent);
   }
 
   .type-item.is-active {
-    border-color: var(--theme-color);
-    background: var(--el-color-primary-light-9);
+    border-color: var(--ring);
+    background: var(--accent);
   }
 
   .type-item-name {

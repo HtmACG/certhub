@@ -1,24 +1,30 @@
 """用户与个人中心接口"""
 from __future__ import annotations
 
+import base64
+import io
 import json
 
 import pyotp
+import qrcode
+import qrcode.image.svg
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import audit, fail, get_current_user, ok, require_admin, page_no, site_name
-from ..models import User
+from ..deps import audit, fail, get_current_user, ok, require_admin, page_no, permissions_of, site_name
+from ..models import User, UserGroup
+from ..permissions import PERMISSIONS, normalize
 from ..security import hash_password, validate_password, verify_password
 
 router = APIRouter(prefix="/api/user", tags=["user"])
 
 
 @router.get("/info")
-def info(user: User = Depends(get_current_user)):
+def info(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    effective = permissions_of(user, db)
     return ok({
         "buttons": ["*"],
         "roles": ["R_SUPER"] if user.role == "admin" else ["R_USER"],
@@ -28,6 +34,9 @@ def info(user: User = Depends(get_current_user)):
         "email": user.email or "",
         "avatar": "",
         "role": user.role,
+        "isAdmin": user.role == "admin",
+        # 管理员给全部权限键，前端统一按 permissions 判断
+        "permissions": [item["key"] for item in PERMISSIONS] if "*" in effective else sorted(effective),
         "totpEnabled": bool(user.totp_enabled),
     })
 
@@ -75,9 +84,17 @@ def change_password(params: PasswordParams, user: User = Depends(get_current_use
 
 # ---------------------------------------------------------------- 两步验证
 
+def _qr_data_url(text: str) -> str:
+    """把 otpauth:// 链接画成二维码，直接给前端 <img src> 用（内网不依赖任何外部服务）。"""
+    img = qrcode.make(text, image_factory=qrcode.image.svg.SvgPathImage, box_size=8, border=2)
+    buffer = io.BytesIO()
+    img.save(buffer)
+    return "data:image/svg+xml;base64," + base64.b64encode(buffer.getvalue()).decode()
+
+
 @router.get("/2fa/secret")
 def gen_2fa(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """取（或首次生成）TOTP 密钥，返回二维码要用的 otpauth:// 链接。
+    """取（或首次生成）TOTP 密钥，返回二维码要用的 otpauth:// 链接和二维码图。
 
     - 已开启两步验证时**沿用原密钥**：多台设备扫同一张码即可，不会把老设备踢掉；
     - issuer 用站点名称，「系统设置 → 站点信息」里改了名字，App 里显示的也就跟着变。
@@ -88,7 +105,7 @@ def gen_2fa(user: User = Depends(get_current_user), db: Session = Depends(get_db
     db.commit()
     uri = pyotp.TOTP(secret).provisioning_uri(name=row.username,
                                               issuer_name=site_name(db))
-    return ok({"secret": secret, "uri": uri,
+    return ok({"secret": secret, "uri": uri, "qr": _qr_data_url(uri),
                "account": row.username, "enabled": bool(row.totp_enabled)})
 
 
@@ -122,20 +139,108 @@ def disable_2fa(params: CodeParams, user: User = Depends(get_current_user),
     return ok(True)
 
 
+# ---------------------------------------------------------------- 用户组（管理员）
+
+class GroupParams(BaseModel):
+    name: str
+    remark: str = ""
+    permissions: list[str] = []
+
+
+@router.get("/permissions")
+def permission_catalog(_: User = Depends(require_admin)):
+    """可选的功能权限目录，前端用它渲染勾选框。"""
+    return ok(PERMISSIONS)
+
+
+@router.get("/groups")
+def list_groups(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = db.query(UserGroup).order_by(UserGroup.id.asc()).all()
+    counts = dict(db.query(User.group_id, func.count(User.id)).group_by(User.group_id).all())
+    def _keys(row: UserGroup) -> list[str]:
+        try:
+            return normalize(json.loads(row.permissions or "[]"))
+        except Exception:
+            return []
+
+    return ok([
+        {"id": row.id, "name": row.name, "remark": row.remark or "",
+         "permissions": _keys(row),
+         "userCount": int(counts.get(row.id, 0))}
+        for row in rows
+    ])
+
+
+@router.post("/groups")
+def create_group(params: GroupParams, admin: User = Depends(require_admin),
+                 db: Session = Depends(get_db)):
+    name = params.name.strip()
+    if not name:
+        return fail("请填写用户组名称")
+    if db.query(UserGroup).filter(UserGroup.name == name).first():
+        return fail("用户组已存在")
+    row = UserGroup(name=name, remark=params.remark.strip(),
+                    permissions=json.dumps(normalize(params.permissions), ensure_ascii=False))
+    db.add(row)
+    db.commit()
+    audit(db, admin, "新增用户组", name)
+    return ok({"id": row.id})
+
+
+@router.put("/groups/{group_id}")
+def update_group(group_id: int, params: GroupParams,
+                 admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    row = db.get(UserGroup, group_id)
+    if not row:
+        return fail("用户组不存在")
+    name = params.name.strip()
+    if not name:
+        return fail("请填写用户组名称")
+    exists = db.query(UserGroup).filter(UserGroup.name == name, UserGroup.id != group_id).first()
+    if exists:
+        return fail("用户组已存在")
+    row.name = name
+    row.remark = params.remark.strip()
+    row.permissions = json.dumps(normalize(params.permissions), ensure_ascii=False)
+    db.commit()
+    audit(db, admin, "修改用户组", name)
+    return ok(True)
+
+
+@router.delete("/groups/{group_id}")
+def delete_group(group_id: int, admin: User = Depends(require_admin),
+                 db: Session = Depends(get_db)):
+    row = db.get(UserGroup, group_id)
+    if not row:
+        return fail("用户组不存在")
+    # 组里的用户退回「未分组」，不删账号
+    db.query(User).filter(User.group_id == group_id).update({User.group_id: 0})
+    db.delete(row)
+    db.commit()
+    audit(db, admin, "删除用户组", row.name)
+    return ok(True)
+
+
 # ---------------------------------------------------------------- 用户管理（管理员）
 
 @router.get("/list")
 def list_users(page: int = Depends(page_no), size: int = Query(10), keyword: str = "",
+               groupId: int = Query(0),
                admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     query = db.query(User)
     if keyword:
         query = query.filter(or_(User.username.like(f"%{keyword}%"),
                                  User.nickname.like(f"%{keyword}%")))
+    if groupId:
+        query = query.filter(User.group_id == groupId)
     total = query.count()
     rows = query.order_by(User.id.asc()).offset((page - 1) * size).limit(size).all()
+    groups = {g.id: g.name for g in db.query(UserGroup).all()}
     records = [{
         "id": r.id, "userName": r.username, "nickname": r.nickname, "email": r.email,
         "role": r.role, "status": r.status,
+        "groupId": r.group_id or 0,
+        "groupName": groups.get(r.group_id or 0, ""),
         "totpEnabled": r.totp_enabled,
         "lastLoginTime": r.last_login_time.strftime("%Y-%m-%d %H:%M:%S") if r.last_login_time else "",
         "createTime": r.create_time.strftime("%Y-%m-%d %H:%M:%S") if r.create_time else "",
@@ -150,6 +255,7 @@ class UserParams(BaseModel):
     email: str = ""
     role: str = "user"
     status: int = 1
+    groupId: int = 0
 
 
 @router.post("")
@@ -162,7 +268,7 @@ def create_user(params: UserParams, request: Request,
         return fail(error)
     row = User(username=params.userName, password=hash_password(params.password),
                nickname=params.nickname or params.userName, email=params.email,
-               role=params.role, status=params.status)
+               role=params.role, status=params.status, group_id=params.groupId)
     db.add(row)
     db.commit()
     audit(db, admin, "新增用户", params.userName)
@@ -179,6 +285,7 @@ def update_user(user_id: int, params: UserParams,
     row.email = params.email
     row.role = params.role
     row.status = params.status
+    row.group_id = params.groupId
     if params.password:
         error = validate_password(params.password, row.username)
         if error:

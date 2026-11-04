@@ -11,12 +11,13 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import audit, fail, get_current_user, ok, page_no
+from ..deps import audit, fail, get_current_user, ok, page_no, require_perm
 from ..models import Certificate, User
 from ..security import decrypt_json, encrypt_json
 from ..services import certutil
 
-router = APIRouter(prefix="/api/cert", tags=["cert"])
+router = APIRouter(prefix="/api/cert", tags=["cert"],
+                   dependencies=[Depends(require_perm("certs"))])
 
 
 def _fmt(dt) -> str:

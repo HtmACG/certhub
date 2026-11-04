@@ -22,7 +22,7 @@
         :class="{ 'is-active': activeTab === 'pipeline' }"
         @click="switchTab('pipeline')"
       >
-        <ArtSvgIcon icon="ri:node-tree" />流水线
+        <ArtSvgIcon icon="ri:node-tree" />{{ $t('certd.pipeline.tabList') }}
       </button>
       <button
         type="button"
@@ -31,7 +31,7 @@
         :class="{ 'is-active': activeTab === 'group' }"
         @click="switchTab('group')"
       >
-        <ArtSvgIcon icon="ri:stack-line" />分组
+        <ArtSvgIcon icon="ri:stack-line" />{{ $t('certd.pipeline.tabGroup') }}
       </button>
     </div>
 
@@ -49,21 +49,21 @@
         <template #left>
           <ElSpace wrap>
             <ElButton type="primary" @click="openCreate">
-              <ArtSvgIcon icon="ri:add-line" class="mr-1" />新建流水线
+              <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.pipeline.create') }}
             </ElButton>
             <ElDropdown trigger="click" @command="handleBatchCommand">
               <ElButton :disabled="!selectedIds.length">
-                批量操作（{{ selectedIds.length }}）
+                {{ $t('certd.common.batchActions') }} ({{ selectedIds.length }})
                 <ArtSvgIcon icon="ri:arrow-down-s-line" class="ml-1" />
               </ElButton>
               <template #dropdown>
                 <ElDropdownMenu>
-                  <ElDropdownItem command="run">立即运行</ElDropdownItem>
-                  <ElDropdownItem command="enable">启用</ElDropdownItem>
-                  <ElDropdownItem command="disable">停用</ElDropdownItem>
-                  <ElDropdownItem command="cron" divided>设置定时</ElDropdownItem>
-                  <ElDropdownItem command="notify">设置通知</ElDropdownItem>
-                  <ElDropdownItem command="delete" divided>删除</ElDropdownItem>
+                  <ElDropdownItem command="run">{{ $t('certd.pipeline.runNow') }}</ElDropdownItem>
+                  <ElDropdownItem command="enable">{{ $t('certd.pipeline.enable') }}</ElDropdownItem>
+                  <ElDropdownItem command="disable">{{ $t('certd.pipeline.disable') }}</ElDropdownItem>
+                  <ElDropdownItem command="cron" divided>{{ $t('certd.pipeline.setCron') }}</ElDropdownItem>
+                  <ElDropdownItem command="notify">{{ $t('certd.pipeline.setNotify') }}</ElDropdownItem>
+                  <ElDropdownItem command="delete" divided>{{ $t('certd.pipeline.delete') }}</ElDropdownItem>
                 </ElDropdownMenu>
               </template>
             </ElDropdown>
@@ -83,15 +83,27 @@
       >
         <template #title="{ row }">
           <div class="cell-title">
-            <ElLink type="primary" :underline="false" @click="goDetail(row)">
-              {{ row.title }}
-            </ElLink>
-            <div class="cell-tags">
+            <!-- 名称和分类标签放同一行：标签下移一行会让整行高出一截，
+                 4 条记录的表就能差出 40px，看起来「松松垮垮」。 -->
+            <div class="cell-title-row">
+              <!-- 不用 ElLink：它是 inline-flex + 居中，配 overflow:hidden 时
+                   长标题会从两头一起被裁。这里用普通 span（block + ellipsis）。 -->
+              <span
+                class="cell-title-link"
+                :title="row.title"
+                role="link"
+                tabindex="0"
+                @click="goDetail(row)"
+                @keyup.enter="goDetail(row)"
+              >
+                {{ row.title }}
+              </span>
               <ElTag
                 v-for="kind in kindsOf(row)"
                 :key="kind.key"
                 size="small"
                 effect="plain"
+                class="cell-kind"
                 :style="{ color: kind.color }"
               >
                 {{ kind.text }}
@@ -105,16 +117,20 @@
 
         <template #enabled="{ row }">
           <ElTooltip
-            :content="row.disabled ? '已停用：定时任务与 Webhook 都不会执行，点一下启用' : '已启用：按定时任务 / Webhook 正常触发，点一下停用'"
+            :content="row.disabled ? $t('certd.pipeline.disabledTip') : $t('certd.pipeline.enabledTip')"
           >
-            <ElSwitch
-              :model-value="!row.disabled"
-              size="small"
-              :loading="togglingId === row.id"
-              :before-change="() => toggleRowEnabled(row)"
-            />
+            <span class="cell-enabled">
+              <ElSwitch
+                :model-value="!row.disabled"
+                size="small"
+                :loading="togglingId === row.id"
+                :before-change="() => toggleRowEnabled(row)"
+              />
+              <span class="cell-enabled-text" :class="{ 'is-off': row.disabled }">
+                {{ row.disabled ? $t('certd.status.disabled') : $t('certd.common.enabled') }}
+              </span>
+            </span>
           </ElTooltip>
-          <div class="cell-sub">{{ row.disabled ? '已停用' : '已启用' }}</div>
         </template>
 
         <template #lastStatus="{ row }">
@@ -123,10 +139,10 @@
               {{ runStatusMeta(row.lastStatus).text }}
             </ElTag>
             <span v-if="row.running" class="cell-running">
-              <ArtSvgIcon icon="ri:loader-4-line" class="animate-spin" />运行中
+              <ArtSvgIcon icon="ri:loader-4-line" class="animate-spin" />{{ $t('certd.pipeline.running') }}
             </span>
           </div>
-          <div class="cell-sub">{{ row.lastHistoryTime || '尚未执行' }}</div>
+          <div class="cell-sub">{{ row.lastHistoryTime || $t('certd.status.pending') }}</div>
         </template>
 
         <template #cert="{ row }">
@@ -136,34 +152,34 @@
             </ElTag>
             <div class="cell-sub">{{ row.certExpiresTime }}</div>
           </template>
-          <span v-else class="cell-sub">暂无证书</span>
+          <span v-else class="cell-sub">{{ $t('certd.pipeline.noCert') }}</span>
         </template>
 
         <template #trigger="{ row }">
           <div class="cell-sub">
-            {{ row.triggerCount ? '定时任务 ' + row.triggerCount + ' 个' : '仅手动' }}
+            {{ row.triggerCount ? $t('certd.pipeline.triggerCount', { n: row.triggerCount }) : $t('certd.pipeline.manualOnly') }}
           </div>
-          <div v-if="row.nextRunTime" class="cell-sub">下次 {{ row.nextRunTime }}</div>
+          <div v-if="row.nextRunTime" class="cell-sub">{{ $t('certd.pipeline.nextRun', { time: row.nextRunTime }) }}</div>
         </template>
 
         <template #operation="{ row }">
           <div class="cell-actions">
-            <ElTooltip content="立即运行">
+            <ElTooltip :content="$t('certd.pipeline.runNow')">
               <ArtButtonTable type="view" @click="runNow(row)" />
             </ElTooltip>
-            <ElTooltip content="编辑">
+            <ElTooltip :content="$t('certd.common.edit')">
               <ArtButtonTable type="edit" @click="goDetail(row)" />
             </ElTooltip>
             <ElDropdown trigger="click" @command="(cmd: string) => handleRowCommand(cmd, row)">
               <ArtButtonTable type="more" />
               <template #dropdown>
                 <ElDropdownMenu>
-                  <ElDropdownItem command="copy">复制</ElDropdownItem>
+                  <ElDropdownItem command="copy">{{ $t('certd.pipeline.copy') }}</ElDropdownItem>
                   <ElDropdownItem command="toggle">
-                    {{ row.disabled ? '启用' : '停用' }}
+                    {{ row.disabled ? $t('certd.pipeline.enable') : $t('certd.pipeline.disable') }}
                   </ElDropdownItem>
-                  <ElDropdownItem command="history">执行历史</ElDropdownItem>
-                  <ElDropdownItem command="delete" divided>删除</ElDropdownItem>
+                  <ElDropdownItem command="history">{{ $t('certd.pipeline.historyAction') }}</ElDropdownItem>
+                  <ElDropdownItem command="delete" divided>{{ $t('certd.pipeline.delete') }}</ElDropdownItem>
                 </ElDropdownMenu>
               </template>
             </ElDropdown>
@@ -173,9 +189,9 @@
     </ElCard>
 
     <!-- 新建：模板优先 -->
-    <ElDialog v-model="createVisible" title="新建流水线" width="min(880px, 92vw)" destroy-on-close>
+    <ElDialog v-model="createVisible" :title="$t('certd.pipeline.create')" width="min(880px, 92vw)" destroy-on-close>
       <div class="template-tip">
-        选一个模板即可生成骨架（阶段与任务都已配好），之后再填域名与授权即可运行。
+        {{ $t('certd.pipeline.templateHint') }}
       </div>
       <div class="template-grid" v-loading="templateLoading">
         <div
@@ -187,7 +203,7 @@
         >
           <div class="template-head">
             <span class="template-name">{{ tpl.name }}</span>
-            <ElTag size="small" effect="plain">{{ tpl.stageCount }} 阶段</ElTag>
+            <ElTag size="small" effect="plain">{{ $t('certd.dashboard.stageCount', { n: tpl.stageCount }) }}</ElTag>
           </div>
           <p class="template-desc">{{ tpl.desc }}</p>
           <div class="template-tags">
@@ -197,21 +213,21 @@
       </div>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="createBlank">从空白创建</ElButton>
+          <ElButton @click="createBlank">{{ $t('certd.pipeline.createBlank') }}</ElButton>
           <ElButton type="primary" :loading="creating" :disabled="!selectedTemplate" @click="createFromTemplate">
-            用模板创建
+            {{ $t('certd.pipeline.createFromTemplate') }}
           </ElButton>
         </div>
       </template>
     </ElDialog>
 
     <!-- 批量：定时 -->
-    <ElDialog v-model="cronVisible" title="设置定时" width="min(460px, 92vw)">
+    <ElDialog v-model="cronVisible" :title="$t('certd.pipeline.setCron')" width="min(460px, 92vw)">
       <ElForm label-width="90px" label-position="top">
-        <ElFormItem label="cron 表达式">
+        <ElFormItem :label="$t('certd.pipeline.cronExpr')">
           <ElInput v-model="cronValue" placeholder="0 3 * * *" clearable />
         </ElFormItem>
-        <ElFormItem label="常用预设">
+        <ElFormItem :label="$t('certd.pipeline.presets')">
           <div class="preset-wrap">
             <ElTag
               v-for="preset in CRON_PRESETS"
@@ -221,21 +237,21 @@
               effect="light"
               @click="cronValue = preset.value"
             >
-              {{ preset.label }}
+              {{ $t(preset.labelKey) }}
             </ElTag>
           </div>
         </ElFormItem>
-        <p class="form-tip">留空表示移除定时任务，只保留手动 / Webhook 触发。</p>
+        <p class="form-tip">{{ $t('certd.pipeline.cronHint') }}</p>
       </ElForm>
       <template #footer>
-        <ElButton @click="cronVisible = false">取消</ElButton>
-        <ElButton type="primary" :loading="batching" @click="applyBatchCron">确定</ElButton>
+        <ElButton @click="cronVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
+        <ElButton type="primary" :loading="batching" @click="applyBatchCron">{{ $t('certd.common.confirm') }}</ElButton>
       </template>
     </ElDialog>
 
     <!-- 批量：通知 -->
-    <ElDialog v-model="notifyVisible" title="设置通知渠道" width="min(460px, 92vw)">
-      <ElSelect v-model="notifyValue" placeholder="选择通知渠道" clearable filterable class="w-full">
+    <ElDialog v-model="notifyVisible" :title="$t('certd.pipeline.setNotify')" width="min(460px, 92vw)">
+      <ElSelect v-model="notifyValue" :placeholder="$t('certd.pipeline.pickChannel')" clearable filterable class="w-full">
         <ElOption
           v-for="item in notificationOptions"
           :key="item.id"
@@ -243,19 +259,19 @@
           :value="item.id"
         />
       </ElSelect>
-      <p class="form-tip">会在流水线末尾追加 / 更新一个「发送通知」阶段；留空则移除该阶段。</p>
+      <p class="form-tip">{{ $t('certd.pipeline.notifyHint') }}</p>
       <template #footer>
-        <ElButton @click="notifyVisible = false">取消</ElButton>
-        <ElButton type="primary" :loading="batching" @click="applyBatchNotify">确定</ElButton>
+        <ElButton @click="notifyVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
+        <ElButton type="primary" :loading="batching" @click="applyBatchNotify">{{ $t('certd.common.confirm') }}</ElButton>
       </template>
     </ElDialog>
 
     <!-- 运行日志 -->
-    <ElDrawer v-model="logVisible" title="运行日志" size="46%" destroy-on-close>
+    <ElDrawer v-model="logVisible" :title="$t('certd.table.logs')" size="46%" destroy-on-close>
       <LogPanel
         :history-id="logHistoryId"
         :closable="true"
-        empty-text="正在启动流水线…"
+        :empty-text="$t('certd.pipeline.starting')"
         @close="logVisible = false"
       />
     </ElDrawer>
@@ -283,6 +299,7 @@
   import type { PipelineItem } from '@/api/certd'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { CRON_PRESETS, STAGE_KIND_META, certStatusMeta, runStatusMeta } from '@/utils/certd'
+  import { $t } from '@/locales'
   import LogPanel from '../components/log-panel.vue'
   import PipelineGroup from './group.vue'
 
@@ -308,28 +325,29 @@
   const selectedIds = ref<number[]>([])
   const selectedRows = ref<PipelineItem[]>([])
 
-  const searchItems = [
-    { key: 'keyword', label: '关键字', type: 'input', placeholder: '流水线名称 / 备注' },
+  /** 搜索项文案随语言变化，用 computed 包一层 */
+  const searchItems = computed(() => [
+    { key: 'keyword', label: $t('certd.search.keyword'), type: 'input', placeholder: $t('certd.search.pipelinePlaceholder') },
     {
       key: 'status',
-      label: '最近结果',
+      label: $t('certd.search.lastResult'),
       type: 'select',
       options: [
-        { label: '成功', value: 'success' },
-        { label: '失败', value: 'failed' },
-        { label: '运行中', value: 'running' },
+        { label: $t('certd.status.success'), value: 'success' },
+        { label: $t('certd.status.failed'), value: 'failed' },
+        { label: $t('certd.status.running'), value: 'running' },
       ],
     },
     {
       key: 'disabled',
-      label: '启用状态',
+      label: $t('certd.search.enabledState'),
       type: 'select',
       options: [
-        { label: '已启用', value: 'false' },
-        { label: '已停用', value: 'true' },
+        { label: $t('certd.common.enabled'), value: 'false' },
+        { label: $t('certd.status.disabled'), value: 'true' },
       ],
     },
-  ]
+  ])
 
   const {
     columns,
@@ -349,13 +367,15 @@
       apiParams: { current: 1, size: 10 },
       columnsFactory: () => [
         { type: 'selection', width: 48 },
-        { prop: 'title', label: '流水线 / 域名', minWidth: 240, useSlot: true },
+        { prop: 'title', label: $t('certd.pipeline.colTitle'), minWidth: 240, useSlot: true },
         // 启用 / 停用直接在这里开关（以前放在流水线编辑页顶部，勾完还得保存一次）
-        { prop: 'enabled', label: '启用', width: 96, useSlot: true },
-        { prop: 'lastStatus', label: '最近执行', width: 150, useSlot: true },
-        { prop: 'cert', label: '证书有效期', width: 150, useSlot: true },
-        { prop: 'trigger', label: '触发方式', width: 150, useSlot: true },
-        { prop: 'operation', label: '操作', width: 150, fixed: 'right', useSlot: true },
+        // 宽度给够：开关 36 + 间隙 8 + 「已启用」36，再加单元格 12×2 内边距 ≈ 104
+        { prop: 'enabled', label: $t('certd.pipeline.colEnabled'), width: 116, useSlot: true },
+        { prop: 'lastStatus', label: $t('certd.pipeline.colLastRun'), width: 160, useSlot: true },
+        { prop: 'cert', label: $t('certd.pipeline.colCert'), width: 150, useSlot: true },
+        // 「下次 2026-11-01 03:00:00」一行放得下才不会折成三行把行高压到 100px
+        { prop: 'trigger', label: $t('certd.pipeline.colTrigger'), width: 190, useSlot: true },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 150, fixed: 'right', useSlot: true },
       ],
     },
     hooks: {
@@ -368,11 +388,14 @@
 
   /** 流程分类标签：由后端解析 content 得出（申请 / 部署 / 通知） */
   const kindsOf = (row: PipelineItem) =>
-    ((row as any).kinds || []).map((key: string) => ({
-      key,
-      text: STAGE_KIND_META[key as 'cert' | 'deploy' | 'notify']?.text || key,
-      color: STAGE_KIND_META[key as 'cert' | 'deploy' | 'notify']?.color || '#909399',
-    }))
+    ((row as any).kinds || []).map((key: string) => {
+      const meta = STAGE_KIND_META[key as 'cert' | 'deploy' | 'notify']
+      return {
+        key,
+        text: meta ? $t(meta.textKey) : key,
+        color: meta?.color || 'var(--muted-foreground)',
+      }
+    })
 
   const daysLeft = (row: PipelineItem) => {
     if (!row.certExpiresTime) return null
@@ -599,45 +622,49 @@
 </script>
 
 <style scoped>
-  /* 页签：与详情页「画布 / 列表」保持同一套视觉，切页不换语言 */
+  /* 页签：与详情页「画布 / 列表」保持同一套视觉，切页不换语言。
+     shadcn 的 tabs 是「下划线式」：透明底 + 选中项 2px 下划条，
+     不再用 Material 的胶囊分段控件。 */
   .page-switch {
     display: inline-flex;
     flex: 0 0 auto;
-    gap: 2px;
+    gap: 4px;
     align-self: flex-start;
-    padding: 2px;
+    padding: 0;
     margin-bottom: 12px;
-    background: var(--g-fill-hover, var(--art-gray-200));
-    border-radius: 100px;
+    background: transparent;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
   }
 
   .page-switch button {
     display: inline-flex;
-    gap: 4px;
+    gap: 6px;
     align-items: center;
-    height: 26px;
-    padding: 0 12px;
-    font-family: var(--g-font, inherit);
-    font-size: 12px;
-    color: var(--g-text-2, var(--art-gray-600));
+    height: 36px;
+    padding: 0 4px;
+    font-family: var(--font-sans, inherit);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted-foreground);
     cursor: pointer;
     background: transparent;
     border: 0;
-    border-radius: 100px;
+    border-radius: 0;
     transition:
       color 0.14s ease,
-      background 0.14s ease,
       box-shadow 0.14s ease;
   }
 
   .page-switch button:hover {
-    color: var(--g-text, var(--art-gray-900));
+    color: var(--foreground);
   }
 
+  /* 选中：前景色字 + 2px 下划线（shadcn tabs 的 data-[state=active] 形态） */
   .page-switch button.is-active {
-    color: var(--g-blue, var(--el-color-primary));
-    background: var(--g-surface, #fff);
-    box-shadow: 0 1px 3px rgb(60 64 67 / 14%);
+    color: var(--foreground);
+    background: transparent;
+    box-shadow: inset 0 -2px 0 0 var(--foreground);
   }
 
   /*
@@ -656,22 +683,64 @@
     min-width: 0;
   }
 
-  .cell-tags {
+  .cell-title-row {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 4px;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
   }
 
-  /* 域名可能有十几个：允许换两行，不要一个字一个省略号地挤在一行里 */
+  /*
+   * 标题：block + 省略号（Element 的 .el-link 是 inline-flex + 居中，
+   * 直接 overflow:hidden 会「从两头一起裁」，长标题会丢掉开头的字母）。
+   */
+  .cell-title-link {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    font-weight: 500;
+    color: var(--foreground);
+    cursor: pointer;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cell-title-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .cell-kind {
+    flex: 0 0 auto;
+  }
+
+  /* 启停：开关 + 文字同一行，别把文字压到第二行去撑高行高 */
+  .cell-enabled {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .cell-enabled-text {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+
+  .cell-enabled-text.is-off {
+    color: var(--warning);
+  }
+
+  /* 域名可能有十几个：允许换两行，不要一个字一个省略号地挤在一行里。
+     用 anywhere 而不是 break-all：优先在逗号处断，实在放不下才在词中断。 */
   .cell-domains {
     display: -webkit-box;
-    margin-top: 4px;
+    margin-top: 2px;
     overflow: hidden;
     font-size: 12px;
     line-height: 1.5;
-    color: var(--art-gray-500);
-    word-break: break-all;
+    color: var(--muted-foreground);
+    overflow-wrap: anywhere;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
@@ -726,15 +795,17 @@
   .template-item {
     padding: 12px;
     cursor: pointer;
-    border: 1px solid var(--art-card-border);
-    border-radius: 8px;
-    transition: all 0.2s;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease;
   }
 
   .template-item:hover,
   .template-item.is-active {
-    border-color: var(--theme-color);
-    background: var(--el-color-primary-light-9);
+    border-color: var(--ring);
+    background: var(--accent);
   }
 
   .template-head {

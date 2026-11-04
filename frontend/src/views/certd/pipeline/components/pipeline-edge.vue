@@ -56,9 +56,11 @@
 </script>
 
 <style scoped>
+  /* 中点圆点：颜色跟着连线走（--flow-edge 由画布容器下发），
+     兜底值也必须是语义令牌，不能退回 Google 蓝 #4285f4 */
   .pipeline-edge-dot {
-    fill: var(--flow-edge, #4285f4);
-    stroke: var(--g-surface, #fff);
+    fill: var(--flow-edge, var(--brand));
+    stroke: var(--g-surface, var(--card));
     stroke-width: 1.5;
   }
 </style>

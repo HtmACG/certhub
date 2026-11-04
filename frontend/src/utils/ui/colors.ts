@@ -41,7 +41,6 @@
  * @module utils/ui/colors
  * @author Art Design Pro Team
  */
-import { useSettingStore } from '@/store/modules/setting'
 
 /**
  * 颜色转换结果接口
@@ -256,18 +255,22 @@ export function handleElementThemeColor(theme: string, isDark: boolean = false):
 
 /**
  * 设置 Element Plus 主题颜色
- * @param color 主题颜色
+ *
+ * ⚠️ shadcn/ui 规范下**不要调用**：primary 是语义令牌（浅色近黑 / 暗色近白），
+ * 内联写到 <html> 上会以最高优先级盖掉 shadcn-tokens.scss 的 :root / html.dark
+ * 重映射，暗色主题下 --el-color-primary 会停留在近黑，页签选中态直接看不见。
+ * 保留此函数只为兼容，内部改为「只清空、不写入」。
+ * @deprecated 改用 shadcn-tokens.scss 的 --brand / --primary
  */
 export function setElementThemeColor(color: string): void {
-  const mixColor = '#ffffff'
+  void color
   const elStyle = document.documentElement.style
-
-  elStyle.setProperty('--el-color-primary', color)
-  handleElementThemeColor(color, useSettingStore().isDark)
-
-  // 生成更淡一点的颜色
+  elStyle.removeProperty('--el-color-primary')
+  for (let i = 1; i <= 9; i++) {
+    elStyle.removeProperty(`--el-color-primary-light-${i}`)
+    elStyle.removeProperty(`--el-color-primary-dark-${i}`)
+  }
   for (let i = 1; i < 16; i++) {
-    const itemColor = colourBlend(color, mixColor, i / 16)
-    elStyle.setProperty(`--el-color-primary-custom-${i}`, itemColor)
+    elStyle.removeProperty(`--el-color-primary-custom-${i}`)
   }
 }

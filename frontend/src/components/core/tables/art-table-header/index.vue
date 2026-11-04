@@ -10,9 +10,9 @@
         v-if="showSearchBar != null"
         class="button"
         @click="search"
-        :class="showSearchBar ? 'active !bg-theme hover:!bg-theme/80' : ''"
+        :class="{ active: showSearchBar }"
       >
-        <ArtSvgIcon icon="ri:search-line" :class="showSearchBar ? 'text-white' : 'text-g-700'" />
+        <ArtSvgIcon icon="ri:search-line" />
       </div>
       <div
         v-if="shouldShow('refresh')"
@@ -321,19 +321,36 @@
 <style scoped>
   @reference '@styles/core/tailwind.css';
 
+  /*
+   * 表头右侧的图标按钮：shadcn 的 ghost icon button。
+   * 原来是「浅灰填充块 + 深色图标」（bg-g-300/55），和表格里其它 ghost 按钮不是一套，
+   * 四个灰块排在一起显得很重。改成透明底 + muted 图标，hover 才出 accent。
+   *
+   * 注意：这里只能用 tailwind.css 的 @theme 里注册过的颜色（g-* / primary / secondary …）。
+   * text-muted-foreground、bg-accent 这类「shadcn 语义名」只在 shadcn-tokens.scss 里，
+   * 全局 @theme 并不认识，写进 @apply 会直接构建失败（已踩）。
+   * 好在 --art-gray-* 已经转指语义令牌，text-g-600 就是 muted-foreground。
+   */
   .button {
-    @apply ml-2 
-    size-8 
-    flex 
-    items-center 
-    justify-center 
-    cursor-pointer 
-    rounded-md 
-    bg-g-300/55
-    dark:bg-g-300/40
-    text-g-700  
-    hover:bg-g-300 
-    md:ml-0 
+    @apply ml-2
+    size-8
+    flex
+    items-center
+    justify-center
+    cursor-pointer
+    rounded-md
+    bg-transparent
+    text-g-600
+    hover:bg-hover-color
+    hover:text-g-900
+    md:ml-0
     md:mr-2.5;
+
+    /* 搜索框显隐的「按下」态：primary 底 + primary-foreground 图标，
+       两层颜色都走 CSS 变量，暗色下自动翻转，不用 Tailwind 的 text-white。 */
+    &.active {
+      color: var(--primary-foreground);
+      background-color: var(--primary);
+    }
   }
 </style>

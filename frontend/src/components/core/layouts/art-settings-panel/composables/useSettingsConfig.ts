@@ -50,7 +50,7 @@ export function useSettingsConfig() {
     }
   ])
 
-  // 圆角大小选项
+  // 圆角大小选项（已下线，仅保留导出以兼容历史配置面板）
   const customRadiusOptions = [
     { value: '0', label: '0' },
     { value: '0.25', label: '0.25' },
@@ -203,16 +203,13 @@ export function useSettingsConfig() {
         options: pageTransitionOptions.value,
         style: { width: '120px' },
         headerBarKey: null // 不依赖headerBar配置
-      },
-      {
-        key: 'customRadius',
-        label: t('setting.basics.list.borderRadius'),
-        type: 'select' as const,
-        handler: 'customRadius',
-        options: customRadiusOptions,
-        style: { width: '120px' },
-        headerBarKey: null // 不依赖headerBar配置
       }
+      /**
+       * 「自定义圆角」已按 shadcn/ui 规范移除：
+       * 圆角只有一个源 —— shadcn-tokens.scss 的 --radius: 0.625rem，
+       * 再由它派生 sm/md/lg/xl。留一个下拉就能把全站圆角改回 0，
+       * 会出现「按钮直角、卡片圆角」两套体系并存。
+       */
     ]
 
     // 根据 headerBarConfig 过滤设置项

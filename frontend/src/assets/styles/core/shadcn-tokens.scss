@@ -1,0 +1,448 @@
+/**
+ * shadcn/ui 设计语言（唯一风格源 / Single Source of Truth）
+ * =========================================================
+ * 全站交互 UI 的规范以 shadcn/ui 的默认主题为准（New York 形态、neutral 基色）。
+ * 这里只做两件事：
+ *
+ *   1. 落地 shadcn 的语义令牌（--background / --foreground / --primary / --muted …），
+ *      数值直接取自 shadcn 默认主题（light: hsl 0 0% 100% 系；dark: hsl 0 0% 3.9% 系）。
+ *   2. 把 Element Plus 的 --el-* 变量整体重映射到这套语义令牌上，
+ *      这样 el-button / el-input / el-table … 全部自动跟随，不需要逐个组件改结构。
+ *
+ * 其余历史令牌（--g-*、--art-*、--custom-radius）保留为「别名」，
+ * 取值转指 shadcn 令牌 —— 老代码不用改，视觉一次统一。
+ *
+ * shadcn 的几条硬规范（组件层 el-shadcn.scss 逐条实现）：
+ *   · 圆角：md = calc(--radius - 2px) = 6px，输入框/按钮 8px 档实际取 6px，卡片 8px；
+ *     全站只有一个源 --radius: 0.625rem，不再由「设置抽屉」改写。
+ *   · 描边：1px，颜色 = --border（neutral 200 / 800），永远是细线，不用粗描边。
+ *   · 阴影：几乎不用。只有浮层（dialog / popper / dropdown）给一层很浅的 sm 阴影。
+ *   · 焦点：2px ring + 2px offset，颜色 = --ring，不做渐变、不做发光。
+ *   · 字重：标题 600，控件 500，正文 400；字号 14px 基准，说明文字 12px。
+ */
+
+/* ==================== shadcn 语义令牌 ==================== */
+:root {
+  /* 圆角唯一来源：shadcn 默认 0.625rem；派生档位在下方一次算好 */
+  --radius: 0.625rem;
+
+  /* neutral 基色 */
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(0 0% 3.9%);
+
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(0 0% 3.9%);
+
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(0 0% 3.9%);
+
+  --primary: hsl(0 0% 9%);
+  --primary-foreground: hsl(0 0% 98%);
+
+  --secondary: hsl(0 0% 96.1%);
+  --secondary-foreground: hsl(0 0% 9%);
+
+  --muted: hsl(0 0% 96.1%);
+  --muted-foreground: hsl(0 0% 45.1%);
+
+  --accent: hsl(0 0% 96.1%);
+  --accent-foreground: hsl(0 0% 9%);
+
+  --destructive: hsl(0 84.2% 60.2%);
+  --destructive-foreground: hsl(0 0% 98%);
+
+  /* 语义状态色：shadcn 默认只用红（destructive），
+     业务上的「成功 / 警告 / 信息」取 Tailwind 的 600/700 档，饱和度比 Material 更低 */
+  --success: hsl(142 71% 29%);
+  --success-foreground: hsl(0 0% 98%);
+  --warning: hsl(32 95% 35%);
+  --warning-foreground: hsl(0 0% 98%);
+  --info: hsl(221 83% 40%);
+  --info-foreground: hsl(0 0% 98%);
+
+  /* 流水线环节色：AGENTS 8.1 要求「申请 / 部署 / 通知」三者可区分，
+     但取值必须是低饱和的语义色（不再是 Material 的 #409eff / #67c23a / #e6a23c）。
+     只用于图标 / 小徽标 / 3px 描边这类「点状强调」，不铺大色块。 */
+  --stage-cert: hsl(221 83% 40%);
+  --stage-deploy: hsl(142 71% 29%);
+  --stage-notify: hsl(32 95% 35%);
+
+  --border: hsl(0 0% 89.8%);
+  --input: hsl(0 0% 89.8%);
+  --ring: hsl(0 0% 3.9%);
+
+  /* 侧边栏（shadcn sidebar 区块的默认值） */
+  --sidebar: hsl(0 0% 98.5%);
+  --sidebar-foreground: hsl(240 5.3% 26.1%);
+  --sidebar-primary: hsl(240 5.9% 10%);
+  --sidebar-primary-foreground: hsl(0 0% 98%);
+  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent-foreground: hsl(240 5.9% 10%);
+  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+
+  /* 图表（shadcn charts 默认 5 色） */
+  --chart-1: hsl(12 76% 61%);
+  --chart-2: hsl(173 58% 39%);
+  --chart-3: hsl(197 37% 24%);
+  --chart-4: hsl(43 74% 66%);
+  --chart-5: hsl(27 87% 67%);
+
+  /**
+   * 内容区画布色（页面底 → 卡片之间的那层）。
+   * 浅色下比卡片略深（页面灰、卡片白），卡片才会「浮」起来；
+   * 暗色下反过来用 --background（见下方 .dark），否则页面比卡片亮，
+   * 一屏白盒子变成一屏「黑洞」。
+   */
+  --canvas: var(--muted);
+}
+
+.dark,
+html.dark {
+  --background: hsl(0 0% 3.9%);
+  --foreground: hsl(0 0% 98%);
+  /**
+   * 暗色下卡片要比页面底**亮一点**（#131313 vs #0a0a0a），
+   * 否则内容区（--canvas = --background）比卡片亮，卡片看起来像挖空的洞。
+   * popover 再亮一档，保证弹窗是「最上层」。
+   */
+  --card: hsl(0 0% 7.5%);
+  --card-foreground: hsl(0 0% 98%);
+
+  --popover: hsl(0 0% 9%);
+  --popover-foreground: hsl(0 0% 98%);
+
+  --primary: hsl(0 0% 98%);
+  --primary-foreground: hsl(0 0% 9%);
+
+  --secondary: hsl(0 0% 14.9%);
+  --secondary-foreground: hsl(0 0% 98%);
+
+  --muted: hsl(0 0% 14.9%);
+  --muted-foreground: hsl(0 0% 63.9%);
+
+  --accent: hsl(0 0% 14.9%);
+  --accent-foreground: hsl(0 0% 98%);
+
+  --destructive: hsl(0 72.2% 50.6%);
+  --destructive-foreground: hsl(0 0% 98%);
+
+  --success: hsl(142 60% 51%);
+  --success-foreground: hsl(0 0% 9%);
+  --warning: hsl(38 92% 55%);
+  --warning-foreground: hsl(0 0% 9%);
+  --info: hsl(213 94% 72%);
+  --info-foreground: hsl(0 0% 9%);
+
+  /* 暗色下环节色统一提亮到 300/400 档，深底上才读得清 */
+  --stage-cert: hsl(213 94% 72%);
+  --stage-deploy: hsl(142 60% 51%);
+  --stage-notify: hsl(38 92% 55%);
+
+  --border: hsl(0 0% 14.9%);
+  --input: hsl(0 0% 14.9%);
+  --ring: hsl(0 0% 83.1%);
+
+  --sidebar: hsl(240 5.9% 10%);
+  --sidebar-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-primary: hsl(224.3 76.3% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 3.7% 15.9%);
+  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-border: hsl(240 3.7% 15.9%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+
+  /* 内容区画布：暗色下用背景色（卡片比它亮一档，见上面的 --card） */
+  --canvas: var(--background);
+}
+
+/* ==================== 派生：圆角档位 + 字体 ==================== */
+:root {
+  /* shadcn 的尾部 `-sm / -md / -lg / -xl` 计算规则 */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  /* 胶囊 / 圆形只有这一个来源，页面里不要再写死 100px / 50% */
+  --radius-full: 9999px;
+
+  /**
+   * 字体：shadcn 侧栏用 Geist，默认文档用系统无衬线栈。
+   * 中文场景下必须在 Inter / Segoe 之后接一套中文字体，
+   * 否则一段里中英混排会掉进各自的回退族，基线不齐。
+   */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Inter, 'Helvetica Neue',
+    'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+
+  /* 等宽：cron / 密钥 / 指纹 / PEM 头统一走这一套，避免每页各写一组长栈 */
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* 阴影：shadcn 只有这两档，且都很浅 */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 10%), 0 2px 4px -2px rgb(0 0 0 / 10%);
+
+  /**
+   * 贴边浮层（Sheet / Drawer）的投影：只在「离开边缘」那一侧有一点淡影。
+   * Element 默认是 16/32/48px 三层大扩散，抽屉整块看起来像悬在空中的卡片，
+   * shadcn 的 Sheet 是贴在窗口边上的，影必须收窄。
+   */
+  --sheet-shadow: -8px 0 24px -12px rgb(0 0 0 / 18%);
+}
+
+/* ==================== Element Plus 语义重映射 ==================== */
+:root {
+  --el-color-primary: var(--primary);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--primary) 90%, transparent);
+  --el-color-primary-light-3: color-mix(in srgb, var(--primary) 70%, var(--background));
+  --el-color-primary-light-5: color-mix(in srgb, var(--primary) 50%, var(--background));
+  --el-color-primary-light-7: color-mix(in srgb, var(--primary) 30%, var(--background));
+  --el-color-primary-light-8: color-mix(in srgb, var(--primary) 20%, var(--background));
+  --el-color-primary-light-9: color-mix(in srgb, var(--primary) 10%, var(--background));
+
+  --el-color-success: var(--success);
+  --el-color-success-light-9: color-mix(in srgb, var(--success) 10%, var(--background));
+  --el-color-warning: var(--warning);
+  --el-color-warning-light-9: color-mix(in srgb, var(--warning) 10%, var(--background));
+  --el-color-danger: var(--destructive);
+  --el-color-danger-light-9: color-mix(in srgb, var(--destructive) 10%, var(--background));
+  --el-color-error: var(--destructive);
+  --el-color-info: var(--muted-foreground);
+  --el-color-info-light-9: var(--muted);
+
+  --el-bg-color: var(--card);
+  --el-bg-color-page: var(--background);
+  --el-bg-color-overlay: var(--popover);
+
+  /* 文字色一律用实色：Element 的 --el-text-color-regular 默认是「前景色 + 透明度」，
+     一旦变成 color-mix(…, transparent)，
+     · 输入框 caret（光标）在 Chrome 下会跟着变成半透明、很难看见；
+     · 审计脚本按「不透明背景」算对比度时会把这类文字全部误判成低对比。
+     shadcn 本身也是实色（#09090b / #71717a），所以这里直接对齐。 */
+  --el-text-color-primary: var(--foreground);
+  --el-text-color-regular: var(--foreground);
+  --el-text-color-secondary: var(--muted-foreground);
+  --el-text-color-placeholder: var(--muted-foreground);
+
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border);
+  --el-border-color-lighter: var(--border);
+  --el-border-color-extra-light: var(--border);
+  --el-border-color-dark: color-mix(in srgb, var(--border) 130%, transparent);
+  --el-border-color-darker: color-mix(in srgb, var(--border) 160%, transparent);
+  --el-border-color-hover: color-mix(in srgb, var(--foreground) 30%, transparent);
+
+  --el-fill-color: var(--muted);
+  --el-fill-color-light: var(--muted);
+  --el-fill-color-lighter: var(--muted);
+  --el-fill-color-blank: var(--background);
+
+  /* 尺寸：shadcn 的控件高 36px（h-9）、输入框 36px，与 EP default 对齐 */
+  --el-component-size: 36px;
+  --el-component-size-large: 40px;
+  --el-component-size-small: 32px;
+
+  --el-font-family: var(--font-sans);
+  --el-font-size-base: 14px;
+
+  /* 圆角：EP 的 base 是「控件档」→ 6px；small 用作 tag / kbd → 4px */
+  --el-border-radius-base: var(--radius-md);
+  --el-border-radius-small: var(--radius-sm);
+  --el-border-radius-round: 9999px;
+  --el-box-shadow-light: var(--shadow-sm);
+  --el-box-shadow: var(--shadow-md);
+}
+
+/* ==================== 暗色：Element Plus 变量必须重映射一遍 ==================== */
+/**
+ * element-plus/theme-chalk/dark/css-vars.css 里的 `html.dark{…}` 选择器权重是 (0,1,1)，
+ * 比 `:root` (0,1,0) 高 —— 只要加载了它，上面那套重映射在暗色下就会被它整体盖掉
+ * （表现为「切到暗色又变回 Element 默认蓝」）。所以暗色下必须再写一次。
+ *
+ * 注意不能合并进 `:root, .dark { … }`：那条规则的权重和 html.dark 相同、
+ * 又排在后面，会把暗色令牌自己盖掉，导致暗色下 --foreground 变成近黑。
+ */
+html.dark {
+  --el-color-primary: var(--primary);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--primary) 90%, transparent);
+  --el-color-primary-light-3: color-mix(in srgb, var(--primary) 70%, var(--background));
+  --el-color-primary-light-5: color-mix(in srgb, var(--primary) 50%, var(--background));
+  --el-color-primary-light-7: color-mix(in srgb, var(--primary) 30%, var(--background));
+  --el-color-primary-light-8: color-mix(in srgb, var(--primary) 20%, var(--background));
+  --el-color-primary-light-9: color-mix(in srgb, var(--primary) 10%, var(--background));
+
+  --el-color-success: var(--success);
+  --el-color-success-light-9: color-mix(in srgb, var(--success) 10%, var(--background));
+  --el-color-warning: var(--warning);
+  --el-color-warning-light-9: color-mix(in srgb, var(--warning) 10%, var(--background));
+  --el-color-danger: var(--destructive);
+  --el-color-danger-light-9: color-mix(in srgb, var(--destructive) 10%, var(--background));
+  --el-color-error: var(--destructive);
+  --el-color-info: var(--muted-foreground);
+  --el-color-info-light-9: var(--muted);
+
+  --el-bg-color: var(--card);
+  --el-bg-color-page: var(--background);
+  --el-bg-color-overlay: var(--popover);
+
+  --el-text-color-primary: var(--foreground);
+  --el-text-color-regular: var(--foreground);
+  --el-text-color-secondary: var(--muted-foreground);
+  --el-text-color-placeholder: var(--muted-foreground);
+  --el-text-color-disabled: color-mix(in srgb, var(--foreground) 40%, transparent);
+
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border);
+  --el-border-color-lighter: var(--border);
+  --el-border-color-extra-light: var(--border);
+  --el-border-color-dark: color-mix(in srgb, var(--border) 130%, transparent);
+  --el-border-color-darker: color-mix(in srgb, var(--border) 160%, transparent);
+  --el-border-color-hover: color-mix(in srgb, var(--foreground) 30%, transparent);
+
+  --el-fill-color: var(--muted);
+  --el-fill-color-light: var(--muted);
+  --el-fill-color-lighter: var(--muted);
+  --el-fill-color-blank: var(--background);
+  --el-mask-color: hsl(0 0% 0% / 75%);
+  --el-button-disabled-text-color: color-mix(in srgb, var(--foreground) 50%, transparent);
+}
+
+/* ==================== 派生：shadcn「语义角色」 ==================== */
+/**
+ * shadcn 的 primary 在一套主题里是「有前景色的品牌块」：
+ *   浅色 → 近黑（#18181b），配白字
+ *   暗色 → 近白（#fafafa），配黑字
+ * 它只适合「实心按钮 / 选中态」这类自带前景色的场景。
+ *
+ * 但业务里大量地方把主色当作「品牌强调色」用（蓝字、蓝图标、蓝底白字的徽标），
+ * 这些场景在暗色下必须换成「白色前景上的中性亮色」才读得清。
+ * 于是额外派生三个角色，组件只需选角色，不再自己判断深浅：
+ *
+ *   --brand        品牌色（浅色=近黑，暗色=zinc-300），可安全用作文字/图标/实心小色块
+ *   --brand-foreground  配 --brand 实心块的前景色（浅色=白，暗色=近黑）
+ *   --brand-soft   品牌色的浅底（选中/悬停）
+ */
+:root {
+  --brand: var(--primary);
+  --brand-foreground: var(--primary-foreground);
+  --brand-soft: var(--accent);
+}
+
+.dark {
+  --brand: hsl(0 0% 83.1%);
+  --brand-foreground: hsl(0 0% 9%);
+  --brand-soft: var(--accent);
+}
+
+/* ==================== 历史令牌 → shadcn 别名（只转指，不再自定义取值） ==================== */
+:root,
+.dark {
+  --custom-radius: var(--radius-md);
+
+  /**
+   * --g-blue 是「品牌强调色」的老名字，不等于 shadcn 的 --primary。
+   * 暗色下 shadcn 的 --primary 是近白（#fafafa），直接映射过去会让
+   * 「蓝字」变成「白字」、「蓝底白字徽标」变成「白底白字」。
+   * 所以这里统一转指 --brand（浅色近黑 / 暗色 zinc-300，见上方「语义角色」）。
+   */
+  --g-blue: var(--brand);
+  --g-blue-700: color-mix(in srgb, var(--brand) 88%, transparent);
+  --g-blue-50: var(--brand-soft);
+  --g-green: var(--success);
+  --g-green-50: color-mix(in srgb, var(--success) 10%, var(--background));
+  --g-amber: var(--warning);
+  --g-amber-50: color-mix(in srgb, var(--warning) 10%, var(--background));
+  --g-red: var(--destructive);
+  --g-red-50: color-mix(in srgb, var(--destructive) 10%, var(--background));
+
+  --g-text: var(--foreground);
+  --g-text-2: var(--muted-foreground);
+  --g-text-3: var(--muted-foreground);
+  --g-sep: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+
+  --g-line: var(--border);
+  --g-line-2: var(--border);
+  --g-surface: var(--card);
+  --g-fill: var(--muted);
+  --g-fill-hover: var(--accent);
+
+  --g-input-line: var(--input);
+  --g-input-line-hover: color-mix(in srgb, var(--input) 130%, transparent);
+
+  --g-font: var(--font-sans);
+
+  --g-elev-1: var(--shadow-sm);
+  --g-elev-2: var(--shadow-md);
+
+  /* art-* 灰度：转成 tailwind 的 neutral 阶梯，避免出现两套灰 */
+  --theme-color: var(--brand);
+  --art-color: var(--background);
+  --default-bg-color: var(--background);
+  --default-box-color: var(--card);
+  --default-border: var(--border);
+  --default-border-dashed: var(--border);
+  --art-card-border: var(--border);
+  --art-hover-color: var(--accent);
+  --art-active-color: var(--accent);
+  --art-el-active-color: var(--accent);
+  --bg-animation-color: var(--background);
+  --w-e-toolbar-bg-color: var(--card);
+  --w-e-toolbar-active-bg-color: var(--accent);
+
+  /**
+   * tailwind.css 里还留着一整套 --art-gray-*（页面里 100 多处仍在用），
+   * 那套值和 shadcn 的 neutral 阶梯并不完全对齐 —— 于是「同一个次要文字」
+   * 在不同页面会是 #737373 或 #525252，暗色下还会一个偏亮一个偏暗。
+   * 这里把它们一次性收口到语义令牌：
+   *   100/200 → 填充底（muted）    300 → 描边（border）
+   *   400/500/600 → 次要文字（muted-foreground）
+   *   700/800/900 → 主文字（foreground）
+   * 页面不用改，视觉自动对齐；新代码请直接用语义令牌，不要再写 --art-gray-*。
+   */
+  --art-gray-100: var(--muted);
+  --art-gray-200: var(--muted);
+  --art-gray-300: var(--border);
+  --art-gray-400: var(--muted-foreground);
+  --art-gray-500: var(--muted-foreground);
+  --art-gray-600: var(--muted-foreground);
+  --art-gray-700: var(--foreground);
+  --art-gray-800: var(--foreground);
+  --art-gray-900: var(--foreground);
+}
+
+/* Tailwind 的 --color-primary 被模板改成 oklch(0.7 0.23 260) 那种亮蓝，
+   会和 shadcn 的 primary 打架；这里统一收口到语义令牌。 */
+@theme {
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-error: var(--destructive);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--destructive);
+
+  /* shadcn 语义色也要能被原子类读到：text-muted-foreground / bg-card / border-border … */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-stage-cert: var(--stage-cert);
+  --color-stage-deploy: var(--stage-deploy);
+  --color-stage-notify: var(--stage-notify);
+}

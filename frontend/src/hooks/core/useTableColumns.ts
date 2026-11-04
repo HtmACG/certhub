@@ -33,7 +33,7 @@
  */
 
 import { ref, computed, watch } from 'vue'
-import { $t } from '@/locales'
+import { $t, i18n } from '@/locales'
 import type { ColumnOption } from '@/types/component'
 
 /**
@@ -146,6 +146,20 @@ export function useTableColumns<T = any>(
 } & DynamicColumnConfig<T> {
   const dynamicColumns = ref<ColumnOption<T>[]>(columnsFactory())
   const columnChecks = ref<ColumnOption<T>[]>(getColumnChecks(dynamicColumns.value))
+
+  /**
+   * 语言切换后重建列定义
+   *
+   * 各页面的 `columnsFactory` 里写的是 `label: $t('...')` —— 它是**命令式**取词，
+   * 只在被调用的那一刻求值。不重建的话，切到英文后表头仍然是中文。
+   * 这里监听 locale 再调一次工厂函数即可，列宽不随语言变化（见各列显式 width）。
+   */
+  watch(
+    () => (i18n.global.locale as unknown as { value: string }).value,
+    () => {
+      dynamicColumns.value = columnsFactory()
+    }
+  )
 
   // 当 dynamicColumns 变动时，重新生成 columnChecks 且保留已存在的显示状态
   watch(

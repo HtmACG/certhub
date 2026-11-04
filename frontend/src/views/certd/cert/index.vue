@@ -22,7 +22,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton type="primary" @click="importVisible = true">
-              <ArtSvgIcon icon="ri:upload-2-line" class="mr-1" />导入证书
+              <ArtSvgIcon icon="ri:upload-2-line" class="mr-1" />{{ $t('certd.cert.importCert') }}
             </ElButton>
             <ElButton
               type="danger"
@@ -32,10 +32,10 @@
               @click="removeSelected"
             >
               <ArtSvgIcon icon="ri:delete-bin-line" class="mr-1" />
-              批量删除<template v-if="selectedIds.length">（{{ selectedIds.length }}）</template>
+              {{ $t('certd.cert.batchDelete') }}<template v-if="selectedIds.length"> ({{ selectedIds.length }})</template>
             </ElButton>
             <ElButton :disabled="!expiringOnly" @click="toggleExpiring">
-              只看 30 天内到期
+              {{ $t('certd.cert.onlyExpiring') }}
             </ElButton>
           </ElSpace>
         </template>
@@ -97,7 +97,7 @@
     </ElCard>
 
     <!-- 详情抽屉 -->
-    <ElDrawer v-model="detailVisible" title="证书详情" size="min(720px, 96vw)" destroy-on-close>
+    <ElDrawer v-model="detailVisible" :title="$t('certd.cert.detailTitle')" size="min(720px, 96vw)" destroy-on-close>
       <div v-if="detail" v-loading="detailLoading" class="cert-detail">
         <div class="cert-detail-head">
           <BrandAvatar
@@ -116,23 +116,23 @@
         </div>
 
         <ElDescriptions :column="1" border class="mt-3">
-          <ElDescriptionsItem label="主题">{{ detail.details?.subject }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="签发者">{{ detail.details?.issuer }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="有效期">
+          <ElDescriptionsItem :label="$t('certd.cert.subject')">{{ detail.details?.subject }}</ElDescriptionsItem>
+          <ElDescriptionsItem :label="$t('certd.cert.issuerLabel')">{{ detail.details?.issuer }}</ElDescriptionsItem>
+          <ElDescriptionsItem :label="$t('certd.cert.validity')">
             {{ detail.details?.notBefore }} ~ {{ detail.details?.notAfter }}
           </ElDescriptionsItem>
-          <ElDescriptionsItem label="公钥">{{ detail.details?.publicKey }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="签名算法">
+          <ElDescriptionsItem :label="$t('certd.cert.publicKey')">{{ detail.details?.publicKey }}</ElDescriptionsItem>
+          <ElDescriptionsItem :label="$t('certd.cert.signatureAlgorithm')">
             {{ detail.details?.signatureAlgorithm }}
           </ElDescriptionsItem>
-          <ElDescriptionsItem label="序列号">{{ detail.details?.serialNumber }}</ElDescriptionsItem>
+          <ElDescriptionsItem :label="$t('certd.cert.serialNumber')">{{ detail.details?.serialNumber }}</ElDescriptionsItem>
           <ElDescriptionsItem label="SHA256 指纹">
             <span class="mono break-all">{{ detail.details?.fingerprintSha256 }}</span>
           </ElDescriptionsItem>
-          <ElDescriptionsItem label="证书链">
-            {{ detail.details?.chainCount }} 张
+          <ElDescriptionsItem :label="$t('certd.cert.chain')">
+            {{ $t('certd.dashboard.countCerts', { n: detail.details?.chainCount }) }}
             <ElTag v-if="detail.details?.isSelfSigned" size="small" type="warning" effect="plain">
-              自签名
+              {{ $t('certd.cert.selfSigned') }}
             </ElTag>
           </ElDescriptionsItem>
           <ElDescriptionsItem label="SAN">
@@ -146,69 +146,68 @@
 
         <div class="pem-block">
           <div class="pem-head">
-            <span>证书 PEM</span>
-            <ElButton link type="primary" @click="copyText(detail.certPem)">复制</ElButton>
+            <span>{{ $t('certd.cert.certPem') }}</span>
+            <ElButton link type="primary" @click="copyText(detail.certPem)">{{ $t('certd.common.copy') }}</ElButton>
           </div>
           <pre class="pem-body">{{ detail.certPem }}</pre>
         </div>
 
         <div class="pem-block">
           <div class="pem-head">
-            <span>私钥 PEM</span>
-            <ElButton link type="primary" @click="copyText(detail.keyPem)">复制</ElButton>
+            <span>{{ $t('certd.cert.keyPem') }}</span>
+            <ElButton link type="primary" @click="copyText(detail.keyPem)">{{ $t('certd.common.copy') }}</ElButton>
           </div>
           <!-- 铁律：凭据不打码。私钥明文展示，要不要看由用户自己决定，不做「隐藏 / 显示」开关 -->
-          <pre class="pem-body is-key">{{ detail.keyPem || '（这张证书没有私钥：导入时未提供私钥）' }}</pre>
+          <pre class="pem-body is-key">{{ detail.keyPem || $t('certd.cert.noKey') }}</pre>
         </div>
 
         <div class="export-wrap">
-          <span class="cell-sub">导出：</span>
+          <span class="cell-sub">{{ $t('certd.cert.exportLabel') }}</span>
           <ElSelect v-model="exportFormat" class="w-40">
             <ElOption label="PEM" value="pem" />
             <ElOption label="DER" value="der" />
-            <ElOption label="Nginx（证书+私钥）" value="nginx" />
+            <ElOption :label="$t('certd.cert.fmtNginx')" value="nginx" />
             <ElOption label="PFX（PKCS#12）" value="pfx" />
-            <ElOption label="P7B（证书链）" value="p7b" />
-            <ElOption label="JKS（Java KeyStore）" value="jks" />
+            <ElOption :label="$t('certd.cert.fmtP7b')" value="p7b" />
+            <ElOption :label="$t('certd.cert.fmtJks')" value="jks" />
           </ElSelect>
           <ElInput
             v-if="exportFormat === 'pfx' || exportFormat === 'jks'"
             v-model="exportPassword"
             type="password"
             show-password
-            placeholder="导出密码（JKS 至少 6 位）"
+            :placeholder="$t('certd.cert.exportPassword')"
             class="w-52"
           />
           <ElTooltip
             v-if="exportFormat === 'pfx'"
-            content="Windows Server 2016 / 2008 只认 SHA1 + 3DES 的 PFX，导入报错时换这里的兼容档（服务器需要装 openssl）"
+            :content="$t('certd.cert.pfxCompatHint')"
           >
-            <ElSelect v-model="exportPfxArgs" class="w-56" placeholder="PFX 兼容性">
-              <ElOption label="最新 Windows 服务器（默认）" value="" />
+            <ElSelect v-model="exportPfxArgs" class="w-56" :placeholder="$t('certd.cert.pfxCompat')">
+              <ElOption :label="$t('certd.cert.pfxLatest')" value="" />
               <ElOption
-                label="Windows Server 2016 兼容"
+                :label="$t('certd.cert.pfx2016')"
                 value="-macalg SHA1 -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES"
               />
               <ElOption
-                label="Windows Server 2008 兼容"
+                :label="$t('certd.cert.pfx2008')"
                 value="-nomac -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES"
               />
             </ElSelect>
           </ElTooltip>
-          <ElButton type="primary" @click="handleDownload(detail, exportFormat)">下载</ElButton>
-          <ElButton @click="handleDownload(detail, 'key')">下载私钥</ElButton>
+          <ElButton type="primary" @click="handleDownload(detail, exportFormat)">{{ $t('certd.common.download') }}</ElButton>
+          <ElButton @click="handleDownload(detail, 'key')">{{ $t('certd.cert.downloadKey') }}</ElButton>
         </div>
       </div>
     </ElDrawer>
 
     <!-- 导入 -->
-    <ElDialog v-model="importVisible" title="导入自有证书" width="min(680px, 94vw)" destroy-on-close>
+    <ElDialog v-model="importVisible" :title="$t('certd.cert.importTitle')" width="min(680px, 94vw)" destroy-on-close>
       <ElAlert type="info" :closable="false" class="mb-3">
-        只接受 PEM 格式的证书与私钥，两者必须是一对（后端会用公钥比对校验）。
-        导入后的证书与流水线签发的一样：可部署、可监控到期、可导出其它格式。
+        {{ $t('certd.cert.importHint') }}
       </ElAlert>
       <ElForm label-position="top">
-        <ElFormItem label="证书内容（含证书链）">
+        <ElFormItem :label="$t('certd.cert.certContent')">
           <ElInput
             v-model="importForm.cert"
             type="textarea"
@@ -216,7 +215,7 @@
             placeholder="-----BEGIN CERTIFICATE-----"
           />
         </ElFormItem>
-        <ElFormItem label="私钥内容">
+        <ElFormItem :label="$t('certd.cert.keyContent')">
           <ElInput
             v-model="importForm.key"
             type="textarea"
@@ -224,19 +223,20 @@
             placeholder="-----BEGIN PRIVATE KEY-----"
           />
         </ElFormItem>
-        <ElFormItem label="备注">
-          <ElInput v-model="importForm.remark" placeholder="例如：从阿里云下载的 2026 年证书" />
+        <ElFormItem :label="$t('certd.table.remark')">
+          <ElInput v-model="importForm.remark" :placeholder="$t('certd.cert.remarkPlaceholder')" />
         </ElFormItem>
       </ElForm>
       <template #footer>
-        <ElButton @click="importVisible = false">取消</ElButton>
-        <ElButton type="primary" :loading="importing" @click="submitImport">导入</ElButton>
+        <ElButton @click="importVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
+        <ElButton type="primary" :loading="importing" @click="submitImport">{{ $t('certd.cert.import') }}</ElButton>
       </template>
     </ElDialog>
   </div>
 </template>
 
 <script setup lang="ts">
+  import { $t } from '@/locales'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import { useTable } from '@/hooks/core/useTable'
   import {
@@ -258,19 +258,25 @@
   const searchForm = ref<Record<string, any>>({ keyword: undefined, expiring: undefined })
   const expiringOnly = ref(false)
 
-  const searchItems = [
-    { key: 'keyword', label: '关键字', type: 'input', placeholder: '域名 / 签发机构' },
+  /** 搜索项文案随语言变化 */
+  const searchItems = computed(() => [
+    {
+      key: 'keyword',
+      label: $t('certd.search.keyword'),
+      type: 'input',
+      placeholder: $t('certd.cert.keywordPlaceholder'),
+    },
     {
       key: 'expiring',
-      label: '到期范围',
+      label: $t('certd.cert.expiryRange'),
       type: 'select',
       options: [
-        { label: '30 天内到期', value: '30' },
-        { label: '7 天内到期', value: '7' },
-        { label: '90 天内到期', value: '90' },
+        { label: $t('certd.cert.expire30'), value: '30' },
+        { label: $t('certd.cert.expire7'), value: '7' },
+        { label: $t('certd.cert.expire90'), value: '90' },
       ],
     },
-  ]
+  ])
 
   const {
     columns,
@@ -290,11 +296,11 @@
       apiParams: { current: 1, size: 10 },
       columnsFactory: () => [
         { type: 'selection', width: 48 },
-        { prop: 'domains', label: '域名', minWidth: 220, useSlot: true },
-        { prop: 'issuer', label: '签发机构', minWidth: 200 },
-        { prop: 'notAfter', label: '有效期', width: 160, useSlot: true },
-        { prop: 'createTime', label: '入库时间', width: 170 },
-        { prop: 'operation', label: '操作', width: 140, fixed: 'right', useSlot: true },
+        { prop: 'domains', label: $t('certd.cert.colDomains'), minWidth: 220, useSlot: true },
+        { prop: 'issuer', label: $t('certd.cert.colIssuer'), minWidth: 200 },
+        { prop: 'notAfter', label: $t('certd.cert.colValidity'), width: 160, useSlot: true },
+        { prop: 'createTime', label: $t('certd.cert.colImportedAt'), width: 170 },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 150, fixed: 'right', useSlot: true },
       ],
     },
   })
@@ -302,7 +308,7 @@
   /* ---------------- 多选批量删除 ---------------- */
   const { selectedIds, removing, handleSelectionChange, removeSelected } = useBatchDelete(
     deleteCert,
-    { label: '证书', nameOf: (row: any) => row.domain, onDone: () => refreshData() }
+    { label: () => $t('certd.cert.itemLabel'), nameOf: (row: any) => row.domain, onDone: () => refreshData() }
   )
 
   const handleSearch = (params: Record<string, any>) => {
@@ -477,15 +483,15 @@
   }
 
   .mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
   }
 
   .pem-block {
     margin-top: 14px;
-    border: 1px solid var(--art-card-border);
-    border-radius: 8px;
     overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
   }
 
   .pem-head {
@@ -503,12 +509,12 @@
     margin: 0;
     padding: 10px;
     overflow: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     line-height: 1.6;
     white-space: pre-wrap;
     word-break: break-all;
-    color: var(--art-gray-700);
+    color: var(--foreground);
   }
 
   /* 私钥块：明文展示，用底色和证书 PEM 区分开（颜色走主题变量，暗色不白底白字） */

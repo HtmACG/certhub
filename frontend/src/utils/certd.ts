@@ -8,8 +8,20 @@
  * @module utils/certd
  */
 import type { PipelineStage, PipelineTask } from '@/api/certd'
+import { i18n } from '@/locales'
 
 export type TagType = 'success' | 'danger' | 'warning' | 'info' | 'primary'
+
+/**
+ * 取当前语言文案
+ *
+ * ⚠️ 一律在**函数体内**调用，不要在模块顶层求值：
+ * 模块顶层会在首次 import 时定死语言，切语言后不跟随。
+ */
+function t(key: string, named?: Record<string, unknown>): string {
+  const tr = i18n.global.t as unknown as (k: string, n?: Record<string, unknown>) => string
+  return named ? tr(key, named) : tr(key)
+}
 
 export interface StatusMeta {
   text: string
@@ -21,75 +33,93 @@ export interface StatusMeta {
 export function runStatusMeta(status?: string): StatusMeta {
   switch (status) {
     case 'success':
-      return { text: '成功', type: 'success', icon: 'ri:checkbox-circle-line' }
+      return { text: t('certd.status.success'), type: 'success', icon: 'ri:checkbox-circle-line' }
     case 'failed':
-      return { text: '失败', type: 'danger', icon: 'ri:close-circle-line' }
+      return { text: t('certd.status.failed'), type: 'danger', icon: 'ri:close-circle-line' }
     case 'running':
-      return { text: '运行中', type: 'warning', icon: 'ri:loader-4-line' }
+      return { text: t('certd.status.running'), type: 'warning', icon: 'ri:loader-4-line' }
     case 'canceled':
-      return { text: '已取消', type: 'info', icon: 'ri:stop-circle-line' }
+      return { text: t('certd.status.canceled'), type: 'info', icon: 'ri:stop-circle-line' }
     case 'skipped':
-      return { text: '已跳过', type: 'info', icon: 'ri:skip-forward-line' }
+      return { text: t('certd.status.skipped'), type: 'info', icon: 'ri:skip-forward-line' }
     case 'disabled':
-      return { text: '已停用', type: 'info', icon: 'ri:pause-circle-line' }
+      return { text: t('certd.status.disabled'), type: 'info', icon: 'ri:pause-circle-line' }
     case 'unlinked':
-      return { text: '未连线', type: 'info', icon: 'ri:link-unlink' }
+      return { text: t('certd.status.unlinked'), type: 'info', icon: 'ri:link-unlink' }
     default:
-      return { text: '未执行', type: 'info', icon: 'ri:subtract-line' }
+      return { text: t('certd.status.pending'), type: 'info', icon: 'ri:subtract-line' }
   }
 }
 
-/** 证书状态（按剩余天数分档，比只看 valid/expired 更有用） */
+/**
+ * 证书状态（按剩余天数分档，比只看 valid/expired 更有用）
+ *
+ * ⚠️ 英文下 `{days}d left` 比中文「剩余 N 天」长，标签会变宽。
+ * 表格里的状态列宽度是按中文定的，见 assets/styles/core/shadcn-ui.scss 里
+ * `.el-tag` 的 `white-space: nowrap` + 表格列的 `min-width`，不要改成会换行的写法。
+ */
 export function certStatusMeta(daysLeft: number | null | undefined): StatusMeta {
   if (daysLeft === null || daysLeft === undefined) {
-    return { text: '未知', type: 'info', icon: 'ri:question-line' }
+    return { text: t('certd.status.unknown'), type: 'info', icon: 'ri:question-line' }
   }
-  if (daysLeft < 0) return { text: '已过期', type: 'danger', icon: 'ri:error-warning-line' }
-  if (daysLeft <= 7) return { text: '剩余 ' + daysLeft + ' 天', type: 'danger', icon: 'ri:alarm-line' }
-  if (daysLeft <= 30) return { text: '剩余 ' + daysLeft + ' 天', type: 'warning', icon: 'ri:time-line' }
-  return { text: '剩余 ' + daysLeft + ' 天', type: 'success', icon: 'ri:shield-check-line' }
+  const text = t('certd.status.expiringSoon', { days: daysLeft })
+  if (daysLeft < 0) return { text: t('certd.status.expired'), type: 'danger', icon: 'ri:error-warning-line' }
+  if (daysLeft <= 7) return { text, type: 'danger', icon: 'ri:alarm-line' }
+  if (daysLeft <= 30) return { text, type: 'warning', icon: 'ri:time-line' }
+  return { text, type: 'success', icon: 'ri:shield-check-line' }
 }
 
 /** 站点监控状态 */
 export function siteStatusMeta(status?: string): StatusMeta {
   switch (status) {
     case 'ok':
-      return { text: '正常', type: 'success', icon: 'ri:checkbox-circle-line' }
+      return { text: t('certd.status.valid'), type: 'success', icon: 'ri:checkbox-circle-line' }
     case 'error':
-      return { text: '异常', type: 'danger', icon: 'ri:error-warning-line' }
+      return { text: t('certd.status.error'), type: 'danger', icon: 'ri:error-warning-line' }
     default:
-      return { text: '未检测', type: 'info', icon: 'ri:question-line' }
+      return { text: t('certd.status.undetected'), type: 'info', icon: 'ri:question-line' }
   }
 }
 
 /** 触发方式 */
 export function triggerText(type?: string): string {
   const map: Record<string, string> = {
-    manual: '手动',
-    timer: '定时',
-    webhook: 'Webhook',
-    openapi: '开放接口',
+    manual: t('certd.trigger.manual'),
+    timer: t('certd.trigger.timer'),
+    webhook: t('certd.trigger.webhook'),
+    openapi: t('certd.trigger.openapi'),
   }
   return map[type || ''] || type || '-'
 }
 
-/** 耗时：后端给秒 */
+/**
+ * 耗时：后端给秒
+ *
+ * 英文用 `1h 5m` / `1m 20s` 这种紧凑写法，
+ * 中文保持「1 时 5 分」—— 两者宽度接近，表格不会因为切语言而抖动。
+ */
 export function formatDuration(seconds?: number | null): string {
   if (!seconds || seconds < 0) return '-'
-  if (seconds < 60) return Math.round(seconds) + ' 秒'
+  if (seconds < 60) return t('certd.time.second', { n: Math.round(seconds) })
   const minutes = Math.floor(seconds / 60)
   const rest = Math.round(seconds % 60)
-  if (minutes < 60) return minutes + ' 分 ' + rest + ' 秒'
-  return Math.floor(minutes / 60) + ' 时 ' + (minutes % 60) + ' 分'
+  if (minutes < 60) return t('certd.time.minuteSecond', { m: minutes, s: rest })
+  return t('certd.time.hourMinute', { h: Math.floor(minutes / 60), m: minutes % 60 })
 }
 
 /** 资源使用率分档：正常 / 偏高 / 告警（CPU、内存、硬盘仪表共用同一套阈值） */
 export type UsageLevel = 'normal' | 'warn' | 'alarm'
 
+/**
+ * 使用率 → 颜色
+ * 走 shadcn 语义令牌（--success / --warning / --destructive），
+ * 不再硬编码 Element 那套 #67c23a / #e6a23c / #f56c6c ——
+ * 那三色在浅底上对比度只有 2.19，属于「看得见但读不清」。
+ */
 export const USAGE_LEVEL_COLOR: Record<UsageLevel, string> = {
-  normal: '#67c23a',
-  warn: '#e6a23c',
-  alarm: '#f56c6c',
+  normal: 'var(--success)',
+  warn: 'var(--warning)',
+  alarm: 'var(--destructive)',
 }
 
 /** 使用率 → 分档：≥90% 告警、≥70% 偏高、其余正常 */
@@ -105,12 +135,12 @@ export function usageColor(percent?: number | string | null): string {
   return USAGE_LEVEL_COLOR[usageLevel(percent)]
 }
 
-/** 使用率 → 中文状态词 */
+/** 使用率 → 状态词 */
 export function usageText(percent?: number | string | null): string {
   const level = usageLevel(percent)
-  if (level === 'alarm') return '告警'
-  if (level === 'warn') return '偏高'
-  return '正常'
+  if (level === 'alarm') return t('certd.usage.alarm')
+  if (level === 'warn') return t('certd.usage.warn')
+  return t('certd.usage.normal')
 }
 
 /** 域名列表 → 展示文本 */
@@ -133,18 +163,54 @@ export function stageKindOf(stage: PipelineStage): 'cert' | 'deploy' | 'notify' 
   return first ? taskKindOf(first.type) : 'deploy'
 }
 
+/**
+ * 阶段大类元信息
+ *
+ * ⚠️ `text` 这里**不能**做静态翻译。
+ * certd.ts 是模块级单例，如果写成 `text: t('certd.stage.cert')`，
+ * 会在首次 import 时就把当时的语言「烤死」进对象，切语言后不跟随。
+ * 所以这里只存 `textKey`，取文案一律走 {@link stageKindText}。
+ */
 export interface StageKindMeta {
   key: 'cert' | 'deploy' | 'notify'
-  text: string
+  textKey: string
   color: string
   icon: string
 }
 
 export const STAGE_KIND_META: Record<'cert' | 'deploy' | 'notify', StageKindMeta> = {
-  // 取色走 Google Material 调色板：蓝 600 / 绿 700 / 琥珀 800（都满足白底可读）
-  cert: { key: 'cert', text: '证书申请', color: '#1a73e8', icon: 'ri:file-shield-2-line' },
-  deploy: { key: 'deploy', text: '证书部署', color: '#1e8e3e', icon: 'ri:rocket-2-line' },
-  notify: { key: 'notify', text: '发送通知', color: '#e37400', icon: 'ri:notification-3-line' },
+  /**
+   * 环节色按 AGENTS 8.1 固定：申请蓝 / 部署绿 / 通知橙。
+   * 但取的是 shadcn-tokens 里新增的 --stage-* 语义令牌（Tailwind 600/700 档的低饱和值），
+   * 不再是 Material 的 #409eff / #67c23a / #e6a23c；
+   * 暗色下由令牌自动提亮，这里不用再写第二套。
+   *
+   * 只用在图标 / 小徽标 / 3px 描边这类「点状强调」上；
+   * 阶段标题、正文仍是 foreground，别把它们也染成彩色。
+   */
+  cert: {
+    key: 'cert',
+    textKey: 'certd.stage.cert',
+    color: 'var(--stage-cert)',
+    icon: 'ri:file-shield-2-line',
+  },
+  deploy: {
+    key: 'deploy',
+    textKey: 'certd.stage.deploy',
+    color: 'var(--stage-deploy)',
+    icon: 'ri:rocket-2-line',
+  },
+  notify: {
+    key: 'notify',
+    textKey: 'certd.stage.notify',
+    color: 'var(--stage-notify)',
+    icon: 'ri:notification-3-line',
+  },
+}
+
+/** 阶段大类 → 当前语言文案（渲染时调用，切语言自动跟随） */
+export function stageKindText(meta: StageKindMeta): string {
+  return t(meta.textKey)
 }
 
 /** 流水线里出现的阶段大类集合，列表页用来打标签 */
@@ -169,14 +235,24 @@ export function shortId(prefix: string): string {
   return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
-/** cron 常用预设（新建定时器时给用户点选，不用背表达式） */
-export const CRON_PRESETS: { label: string; value: string; desc: string }[] = [
-  { label: '每天凌晨 3 点', value: '0 3 * * *', desc: '0 3 * * *' },
-  { label: '每天凌晨 1 点', value: '0 1 * * *', desc: '0 1 * * *' },
-  { label: '每 6 小时', value: '0 */6 * * *', desc: '0 */6 * * *' },
-  { label: '每周一凌晨 2 点', value: '0 2 * * 1', desc: '0 2 * * 1' },
-  { label: '每月 1 号凌晨 2 点', value: '0 2 1 * *', desc: '0 2 1 * *' },
+/**
+ * cron 常用预设（新建定时器时给用户点选，不用背表达式）
+ *
+ * `desc` 只放表达式本身，给人看「选了哪条规则」；
+ * `label` 是自然语言说明，取词走 {@link cronPresetLabel}。
+ */
+export const CRON_PRESETS: { labelKey: string; value: string; desc: string }[] = [
+  { labelKey: 'certd.cron.dailyAt3', value: '0 3 * * *', desc: '0 3 * * *' },
+  { labelKey: 'certd.cron.dailyAt1', value: '0 1 * * *', desc: '0 1 * * *' },
+  { labelKey: 'certd.cron.every6h', value: '0 */6 * * *', desc: '0 */6 * * *' },
+  { labelKey: 'certd.cron.weeklyMon2', value: '0 2 * * 1', desc: '0 2 * * 1' },
+  { labelKey: 'certd.cron.monthly1st2', value: '0 2 1 * *', desc: '0 2 1 * *' },
 ]
+
+/** cron 预设 → 当前语言说明 */
+export function cronPresetLabel(preset: { labelKey: string }): string {
+  return t(preset.labelKey)
+}
 
 /** 阶段里设置了「失败继续」的任务（卡片上用来说明容错） */
 export function stageIgnoreErrors(stage: PipelineStage): PipelineTask[] {

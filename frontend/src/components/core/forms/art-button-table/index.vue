@@ -1,8 +1,14 @@
 <!-- 表格按钮 -->
+<!--
+  shadcn 规范：表格行内操作用「ghost icon button」——
+  32px 方块、8px 圆角、透明底，默认 muted 图标，悬停出现 accent 底。
+  不再给图标铺一层彩色软底（bg-info/12 那种），一列里出现三种色块就花了；
+  只有 delete 保留 destructive 前景色，作为唯一的高危提示。
+-->
 <template>
   <div
     :class="[
-      'inline-flex items-center justify-center size-8 mr-2.5 text-sm c-p rounded-lg align-middle',
+      'art-table-btn inline-flex items-center justify-center size-8 text-sm c-p rounded-lg align-middle',
       buttonClass
     ]"
     :style="{ backgroundColor: buttonBgColor, color: iconColor }"
@@ -34,13 +40,13 @@
     (e: 'click'): void
   }>()
 
-  // 默认按钮配置
+  // 默认按钮配置（颜色全部走语义令牌：muted 图标 / accent 悬停底 / destructive 危险）
   const defaultButtons = {
-    add: { icon: 'ri:add-fill', class: 'bg-theme/12 text-theme' },
-    edit: { icon: 'ri:pencil-line', class: 'bg-secondary/12 text-secondary' },
-    delete: { icon: 'ri:delete-bin-5-line', class: 'bg-error/12 text-error' },
-    view: { icon: 'ri:eye-line', class: 'bg-info/12 text-info' },
-    more: { icon: 'ri:more-2-fill', class: '' }
+    add: { icon: 'ri:add-fill', class: 'is-ghost' },
+    edit: { icon: 'ri:pencil-line', class: 'is-ghost' },
+    delete: { icon: 'ri:delete-bin-5-line', class: 'is-ghost is-danger' },
+    view: { icon: 'ri:eye-line', class: 'is-ghost' },
+    more: { icon: 'ri:more-2-fill', class: 'is-ghost' }
   } as const
 
   // 获取图标内容

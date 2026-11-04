@@ -507,6 +507,18 @@ _ACCESS_VISUAL: dict[str, tuple[str, str, str]] = {
     "baiducloud": ("simple-icons:baidu", "#2932e1", "百"),
     "trustasia": ("", "#c6272a", "信"),
     "eab": ("mdi:key-variant", "#8b5cf6", "E"),
+    # 新厂商：logo 是联网抓的本地文件（/logos/access/<key>），这里只定品牌色与字母兜底
+    "ucloud": ("", "#1f6fe5", "U"),
+    "cmcc": ("", "#0084c8", "移"),
+    "ksyun": ("", "#e60012", "金"),
+    "rainyun": ("", "#7c3aed", "雨"),
+    "acepanel": ("", "#111827", "A"),
+    "baiducce": ("", "#2932e1", "百"),
+    "esxi": ("", "#607078", "E"),
+    "fnos": ("", "#0f766e", "飞"),
+    # 托管 K8s：复用阿里 / 腾讯品牌图
+    "ack": ("", "#ff6a00", "阿"),
+    "tke": ("", "#006eff", "腾"),
 }
 
 #: Iconify 上没有的品牌，logo 是手绘矢量（同放在 logos/access/ 下，同样是 SVG）。
@@ -546,6 +558,12 @@ _ACCESS_LOGO_EXT: dict[str, str] = {
     "kuocaicdn": "png",
     "woai": "png",
     "ctyun": "png",
+    # 新厂商的 logo 是官网 favicon 转的 PNG
+    "ucloud": "png",
+    "ksyun": "png",
+    "rainyun": "png",
+    "acepanel": "png",
+    "fnos": "png",
 }
 
 
@@ -1782,6 +1800,49 @@ TASK_PLUGINS: list[dict[str, Any]] = [
         "outputs": [],
     },
 ]
+
+# ---------------------------------------------------------------- 新厂商插件
+# 新增的云厂商部署插件（优刻得 / 移动云 / 金山云 / 雨云 / AcePanel / 飞牛 / ESXi / 百度 CCE …）
+# 各自放在 services/deploy_vendor_<厂商>.py：元数据 + handler 一体，这里统一并入。
+from .services.deploy_vendor_registry import collect as _collect_vendor_plugins  # noqa: E402
+
+_VENDOR_PLUGINS, _VENDOR_ACCESS_TYPES = _collect_vendor_plugins()
+#: 新厂商部署任务卡的 logo：没走 access 的（飞牛 / ESXi / 百度 CCE）在这里点名
+_VENDOR_PLUGIN_LOGOS = {
+    "DeployToFnOs": "/logos/access/fnos.png",
+    "DeployToEsxi": "/logos/access/esxi.svg",
+    "DeployToBaiduCce": "/logos/access/baiducce.svg",
+}
+if _VENDOR_PLUGINS:
+    TASK_PLUGINS.extend(_VENDOR_PLUGINS)
+    for _plugin in _VENDOR_PLUGINS:
+        _logo = _VENDOR_PLUGIN_LOGOS.get(_plugin["type"], "")
+        if not _logo:
+            for _input in _plugin.get("inputs") or []:
+                _types = _input.get("accessTypes") or []
+                if _input.get("component") == "access" and _types:
+                    if _types[0] in _ACCESS_VISUAL:
+                        _logo = _brand_logo(_types[0])
+                    break
+        _plugin.setdefault("short", (_plugin.get("name") or "?")[:1])
+        _plugin.setdefault("logoFile", _logo)
+        _plugin.setdefault("color", "#909399")
+if _VENDOR_ACCESS_TYPES:
+    ACCESS_TYPES.update(_VENDOR_ACCESS_TYPES)
+    # 上面的外观装饰只跑过内置授权类型，新厂商这里补一次（模块里给了就用模块的）
+    for _key in _VENDOR_ACCESS_TYPES:
+        _meta = ACCESS_TYPES[_key]
+        _meta.setdefault("capabilities", [_meta.get("category", "cloud")])
+        _logo, _color, _short = _ACCESS_VISUAL.get(
+            _key, (_meta.get("logo", ""), _meta.get("color", "#909399"), ""))
+        _cat = _CATEGORY_BY_KEY.get(_meta.get("category", "cloud"), {})
+        _meta.setdefault("logo", _logo)
+        _meta.setdefault("color", _color)
+        _meta.setdefault("short", _short or (_meta.get("name") or "?")[:1].upper())
+        _meta.setdefault("categoryName", _cat.get("name", _meta.get("category")))
+        _meta.setdefault("categoryColor", _cat.get("color", "#909399"))
+        _meta.setdefault("favicon", "")
+        _meta.setdefault("logoFile", _brand_logo(_key))
 
 # 有些插件是直接写在 TASK_PLUGINS 里的（没走 _deploy()），这里统一补上 logo/品牌色
 #: 授权类型的 logo 图标名 → 品牌 key，部署任务据此复用同一张本地 SVG

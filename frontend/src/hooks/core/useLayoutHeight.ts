@@ -23,7 +23,7 @@ import { useElementSize } from '@vueuse/core'
  * 页面容器高度配置
  */
 interface LayoutHeightOptions {
-  /** 额外的间距（默认 15px） */
+  /** 额外的间距（默认 15 + 页面纵向内边距之和） */
   extraSpacing?: number
   /** 是否自动更新 CSS 变量（默认 true） */
   updateCssVar?: boolean
@@ -31,8 +31,26 @@ interface LayoutHeightOptions {
   cssVarName?: string
 }
 
+/**
+ * 页面容器的纵向内边距：`.layout-content` 的 `padding: 20px 0 8px`
+ * （见 `views/index/style.scss`）。
+ *
+ * 这个高度必须算进 extraSpacing：容器高度 = 100vh - 头部 - 内容头 - extraSpacing，
+ * 而页面又在 `.layout-content` 里被上下各垫了一段内边距 —— 不把它算进去，
+ * 每个页面都会多出 28px 的空白可滚动区域（「能滚但没内容」）。
+ * 改内边距时两处必须一起改。
+ */
+const CONTENT_PADDING_Y = 28
+
+/** 底部留白（保持页面最后一张卡片和视口底边有一点距离） */
+const CONTENT_BOTTOM_GAP = 15
+
 export function useLayoutHeight(options: LayoutHeightOptions = {}) {
-  const { extraSpacing = 15, updateCssVar = true, cssVarName = '--art-full-height' } = options
+  const {
+    extraSpacing = CONTENT_BOTTOM_GAP + CONTENT_PADDING_Y,
+    updateCssVar = true,
+    cssVarName = '--art-full-height'
+  } = options
 
   // 元素引用
   const headerRef = ref<HTMLElement>()
@@ -87,7 +105,11 @@ export function useAutoLayoutHeight(
   headerIds: string[] = ['app-header', 'app-content-header'],
   options: LayoutHeightOptions = {}
 ) {
-  const { extraSpacing = 15, updateCssVar = true, cssVarName = '--art-full-height' } = options
+  const {
+    extraSpacing = CONTENT_BOTTOM_GAP + CONTENT_PADDING_Y,
+    updateCssVar = true,
+    cssVarName = '--art-full-height'
+  } = options
 
   // 创建元素引用
   const headerRef = ref<HTMLElement>()

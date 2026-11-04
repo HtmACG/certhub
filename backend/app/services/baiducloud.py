@@ -45,7 +45,8 @@ def _encode(value) -> str:
 
 
 def _sign(config: dict, method: str, path: str,
-          params: dict | None = None, expiration: int = 1800) -> dict:
+          params: dict | None = None, expiration: int = 1800,
+          host: str = HOST) -> dict:
     ak = (config.get("accessKeyId") or "").strip()
     sk = (config.get("accessKeySecret") or "").strip()
     if not ak or not sk:
@@ -59,7 +60,7 @@ def _sign(config: dict, method: str, path: str,
     query = "&".join(
         f"{_encode(k)}={_encode(v)}" for k, v in sorted((params or {}).items())
     )
-    signed = {"host": HOST, "x-bce-date": timestamp}
+    signed = {"host": host, "x-bce-date": timestamp}
     canonical_headers = "\n".join(f"{k}:{_encode(v)}" for k, v in sorted(signed.items()))
     signed_headers = ";".join(sorted(signed))
 
@@ -69,19 +70,19 @@ def _sign(config: dict, method: str, path: str,
     signature = hmac.new(signing_key.encode(), canonical_request.encode(),
                          hashlib.sha256).hexdigest()
     return {
-        "Host": HOST,
+        "Host": host,
         "x-bce-date": timestamp,
         "Authorization": f"{auth_prefix}/{signed_headers}/{signature}",
     }
 
 
 def call(config: dict, method: str, path: str, params: dict | None = None,
-         body: dict | None = None, timeout: int = 30) -> dict:
-    """调一次 CDN 接口，返回 JSON（错误压成一行人话）。"""
-    headers = _sign(config, method, path, params)
+         body: dict | None = None, timeout: int = 30, host: str = HOST) -> dict:
+    """调一次 BCE 接口，返回 JSON（错误压成一行人话）。"""
+    headers = _sign(config, method, path, params, host=host)
     if body is not None:
         headers["Content-Type"] = "application/json; charset=utf-8"
-    url = f"https://{HOST}{path}"
+    url = f"https://{host}{path}"
     try:
         resp = net.request(method.upper(), url, params=params, json=body,
                            headers=headers, timeout=timeout)

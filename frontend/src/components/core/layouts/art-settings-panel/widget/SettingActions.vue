@@ -87,7 +87,8 @@
     { comment: '边框模式', key: 'boxBorderMode' },
     { comment: '页面过渡效果', key: 'pageTransition' },
     { comment: '标签页样式', key: 'tabStyle' },
-    { comment: '自定义圆角', key: 'customRadius' },
+    // 设计语言已固定为 shadcn/ui：圆角由 --radius 统一控制（控件 6px / 卡片 8px），
+    // 不再提供「自定义圆角」，否则会出现同一页两套圆角。
     { comment: '容器宽度', key: 'containerWidth', enumMap: ENUM_MAPS.containerWidth },
     { comment: '节日日期', key: 'festivalDate', forceValue: '' }
   ]

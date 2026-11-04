@@ -8,11 +8,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import audit, fail, get_current_user, ok, page_no
+from ..deps import audit, fail, get_current_user, ok, page_no, require_perm
 from ..models import SiteMonitor, User
 from ..services.scheduler import check_site
 
-router = APIRouter(prefix="/api/monitor", tags=["monitor"])
+router = APIRouter(prefix="/api/monitor", tags=["monitor"],
+                   dependencies=[Depends(require_perm("monitor"))])
 
 
 def _fmt(dt) -> str:

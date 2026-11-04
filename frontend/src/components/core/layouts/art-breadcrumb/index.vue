@@ -22,7 +22,7 @@
         </div>
         <div
           v-if="!isLastItem(index) && item.meta?.title"
-          class="mx-1 text-sm not-italic text-g-500"
+          class="mx-1.5 text-sm not-italic text-g-500"
           aria-hidden="true"
         >
           /

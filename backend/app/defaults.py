@@ -17,7 +17,11 @@ DEFAULT_SETTINGS: dict[str, dict] = {
         # ---- 站点个性化（商业版能力）----
         # logo 支持 http(s) 图片地址，也支持系统设置里上传后存下来的 data:image/... 内联图
         "logo": "",
+        # 登录页背景图：同样存 data:image/... 内联图，前端限制原始文件 ≤ 1MB
+        "loginBackground": "",
         "loginNotice": "",
+        # GitHub 仓库（owner/repo）：关于页的更新记录 / 检查更新用
+        "githubRepo": "HtmACG/certhub",
         "homeNotice": "",
         "hideBrand": False,
     },
@@ -28,6 +32,8 @@ DEFAULT_SETTINGS: dict[str, dict] = {
         # 密码输错几次之后开始要求图形验证码（默认开启，失败 1 次就要）
         "captchaEnabled": True,
         "captchaAfter": 1,
+        # 登录成功给用户邮箱发提醒（用户没填邮箱 / 没配邮件渠道时自动跳过）
+        "loginNotify": True,
     },
     "notify": {
         "expireDays": 15,

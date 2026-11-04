@@ -9,6 +9,8 @@ backend/data/
 node_modules/
 frontend/dist/
 frontend/dist.bak-*/
+webui/dist/
+webui/dist.bak-*/
 .pnpm-store/
 
 # 系统

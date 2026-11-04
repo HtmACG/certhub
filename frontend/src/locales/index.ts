@@ -109,15 +109,31 @@ const i18n: I18n = createI18n(i18nOptions)
 
 /**
  * 翻译函数类型
+ *
+ * 第二个参数是命名插值（`{n}` / `{user}` 这种），vue-i18n 的 `t(key, named)` 形式。
+ * 这里显式带上，否则业务里 `$t('xxx', { n: 3 })` 全部报 TS2554。
  */
 interface Translation {
-  (key: string): string
+  (key: string, named?: Record<string, unknown>): string
 }
 
 /**
  * 全局翻译函数
  * 可在任何地方使用，无需导入 useI18n
+ *
+ * ⚠️ 在 `setup` / 模块函数里调用时是**快照**，不会跟随语言切换；
+ * 需要随语言变化重新求值的，放进 `computed`。
  */
-export const $t = i18n.global.t as Translation
+export const $t = i18n.global.t as unknown as Translation
+
+/**
+ * i18n 实例本身（具名导出）
+ *
+ * 除了 `$t`，业务侧还需要：
+ * - `i18n.global.t(key, named)` —— 带插值的翻译（耗时、剩余天数、批量删除数…）
+ * - `i18n.global.te(key)` —— 判断词条是否存在，用于「路由标题既可能是 key 也可能已被插件翻译」
+ * - `i18n.global.locale` —— 响应式语言值，`computed` 里读它可让切语言后自动重算
+ */
+export { i18n }
 
 export default i18n

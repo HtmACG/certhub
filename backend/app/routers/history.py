@@ -8,11 +8,12 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import fail, get_current_user, ok, page_no
+from ..deps import fail, get_current_user, ok, page_no, require_perm
 from ..models import History, User
 from ..services import engine, logbus
 
-router = APIRouter(prefix="/api/history", tags=["history"])
+router = APIRouter(prefix="/api/history", tags=["history"],
+                   dependencies=[Depends(require_perm("history"))])
 
 
 def _fmt(dt) -> str:

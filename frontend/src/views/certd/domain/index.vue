@@ -19,7 +19,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton type="primary" @click="openCreate">
-              <ArtSvgIcon icon="ri:add-line" class="mr-1" />新增域名
+              <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.domain.create') }}
             </ElButton>
             <ElButton
               type="danger"
@@ -29,7 +29,7 @@
               @click="removeSelected"
             >
               <ArtSvgIcon icon="ri:delete-bin-line" class="mr-1" />
-              批量删除<template v-if="selectedIds.length">（{{ selectedIds.length }}）</template>
+              {{ $t('certd.common.batchDelete') }}<template v-if="selectedIds.length"> ({{ selectedIds.length }})</template>
             </ElButton>
           </ElSpace>
         </template>
@@ -49,13 +49,13 @@
           <ElTag size="small" effect="plain">{{ verifyText(row.verifyType) }}</ElTag>
         </template>
         <template #accessId="{ row }">
-          <span v-if="!row.accessId" class="cell-sub">未绑定</span>
+          <span v-if="!row.accessId" class="cell-sub">{{ $t('certd.domain.unbound') }}</span>
           <span v-else>{{ accessName(row.accessId) }}</span>
         </template>
         <template #operation="{ row }">
           <div class="cell-actions">
-            <ElButton link @click="openEdit(row)">编辑</ElButton>
-            <ElButton link type="danger" @click="remove(row)">删除</ElButton>
+            <ElButton link @click="openEdit(row)">{{ $t('certd.common.edit') }}</ElButton>
+            <ElButton link type="danger" @click="remove(row)">{{ $t('certd.common.delete') }}</ElButton>
           </div>
         </template>
       </ArtTable>
@@ -63,22 +63,22 @@
 
     <ElDialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑域名' : '新增域名'"
+      :title="editingId ? $t('certd.domain.editTitle') : $t('certd.domain.create')"
       width="min(520px, 94vw)"
       destroy-on-close
     >
       <ElForm label-position="top">
-        <ElFormItem label="域名">
+        <ElFormItem :label="$t('certd.domain.domainLabel')">
           <ElInput v-model="form.domain" placeholder="example.com 或 *.example.com" />
         </ElFormItem>
-        <ElFormItem label="验证方式">
+        <ElFormItem :label="$t('certd.domain.verifyLabel')">
           <ElRadioGroup v-model="form.verifyType">
-            <ElRadioButton label="dns">DNS 验证</ElRadioButton>
-            <ElRadioButton label="http">HTTP 验证</ElRadioButton>
+            <ElRadioButton label="dns">{{ $t('certd.domain.dnsVerify') }}</ElRadioButton>
+            <ElRadioButton label="http">{{ $t('certd.domain.httpVerify') }}</ElRadioButton>
           </ElRadioGroup>
         </ElFormItem>
-        <ElFormItem label="DNS 授权">
-          <ElSelect v-model="form.accessId" placeholder="可选，绑定后申请证书更快" clearable class="w-full">
+        <ElFormItem :label="$t('certd.domain.accessLabel')">
+          <ElSelect v-model="form.accessId" :placeholder="$t('certd.domain.accessPh')" clearable class="w-full">
             <ElOption
               v-for="item in dnsAccess"
               :key="item.id"
@@ -87,14 +87,14 @@
             />
           </ElSelect>
         </ElFormItem>
-        <ElFormItem label="备注">
-          <ElInput v-model="form.remark" placeholder="可选" />
+        <ElFormItem :label="$t('certd.table.remark')">
+          <ElInput v-model="form.remark" :placeholder="$t('certd.domain.remarkPh')" />
         </ElFormItem>
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="dialogVisible = false">取消</ElButton>
-          <ElButton type="primary" :loading="saving" @click="save">保存</ElButton>
+          <ElButton @click="dialogVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
+          <ElButton type="primary" :loading="saving" @click="save">{{ $t('certd.common.save') }}</ElButton>
         </div>
       </template>
     </ElDialog>
@@ -111,12 +111,20 @@
     updateDomain,
   } from '@/api/certd'
   import { ElMessage, ElMessageBox } from 'element-plus'
+  import { $t } from '@/locales'
   import { useBatchDelete } from '../composables/use-batch-delete'
 
   defineOptions({ name: 'CertdDomain' })
 
   const searchForm = ref<Record<string, any>>({ keyword: undefined })
-  const searchItems = [{ key: 'keyword', label: '域名', type: 'input', placeholder: '搜索域名' }]
+  const searchItems = computed(() => [
+    {
+      key: 'keyword',
+      label: $t('certd.domain.colDomain'),
+      type: 'input',
+      placeholder: $t('certd.domain.searchPlaceholder'),
+    },
+  ])
 
   const {
     columns,
@@ -136,12 +144,12 @@
       apiParams: { current: 1, size: 20 },
       columnsFactory: () => [
         { type: 'selection', width: 48 },
-        { prop: 'domain', label: '域名', minWidth: 220 },
-        { prop: 'verifyType', label: '验证方式', width: 120, useSlot: true },
-        { prop: 'accessId', label: 'DNS 授权', minWidth: 180, useSlot: true },
-        { prop: 'remark', label: '备注', minWidth: 160 },
-        { prop: 'createTime', label: '添加时间', width: 170 },
-        { prop: 'operation', label: '操作', width: 140, fixed: 'right', useSlot: true },
+        { prop: 'domain', label: $t('certd.domain.colDomain'), minWidth: 220 },
+        { prop: 'verifyType', label: $t('certd.domain.colVerifyType'), width: 130, useSlot: true },
+        { prop: 'accessId', label: $t('certd.domain.colAccess'), minWidth: 180, useSlot: true },
+        { prop: 'remark', label: $t('certd.table.remark'), minWidth: 160 },
+        { prop: 'createTime', label: $t('certd.domain.colCreated'), width: 170 },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 150, fixed: 'right', useSlot: true },
       ],
     },
   })
@@ -149,7 +157,7 @@
   /* ---------------- 多选批量删除 ---------------- */
   const { selectedIds, removing, handleSelectionChange, removeSelected } = useBatchDelete(
     deleteDomain,
-    { label: '域名', nameOf: (row: any) => row.domain, onDone: () => refreshData() }
+    { label: () => $t('certd.domain.itemLabel'), nameOf: (row: any) => row.domain, onDone: () => refreshData() }
   )
 
   const dnsAccess = ref<any[]>([])
@@ -197,7 +205,7 @@
 
   const save = async () => {
     if (!form.domain.trim()) {
-      ElMessage.warning('请填写域名')
+      ElMessage.warning($t('certd.domain.domainRequired'))
       return
     }
     const payload = { ...form, accessId: form.accessId || 0 }
@@ -213,9 +221,13 @@
   }
 
   const remove = async (row: any) => {
-    await ElMessageBox.confirm('确定删除域名「' + row.domain + '」吗？', '删除域名', { type: 'warning' })
+    await ElMessageBox.confirm($t('certd.domain.confirmDelete', { name: row.domain }), $t('certd.domain.deleteTitle'), {
+      type: 'warning',
+      confirmButtonText: $t('certd.common.confirm'),
+      cancelButtonText: $t('certd.common.cancel'),
+    })
     await deleteDomain(row.id)
-    ElMessage.success('已删除')
+    ElMessage.success($t('certd.common.deleted'))
     refreshData()
   }
 

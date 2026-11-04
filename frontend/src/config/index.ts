@@ -118,14 +118,16 @@ const appConfig: SystemConfig = {
   ],
   // 系统主色
   systemMainColor: [
-    // 默认主色取 Google Blue，整体观感对齐 Material 3
-    '#1a73e8',
-    '#B48DF3',
-    '#1D84FF',
-    '#1e8e3e',
-    '#38C0FC',
-    '#F9901F',
-    '#FF80C8'
+    // 默认主色 = shadcn/ui 的 primary（neutral-900 #18181b）。
+    // shadcn 的默认主题里 primary 就是「近黑」，靠色块反差表达层级，
+    // 而不是靠高饱和品牌色，所以这里第一项必须是它。
+    '#18181b',
+    '#2563eb',
+    '#7c3aed',
+    '#059669',
+    '#0891b2',
+    '#ea580c',
+    '#db2777'
   ] as const,
   // 快速入口配置
   fastEnter: fastEnterConfig,

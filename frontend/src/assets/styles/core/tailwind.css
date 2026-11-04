@@ -16,19 +16,20 @@
   --art-warning: oklch(0.78 0.14 75.5);
   --art-danger: oklch(0.68 0.22 25.3);
 
-  /* Gray Scale - Light Mode */
-  --art-gray-100: #f9fafb;
-  --art-gray-200: #f2f4f5;
-  --art-gray-300: #e6eaeb;
-  --art-gray-400: #dbdfe1;
-  --art-gray-500: #949eb7;
-  --art-gray-600: #7987a1;
-  --art-gray-700: #4d5875;
-  --art-gray-800: #383853;
-  --art-gray-900: #323251;
+  /* Gray Scale - Light Mode
+     对齐 shadcn 用的 Tailwind neutral 阶梯（原来带蓝紫色偏，跟新主色不是一套）。 */
+  --art-gray-100: #f5f5f5;
+  --art-gray-200: #e5e5e5;
+  --art-gray-300: #d4d4d4;
+  --art-gray-400: #a3a3a3;
+  --art-gray-500: #737373;
+  --art-gray-600: #525252;
+  --art-gray-700: #404040;
+  --art-gray-800: #262626;
+  --art-gray-900: #171717;
 
   /* Border Colors */
-  --art-card-border: rgba(0, 0, 0, 0.08);
+  --art-card-border: hsl(0 0% 89.8%);
 
   --default-border: #e2e8ee;
   --default-border-dashed: #dbdfe9;
@@ -52,35 +53,35 @@
   /* Base Colors */
   --art-color: #000000;
 
-  /* Gray Scale - Dark Mode */
-  --art-gray-100: #110f0f;
-  --art-gray-200: #17171c;
-  --art-gray-300: #393946;
-  --art-gray-400: #505062;
-  --art-gray-500: #73738c;
-  --art-gray-600: #8f8fa3;
-  --art-gray-700: #ababba;
-  --art-gray-800: #c7c7d1;
-  --art-gray-900: #e3e3e8;
+  /* Gray Scale - Dark Mode（Tailwind neutral 阶梯，与 shadcn dark 一致） */
+  --art-gray-100: #171717;
+  --art-gray-200: #262626;
+  --art-gray-300: #404040;
+  --art-gray-400: #525252;
+  --art-gray-500: #737373;
+  --art-gray-600: #a3a3a3;
+  --art-gray-700: #d4d4d4;
+  --art-gray-800: #e5e5e5;
+  --art-gray-900: #fafafa;
 
   /* Border Colors */
-  --art-card-border: rgba(255, 255, 255, 0.08);
+  --art-card-border: hsl(0 0% 14.9%);
 
-  --default-border: rgba(255, 255, 255, 0.1);
-  --default-border-dashed: #363843;
+  --default-border: hsl(0 0% 14.9%);
+  --default-border-dashed: hsl(0 0% 14.9%);
 
   /* Background Colors */
-  --default-bg-color: #070707;
-  --default-box-color: #161618;
+  --default-bg-color: hsl(0 0% 3.9%);
+  --default-box-color: hsl(0 0% 3.9%);
 
   /* Hover Color */
-  --art-hover-color: #252530;
+  --art-hover-color: hsl(0 0% 14.9%);
 
   /* Active Color */
-  --art-active-color: #202226;
+  --art-active-color: hsl(0 0% 14.9%);
 
   /* Element Component Active Color */
-  --art-el-active-color: #2e2e38;
+  --art-el-active-color: hsl(0 0% 14.9%);
 }
 
 /* ==================== Tailwind Theme Configuration ==================== */
@@ -100,14 +101,18 @@
   /* Active Color */
   --color-el-active-color: var(--art-active-color);
 
-  /* ElementPlus Theme Colors */
-  --color-primary: var(--art-primary);
-  --color-secondary: var(--art-secondary);
-  --color-error: var(--art-error);
-  --color-info: var(--art-info);
-  --color-success: var(--art-success);
-  --color-warning: var(--art-warning);
-  --color-danger: var(--art-danger);
+  /* ElementPlus Theme Colors
+     这些是给 tailwind 的 bg-primary / text-success 之类的工具类用的。
+     取值必须跟 shadcn 的语义令牌一致，否则同一页会出现
+     「Element 组件是近黑主色、tailwind 类还是亮蓝」的割裂。
+     （原来这里是 oklch(0.7 0.23 260) 那种高饱和亮蓝。） */
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-error: var(--destructive);
+  --color-info: var(--muted-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--destructive);
 
   /* Gray Scale Colors (Auto-adapts to dark mode) */
   --color-g-100: var(--art-gray-100);

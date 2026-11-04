@@ -74,6 +74,41 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def permissions_of(user: User, db: Session) -> set[str]:
+    """当前用户的有效权限集合；管理员返回 {"*"}。"""
+    from .models import UserGroup
+    from .permissions import PERMISSION_KEYS, normalize
+
+    if user.role == "admin":
+        return {"*"}
+    group = db.get(UserGroup, user.group_id or 0)
+    if not group:
+        return set()
+    try:
+        keys = json.loads(group.permissions or "[]")
+    except Exception:
+        keys = []
+    return set(normalize(keys)) & PERMISSION_KEYS
+
+
+def user_can(user: User, db: Session, perm: str) -> bool:
+    perms = permissions_of(user, db)
+    return "*" in perms or perm in perms
+
+
+def require_perm(perm: str):
+    """路由级权限依赖：挂到 APIRouter(dependencies=[...]) 上，整块功能一起控。"""
+
+    def dependency(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+        if user.role == "admin":
+            return user
+        if not user_can(user, db, perm):
+            raise HTTPException(status_code=403, detail="没有该功能的访问权限，请联系管理员")
+        return user
+
+    return dependency
+
+
 def page_no(page: int = Query(1, ge=1), current: int = Query(0, ge=0)) -> int:
     """页码参数：前端的 useTable 发的是 `current`，后端历史接口用 `page`。
 

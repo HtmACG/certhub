@@ -1,0 +1,1417 @@
+/**
+ * shadcn/ui 组件规范（Element Plus 落点）
+ * =========================================================
+ * tokens 把「颜色」换掉了，这个文件换「形态」：圆角、高度、描边、阴影、焦点环、间距。
+ * 规范全部对照 shadcn/ui 的默认实现（button / input / table / badge / card / dropdown /
+ * dialog / switch / checkbox / tabs / pagination），不自行发挥。
+ *
+ * 单行未写 `.g-scope` 前缀的规则是全局的 —— 登录页、弹层、独立组件都会带上，
+ * 避免出现「内容区是新风格、弹窗还是老风格」的割裂。
+ */
+
+/* ==================== shadcn 语义变量注册到按钮 ==================== */
+/**
+ * Element Plus 的按钮颜色全部取自 `--el-button-*`，而这些变量是在
+ * `.el-button { … }` 里定义的、且排在 vite 注入的组件样式之后。
+ * 只要有一条同权重的 `.el-button` 规则后落笔（比如各页面 scoped 样式里
+ * 顺手写的一条），暗色下就会退回 Element 自己的默认值 —— 表现是
+ * 「暗色里白底按钮变成黑底黑字」。
+ * 这里用 `html .el-button`（权重 0,1,1）抬一档，保证语义变量一定生效。
+ */
+html .el-button {
+  --el-button-border-color: var(--border);
+  --el-button-bg-color: var(--background);
+  --el-button-text-color: var(--foreground);
+}
+
+html .el-button--default,
+html .el-button.is-plain {
+  --el-button-border-color: var(--border);
+  --el-button-bg-color: var(--secondary);
+  --el-button-text-color: var(--foreground);
+}
+
+html .el-button--primary {
+  --el-button-border-color: var(--brand);
+  --el-button-bg-color: var(--brand);
+  --el-button-text-color: var(--brand-foreground);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--brand) 90%, transparent);
+  --el-button-hover-border-color: color-mix(in srgb, var(--brand) 90%, transparent);
+  --el-button-hover-text-color: var(--brand-foreground);
+}
+
+/* ==================== 按钮 ==================== */
+/**
+ * shadcn button：
+ *   h-9(36px) px-4 text-sm font-medium rounded-md(6px) shadow-xs
+ *   variant default  = 纯色 primary（浅色主题下是近黑 #18181b，不是蓝）
+ *   variant outline  = 白底 + 1px border
+ *   variant secondary= muted 底 + 无描边
+ *   variant ghost    = 透明底，hover 才出 accent
+ *   focus-visible    = ring-2 ring-ring ring-offset-2
+ */
+.el-button {
+  --el-button-border-color: var(--border);
+  --el-button-bg-color: var(--background);
+  --el-button-text-color: var(--foreground);
+  --el-button-hover-text-color: var(--foreground);
+  --el-button-hover-bg-color: var(--accent);
+  --el-button-hover-border-color: var(--border);
+  --el-button-active-bg-color: var(--accent);
+  --el-button-active-border-color: var(--border);
+  --el-button-outline-color: var(--ring);
+  --el-button-disabled-bg-color: var(--muted);
+  --el-button-disabled-border-color: var(--border);
+  --el-button-disabled-text-color: color-mix(in srgb, var(--foreground) 50%, transparent);
+
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--foreground);
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-sm);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+
+  /* shadcn 不缩放按钮，禁用 Element 自带的 hover 上浮/变色 */
+  transform: none !important;
+
+  &:hover,
+  &:focus-visible {
+    background-color: var(--accent);
+    border-color: var(--border);
+    color: var(--foreground);
+    transform: none !important;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* 图标型按钮：正好 36×36 的方块 */
+  &.is-circle,
+  &.is-round.is-circle {
+    width: 36px;
+    padding: 0;
+    border-radius: var(--radius-md) !important;
+  }
+
+  /* link / text：ghost 形态 */
+  &.is-link,
+  &.is-text {
+    height: auto;
+    padding: 0;
+    box-shadow: none;
+    background: transparent;
+    border-color: transparent;
+
+    &:hover {
+      background: transparent;
+      border-color: transparent;
+    }
+  }
+
+  &.is-link {
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+      text-underline-offset: 4px;
+    }
+  }
+
+  & + .el-button {
+    margin-left: 8px;
+  }
+
+  &.is-disabled,
+  &.is-disabled:hover,
+  &.is-disabled:focus {
+    color: color-mix(in srgb, var(--foreground) 50%, transparent) !important;
+    background-color: var(--muted) !important;
+    border-color: var(--border) !important;
+    box-shadow: none !important;
+    opacity: 1;
+  }
+}
+
+/* default（主按钮）：实心 primary —— shadcn 里 primary 是近黑/近白，靠色块反差取胜 */
+.el-button--primary {
+  --el-button-text-color: var(--brand-foreground);
+  --el-button-bg-color: var(--brand);
+  --el-button-border-color: var(--brand);
+  --el-button-hover-text-color: var(--brand-foreground);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--brand) 90%, transparent);
+  --el-button-hover-border-color: color-mix(in srgb, var(--brand) 90%, transparent);
+  --el-button-active-bg-color: color-mix(in srgb, var(--brand) 80%, transparent);
+  --el-button-active-border-color: color-mix(in srgb, var(--brand) 80%, transparent);
+  --el-button-disabled-bg-color: var(--brand);
+  --el-button-disabled-border-color: var(--brand);
+  --el-button-disabled-text-color: var(--brand-foreground);
+
+  color: var(--brand-foreground);
+  background-color: var(--brand);
+  border-color: var(--brand);
+  box-shadow: var(--shadow-sm);
+
+  &:hover,
+  &:focus {
+    color: var(--brand-foreground);
+    background-color: color-mix(in srgb, var(--brand) 90%, transparent);
+    border-color: color-mix(in srgb, var(--brand) 90%, transparent);
+  }
+
+  &.is-disabled,
+  &.is-disabled:hover {
+    color: var(--brand-foreground) !important;
+    background-color: color-mix(in srgb, var(--brand) 50%, transparent) !important;
+    border-color: transparent !important;
+  }
+}
+
+/* 朴素按钮 = shadcn 的 secondary */
+.el-button.is-plain,
+.el-button--default {
+  --el-button-text-color: var(--foreground);
+  --el-button-bg-color: var(--secondary);
+  --el-button-border-color: var(--border);
+
+  color: var(--foreground);
+  background-color: var(--secondary);
+  border-color: var(--border);
+
+  &:hover,
+  &:focus {
+    background-color: color-mix(in srgb, var(--accent) 80%, var(--secondary));
+    border-color: var(--border);
+  }
+}
+
+/* 语义按钮：沿用实心底，保证「危险/成功」一眼可辨，但降低饱和度到 Tailwind 600 档 */
+@each $type, $token in (success: success, warning: warning, danger: destructive, error: destructive) {
+  .el-button--#{$type} {
+    --el-button-text-color: var(--#{$token}-foreground);
+    --el-button-bg-color: var(--#{$token});
+    --el-button-border-color: var(--#{$token});
+    --el-button-hover-text-color: var(--#{$token}-foreground);
+    --el-button-hover-bg-color: color-mix(in srgb, var(--#{$token}) 90%, transparent);
+    --el-button-hover-border-color: color-mix(in srgb, var(--#{$token}) 90%, transparent);
+
+    color: var(--#{$token}-foreground);
+    background-color: var(--#{$token});
+    border-color: var(--#{$token});
+
+    &:hover,
+    &:focus {
+      color: var(--#{$token}-foreground);
+      background-color: color-mix(in srgb, var(--#{$token}) 90%, transparent);
+      border-color: color-mix(in srgb, var(--#{$token}) 90%, transparent);
+    }
+  }
+
+  /* 危险按钮的 plain 形态：shadcn 用「浅红底 + 红字」而不是实心红 */
+  .el-button--#{$type}.is-plain {
+    color: var(--#{$token});
+    background-color: var(--background);
+    border-color: color-mix(in srgb, var(--#{$token}) 35%, var(--border));
+
+    &:hover,
+    &:focus {
+      color: var(--#{$token});
+      background-color: color-mix(in srgb, var(--#{$token}) 8%, var(--background));
+      border-color: color-mix(in srgb, var(--#{$token}) 50%, var(--border));
+    }
+  }
+
+  /* 表格里的文字按钮 */
+  .el-button--#{$type}.is-link,
+  .el-button--#{$type}.is-text {
+    color: var(--#{$token});
+    background: transparent;
+    border-color: transparent;
+
+    &:hover {
+      background: color-mix(in srgb, var(--#{$token}) 8%, transparent);
+    }
+  }
+}
+
+.el-button--primary.is-link,
+.el-button--primary.is-text {
+  color: var(--foreground);
+  background: transparent;
+  border-color: transparent;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--accent);
+    border-color: transparent;
+  }
+}
+
+/* 小号按钮 */
+.el-button--small {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  border-radius: var(--radius-sm) !important;
+}
+
+.el-button--large {
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--radius-md) !important;
+}
+
+/* ==================== 输入框 / 选择器 / 文本域 ==================== */
+/**
+ * shadcn input：
+ *   h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs
+ *   placeholder = muted-foreground
+ *   focus-visible = border-ring + ring-[3px] ring-ring/50
+ * 注意 shadcn 不是「向内 1px 变蓝」，而是 3px 半透明光环 + 描边加深。
+ */
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-input-tag__wrapper,
+.el-input-number .el-input__wrapper {
+  min-height: 36px;
+  padding: 0 12px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--foreground);
+  background-color: transparent !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: inset 0 0 0 1px var(--input) !important;
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+
+  &:hover {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 25%, transparent) !important;
+  }
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus,
+.el-input-tag__wrapper.is-focused {
+  box-shadow:
+    inset 0 0 0 1px var(--ring),
+    0 0 0 3px color-mix(in srgb, var(--ring) 15%, transparent) !important;
+}
+
+/* 暗色主题下 primary 是近白，用 foreground 当 ring 太刺眼，降一档 */
+.dark .el-input__wrapper.is-focus,
+.dark .el-select__wrapper.is-focused,
+.dark .el-textarea__inner:focus,
+.dark .el-input-tag__wrapper.is-focused {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--foreground) 40%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--foreground) 12%, transparent) !important;
+}
+
+.el-input__inner,
+.el-textarea__inner {
+  font-size: 14px;
+  color: var(--foreground);
+
+  &::placeholder {
+    color: var(--muted-foreground);
+  }
+}
+
+.el-input__wrapper.is-disabled,
+.el-select__wrapper.is-disabled,
+.el-textarea.is-disabled .el-textarea__inner,
+.el-input.is-disabled .el-input__wrapper {
+  background-color: var(--muted) !important;
+  box-shadow: inset 0 0 0 1px var(--border) !important;
+  opacity: 1;
+}
+
+/* 前后缀：跟主体同色，不要另起一块灰底 */
+.el-input-group__append,
+.el-input-group__prepend {
+  background-color: var(--secondary);
+  border-color: var(--input);
+  box-shadow: none;
+}
+
+.el-select__placeholder {
+  color: var(--muted-foreground);
+}
+
+.el-select__caret,
+.el-input__suffix-inner {
+  color: var(--muted-foreground);
+}
+
+/**
+ * 输入框里的行内「前置/后缀」文字（Element 的 el-input prefix/suffix 插槽，
+ * 比如「Key ID：」「接口环境：」这种灰字）。
+ * shadcn 里它不是描边块，也不该有填充色 —— 透明底 + muted 字，靠它自己在行内的位置区分。
+ * 模板里这类块常常带 scoped 类名 + 内联底色，所以这里用 html 前缀并允许 !important。
+ */
+html .el-input__prefix,
+html .el-input__suffix {
+  color: var(--muted-foreground);
+}
+
+html .el-input__prefix-inner > *,
+html .el-input__suffix-inner > * {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: var(--muted-foreground);
+}
+
+/* 表格里「键值对」那种小胶囊：shadcn 的 secondary badge，中性、无描边 */
+html .el-tag.el-tag--info,
+html .el-tag--info.el-tag--plain {
+  --el-tag-text-color: var(--muted-foreground);
+  --el-tag-bg-color: var(--muted);
+  --el-tag-border-color: transparent;
+}
+
+/* ==================== 表单 ==================== */
+.el-form-item {
+  margin-bottom: 20px;
+}
+
+.el-form-item__label {
+  height: auto !important;
+  margin-bottom: 8px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4 !important;
+  color: var(--foreground);
+}
+
+.el-form-item__error {
+  padding-top: 6px;
+  font-size: 12px;
+  color: var(--destructive);
+}
+
+.el-form-item.is-error .el-input__wrapper,
+.el-form-item.is-error .el-select__wrapper,
+.el-form-item.is-error .el-textarea__inner {
+  box-shadow:
+    inset 0 0 0 1px var(--destructive),
+    0 0 0 3px color-mix(in srgb, var(--destructive) 15%, transparent) !important;
+}
+
+/* ==================== 表格 ==================== */
+/**
+ * shadcn table：
+ *   表头 h-10 px-2 text-sm font-medium text-muted-foreground，无底色，只有一条下边框
+ *   行 border-b，hover = muted/50
+ *   单元格 py-3，不用竖线
+ */
+.el-table {
+  --el-table-border-color: var(--border);
+  --el-table-header-bg-color: var(--card);
+  --el-table-bg-color: var(--card);
+  --el-table-tr-bg-color: var(--card);
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--muted) 60%, transparent);
+  --el-table-text-color: var(--foreground);
+  --el-table-header-text-color: var(--muted-foreground);
+  --el-table-expanded-cell-bg-color: var(--card);
+
+  font-family: var(--font-sans);
+  font-size: 14px;
+  background-color: transparent;
+
+  /* 去掉 Element 默认的整圈外框，shadcn 的表格是「通栏 + 细分隔线」 */
+  &::before,
+  &::after {
+    display: none;
+  }
+
+  th.el-table__cell {
+    height: 44px;
+    padding: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    background-color: var(--card);
+
+    .cell {
+      padding: 0 12px;
+    }
+
+    &.is-leaf {
+      border-bottom: 1px solid var(--border);
+    }
+  }
+
+  td.el-table__cell {
+    padding: 12px 0;
+    font-size: 14px;
+    color: var(--foreground);
+    border-bottom: 1px solid var(--border);
+
+    .cell {
+      padding: 0 12px;
+      line-height: 1.5;
+    }
+  }
+
+  .el-table__inner-wrapper::before {
+    display: none;
+  }
+
+  .el-table__body tr:last-child td.el-table__cell {
+    border-bottom: 0;
+  }
+
+  /* 空状态：shadcn 是一行 muted 文案，不是插画 */
+  .el-table__empty-block {
+    min-height: 160px;
+  }
+
+  .el-table__empty-text {
+    font-size: 14px;
+    color: var(--muted-foreground);
+  }
+}
+
+/* 表格内的文字按钮：shadcn 是 28px 高的 ghost，不是蓝色链接 */
+/* 注意：Element 的 link/text 按钮前景色取自 `--el-button-text-color`，
+   而它是定义在 `.el-button--primary.is-link` 这类「三连」选择器里的，
+   只写 height/padding 会把颜色留在主色上 —— 暗色主色是近白，看起来像「白块」。
+   所以这里连语义变量一起接管，并且用 `html` 前缀压过 Element 自身的规则。 */
+html .cell-actions .el-button.is-link,
+html .el-table .el-button.is-link,
+html .el-table .el-button.is-text,
+html .el-table .el-button.is-link.is-danger,
+html .el-table .el-button.is-text.is-danger {
+  --el-button-text-color: var(--foreground);
+  --el-button-hover-text-color: var(--foreground);
+  --el-button-active-text-color: var(--foreground);
+  --el-button-hover-link-text-color: var(--foreground);
+  --el-button-hover-bg-color: var(--accent);
+  --el-button-hover-border-color: transparent;
+}
+
+html .el-table .el-button.is-link.is-danger,
+html .el-table .el-button.is-text.is-danger,
+html .el-table .el-button--danger.is-link {
+  --el-button-text-color: var(--destructive);
+  --el-button-hover-text-color: var(--destructive);
+  --el-button-active-text-color: var(--destructive);
+  --el-button-hover-link-text-color: var(--destructive);
+}
+
+.cell-actions .el-button,
+.el-table .el-button.is-link,
+.el-table .el-button.is-text {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm) !important;
+
+  &:hover {
+    background: var(--accent);
+  }
+}
+
+/**
+ * 行内图标按钮（ArtButtonTable）：shadcn 的 ghost icon button
+ * 32px / 8px 圆角 / 透明底 / muted 图标，悬停 accent 底 + foreground 图标。
+ * 只有 error（删除）保留 destructive 前景色。
+ */
+.art-table-btn {
+  color: var(--muted-foreground);
+  background-color: transparent;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+
+  &:hover {
+    color: var(--foreground);
+    background-color: var(--accent) !important;
+  }
+
+  &.is-danger {
+    color: var(--muted-foreground);
+
+    &:hover {
+      color: var(--destructive);
+      background-color: color-mix(in srgb, var(--destructive) 10%, transparent) !important;
+    }
+  }
+}
+
+/* ==================== 标签 / 徽标 ==================== */
+/**
+ * shadcn badge：h-5 rounded-md border px-2 text-xs font-medium
+ * 默认是 outline（细描边 + 无底色），有前景色变体时用浅底 + 深字。
+ */
+/**
+ * Element 的标签颜色同样抽在 `.el-tag--primary{…}` 这类规则里的变量上，
+ * 页面级 scoped 样式（`.certd-pipeline :deep(.el-tag)` 之类的 0,2,x）一旦落笔就会
+ * 把前景色/底色覆盖回 Element 的默认值 —— 外面再写 `.el-tag` 是压不住的。
+ * 统一用 `html .el-tag`（0,1,1）抬一档，并直接从变量层接管：
+ *   · 所有变体默认 = shadcn 的「secondary badge」：muted 底 + 中性字 + 无描边
+ *   · primary / success / warning / danger 等语义色 = 淡色底 + 语义深字
+ *   · effect="dark" = 实心
+ */
+html .el-tag {
+  --el-tag-border-radius: var(--radius-sm);
+  /* 兜底：页面用 :color 内联了任意色值，也让它退回中性，避免暗色下出现浅色块 */
+  --el-tag-text-color: var(--secondary-foreground);
+  --el-tag-bg-color: var(--secondary);
+  --el-tag-border-color: transparent;
+
+  height: 22px;
+  padding: 0 8px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--el-tag-text-color);
+  background-color: var(--el-tag-bg-color);
+  border: 1px solid var(--el-tag-border-color);
+  border-radius: var(--radius-sm);
+
+  &.el-tag--small {
+    height: 20px;
+    padding: 0 6px;
+    font-size: 11.5px;
+  }
+
+  &.el-tag--large {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  /* 分类标签（业务里最常见的 type="primary" + plain）：中性，靠图标和文字区分 */
+  &.el-tag--primary {
+    --el-tag-text-color: var(--secondary-foreground);
+    --el-tag-bg-color: var(--secondary);
+    --el-tag-border-color: transparent;
+  }
+
+  @each $type, $token in (success: success, warning: warning, danger: destructive, error: destructive, info: muted-foreground) {
+    &.el-tag--#{$type} {
+      --el-tag-text-color: var(--#{$token});
+      --el-tag-bg-color: color-mix(in srgb, var(--#{$token}) 12%, transparent);
+      --el-tag-border-color: color-mix(in srgb, var(--#{$token}) 20%, transparent);
+    }
+  }
+
+  /* effect="dark" 时用实心底 */
+  &.el-tag--primary.el-tag--dark {
+    --el-tag-text-color: var(--brand-foreground);
+    --el-tag-bg-color: var(--brand);
+    --el-tag-border-color: transparent;
+  }
+
+  @each $type, $token in (success: success, warning: warning, danger: destructive, error: destructive, info: muted-foreground) {
+    &.el-tag--#{$type}.el-tag--dark {
+      --el-tag-text-color: var(--#{$token}-foreground);
+      --el-tag-bg-color: var(--#{$token});
+      --el-tag-border-color: transparent;
+    }
+  }
+}
+
+/* ==================== 卡片 ==================== */
+/**
+ * shadcn card：rounded-lg(8px) border bg-card shadow-sm
+ * card-header = p-6 pb-0，card-content = p-6 pt-0
+ *
+ * 注意：业务里的 .art-card / .page-content 之前是「全直角色块」，
+ * 这里统一到 rounded-lg + 细描边，和 shadcn 的 card 一致。
+ */
+.el-card {
+  --el-card-border-color: var(--border);
+  --el-card-bg-color: var(--card);
+
+  background-color: var(--card);
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: none !important;
+
+  .el-card__header {
+    padding: 20px 20px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--card-foreground);
+    border-bottom: 0;
+  }
+
+  .el-card__body {
+    padding: 20px;
+  }
+}
+
+/* ==================== 浮层：弹窗 / 抽屉 / 气泡 / 下拉 ==================== */
+.el-popper.is-light,
+.el-popper.is-dark,
+.el-select__popper,
+.el-dropdown__popper,
+.el-cascader__dropdown,
+.el-picker__popper {
+  --el-bg-color-overlay: var(--popover);
+
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--popover-foreground);
+  background: var(--popover);
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md);
+}
+
+.el-popper.is-dark {
+  color: var(--popover-foreground);
+  background: var(--popover);
+}
+
+.el-popper .el-popper__arrow::before {
+  background: var(--popover) !important;
+  border-color: var(--border) !important;
+}
+
+.el-dropdown-menu,
+.el-select-dropdown__list {
+  padding: 4px;
+  background: var(--popover);
+}
+
+.el-dropdown-menu__item,
+.el-select-dropdown__item {
+  height: 32px;
+  margin-bottom: 2px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 32px;
+  color: var(--popover-foreground);
+  border-radius: var(--radius-sm);
+
+  &:hover,
+  &:focus {
+    color: var(--popover-foreground);
+    background: var(--accent);
+  }
+
+  &.is-selected,
+  &.is-active {
+    color: var(--foreground);
+    background: var(--accent);
+  }
+}
+
+.el-dropdown-menu__item--divided {
+  margin-top: 4px;
+  border-top-color: var(--border);
+}
+
+.el-dropdown-menu__item--divided::before {
+  display: none;
+}
+
+/**
+ * dialog / drawer：shadcn 的 dialog 是 rounded-lg + 无描边 + 只有 sm 阴影，
+ * header 有下边框，footer 有上边框。
+ * 之前这里是 20px 大圆角，和 6px 的控件放在一起像两个系统。
+ */
+.el-dialog {
+  overflow: hidden;
+  padding: 0;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md);
+
+  .el-dialog__header {
+    padding: 20px 24px;
+    margin: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .el-dialog__title {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--foreground);
+  }
+
+  .el-dialog__headerbtn {
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+
+    &:hover {
+      background: var(--accent);
+    }
+  }
+
+  .el-dialog__body {
+    padding: 24px !important;
+    color: var(--foreground);
+  }
+
+  .el-dialog__footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* 旧的「分隔线装饰」在新风格里是多余的 */
+  &.el-dialog-border .el-dialog__body::before,
+  &.el-dialog-border .el-dialog__body::after {
+    display: none;
+  }
+}
+
+/**
+ * 抽屉和 shadcn 的 Sheet 对齐：贴边、无圆角、只有一条 1px 分隔线，
+ * 阴影收窄到「贴边的一层淡影」（Element 默认是 48px 扩散的三层大影，太厚）。
+ */
+html .el-drawer {
+  border-radius: 0 !important;
+  background: var(--popover);
+  box-shadow: var(--sheet-shadow);
+
+  &.ltr,
+  &.rtl {
+    border-top: 0;
+    border-bottom: 0;
+    border-left: 1px solid var(--border);
+  }
+
+  &.rtl {
+    border-right: 0;
+  }
+
+  &.ttb,
+  &.btt {
+    border: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .el-drawer__header {
+    display: flex;
+    align-items: center;
+    min-height: 56px;
+    padding: 0 24px;
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--foreground);
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Element 默认把标题包在 .el-drawer__title 里，字号会再被 .el-drawer__title 拉走 */
+  .el-drawer__title {
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+
+  .el-drawer__close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-right: -6px;
+    color: var(--muted-foreground);
+    border-radius: var(--radius-sm);
+
+    &:hover {
+      color: var(--foreground);
+      background: var(--accent);
+    }
+  }
+
+  .el-drawer__body {
+    padding: 16px 24px 24px;
+  }
+
+  .el-drawer__footer {
+    padding: 12px 24px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+.el-overlay {
+  background-color: hsl(0 0% 0% / 50%);
+}
+
+/* ==================== 消息提示 ==================== */
+/**
+ * shadcn 的 toast（sonner）：白底 + 细描边 + sm 阴影 + 8px 圆角，左侧一个状态图标。
+ */
+.el-message,
+.el-notification {
+  padding: 12px 16px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--popover-foreground);
+  background-color: var(--popover) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md) !important;
+
+  p {
+    font-size: 13px;
+  }
+
+  .el-message__content {
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+
+  /* 状态图标按语义着色，但不给整条消息上色底 */
+  &.el-message--success .el-message__icon {
+    color: var(--success);
+  }
+
+  &.el-message--warning .el-message__icon {
+    color: var(--warning);
+  }
+
+  &.el-message--error .el-message__icon {
+    color: var(--destructive);
+  }
+
+  &.el-message--info .el-message__icon {
+    color: var(--muted-foreground);
+  }
+}
+
+.el-message-box {
+  padding: 0;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md);
+
+  .el-message-box__header {
+    padding: 20px 24px 0;
+  }
+
+  .el-message-box__title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--foreground);
+  }
+
+  .el-message-box__content {
+    padding: 12px 24px 20px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--muted-foreground);
+  }
+
+  .el-message-box__btns {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* ==================== 开关 / 复选 / 单选 ==================== */
+/**
+ * shadcn switch：h-5(20px) w-9(36px) rounded-full
+ *   track 选中 = primary，未选中 = input 灰；thumb = background 白圆点，无投影。
+ *
+ * 结构坑（Element 的 DOM）：
+ *   <div class="el-switch"><span class="el-switch__core"></span><span class="el-switch__action"></span></div>
+ *   · `.el-switch__core` 与 `.el-switch__action` 是 .el-switch 的**兄弟**节点，
+ *     写在 `.el-switch{}` 里的变量传不下去，必须 `html .el-switch …` 全路径命中；
+ *   · 滑块 `width/height` 是内联 style（按 size 计算），普通声明压不过 → 必须 !important；
+ *   · 选中态的 left 由 `.el-switch.is-checked .el-switch__action`（0,3,0）给出
+ *     `calc(100% - 17px)`，是按 12px 滑块留的 gap，换成 16px 后右侧顶出去 3px，
+ *     必须用更高权重直接写死 `left: 18px`；
+ *   · `.el-switch` 是 inline-flex，容器若停在 16px 会把 20px 的轨道压扁，
+ *     滑块随之「上下贴边被切」—— 容器要显式 `height: 20px !important` + `flex: 0 0 auto`。
+ */
+html .el-switch__core {
+  --el-switch-on-color: var(--brand);
+  --el-switch-off-color: color-mix(in srgb, var(--foreground) 18%, var(--background));
+}
+
+html .el-switch .el-switch__core {
+  flex: 0 0 auto;
+  min-width: 36px !important;
+  width: 36px !important;
+  height: 20px !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+  background: color-mix(in srgb, var(--foreground) 18%, var(--background)) !important;
+}
+
+html .el-switch.is-checked .el-switch__core {
+  background: var(--brand) !important;
+}
+
+html .el-switch,
+html .el-switch--small {
+  flex: 0 0 auto;
+  height: 20px !important;
+}
+
+html .el-switch .el-switch__core .el-switch__action,
+html .el-switch.is-checked .el-switch__core .el-switch__action {
+  top: 2px !important;
+  width: 16px !important;
+  height: 16px !important;
+  background: var(--background) !important;
+  box-shadow: none !important;
+  transform: none !important;
+  transition:
+    left 0.2s ease,
+    background-color 0.2s ease !important;
+}
+
+html .el-switch .el-switch__core .el-switch__action {
+  left: 2px !important;
+}
+
+html .el-switch.is-checked .el-switch__core .el-switch__action {
+  left: 18px !important;
+  /* 暗色的 track 是 zinc-300（浅色），白圆点会糊在一起 —— 选中态改成深色圆点 */
+  background: var(--brand-foreground) !important;
+}
+
+/* checkbox / radio：shadcn 是 16px 方/圆，选中填 primary */
+.el-checkbox__inner {
+  width: 16px;
+  height: 16px;
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+}
+
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-checkbox__input.is-indeterminate .el-checkbox__inner {
+  background-color: var(--brand);
+  border-color: var(--brand);
+}
+
+.el-radio__inner {
+  width: 16px;
+  height: 16px;
+  border-color: var(--input);
+}
+
+.el-radio__input.is-checked .el-radio__inner {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.el-checkbox__label,
+.el-radio__label {
+  font-size: 14px;
+  color: var(--foreground);
+}
+
+/* ==================== 分段控件（radio-button / checkbox-button） ==================== */
+.el-radio-button__inner,
+.el-checkbox-button__inner {
+  height: 32px;
+  padding: 0 14px !important;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 32px;
+  color: var(--muted-foreground);
+  background: transparent;
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+
+  &:hover {
+    color: var(--foreground);
+  }
+}
+
+.el-radio-button.is-active .el-radio-button__inner,
+.el-radio-button__original-radio:checked + .el-radio-button__inner,
+.el-checkbox-button.is-checked .el-checkbox-button__inner {
+  color: var(--foreground) !important;
+  background: var(--accent) !important;
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+}
+
+/* ==================== 分页 ==================== */
+/**
+ * shadcn pagination：ghost 方形按钮 36px，当前页是 outline 态（border + 白底）。
+ * Element 的 is-background 是「实心色块」，这里整个换掉。
+ */
+.el-pagination {
+  --el-pagination-button-bg-color: transparent;
+  --el-pagination-hover-color: var(--foreground);
+
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--muted-foreground);
+
+  .el-pager li,
+  .btn-prev,
+  .btn-next {
+    min-width: 32px;
+    height: 32px;
+    margin: 0 2px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--foreground);
+    background: transparent !important;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm) !important;
+
+    &:hover {
+      background: var(--accent) !important;
+    }
+  }
+
+  .el-pager li.is-active {
+    color: var(--foreground) !important;
+    background: var(--background) !important;
+    border-color: var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .el-pagination__total,
+  .el-pagination__jump {
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+
+  .el-select__wrapper {
+    min-height: 32px;
+    box-shadow: inset 0 0 0 1px var(--border) !important;
+  }
+}
+
+/* ==================== 页签 ==================== */
+/**
+ * shadcn tabs：底下一根 1px 分隔线，选中项是 foreground 字 + 2px 下划条。
+ */
+.el-tabs__header {
+  margin-bottom: 16px;
+}
+
+.el-tabs__nav-wrap::after {
+  height: 1px;
+  background-color: var(--border);
+}
+
+.el-tabs__item {
+  height: 40px;
+  padding: 0 4px;
+  margin-right: 20px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+
+  &:hover {
+    color: var(--foreground);
+  }
+
+  &.is-active {
+    color: var(--foreground);
+  }
+}
+
+.el-tabs__active-bar {
+  height: 2px;
+  background-color: var(--foreground);
+}
+
+/* ==================== 其它零碎控件 ==================== */
+.el-divider {
+  border-color: var(--border);
+}
+
+/**
+ * 链接：shadcn 里行标题是普通 foreground + 500 字重，只 hover 加下划线。
+ * Element 的 el-link 颜色取自 --el-link-text-color（默认主题色），
+ * 在暗色下主题色是近白，直接用在浅底上会「白字压白底」。
+ * 用 html 前缀抬一档权重，把变量钉死在 foreground。
+ */
+html .el-link {
+  --el-link-text-color: var(--foreground);
+  --el-link-hover-text-color: var(--foreground);
+  --el-link-disabled-text-color: color-mix(in srgb, var(--foreground) 50%, transparent);
+
+  font-size: inherit;
+  font-weight: 500;
+  color: var(--foreground);
+
+  &:hover {
+    color: var(--foreground);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+}
+
+.el-loading-mask {
+  background-color: color-mix(in srgb, var(--background) 70%, transparent);
+}
+
+.el-empty {
+  --el-empty-description-margin-top: 12px;
+
+  .el-empty__description p {
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+}
+
+.el-skeleton {
+  --el-skeleton-color: var(--muted);
+  --el-skeleton-to-color: var(--accent);
+}
+
+.el-progress-bar__outer {
+  border-radius: 9999px;
+}
+
+.el-progress-bar__inner {
+  border-radius: 9999px;
+}
+
+/* 提示条（ElAlert）的形态在文件末尾统一收口，这里不再重复声明 */
+
+.el-tooltip__popper {
+  max-width: 320px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ==================================================================
+ * 图标与行内对齐
+ * ==================================================================
+ * ArtSvgIcon 渲染成 <svg class="art-svg-icon inline">。display:inline 的 svg 是
+ * 「基线对齐」的：在 flex 容器里没问题，一旦写在句子/标题/按钮文案里，
+ * 图标就会比文字高一截 —— 一屏出现十几处，整体就成了「参差不齐」。
+ * shadcn 的写法是给图标一个 -0.125em 的 vertical-align。
+ * flex / grid 子项不受 vertical-align 影响，所以不会把已有布局带歪。
+ */
+.art-svg-icon {
+  flex: 0 0 auto;
+  vertical-align: -0.125em;
+}
+
+/* ==================================================================
+ * 行内操作列
+ * ==================================================================
+ * 表格「操作」列里经常混排两种按钮：ElButton link（28px）与
+ * ArtButtonTable 图标按钮（32px）。高度不一致会让底边错开、
+ * hover 底色一个大一个小，看起来就是「歪的」。
+ * 统一到 32px（shadcn h-8）+ 2px 间距。
+ */
+html .cell-actions {
+  gap: 2px;
+}
+
+html .cell-actions .el-button,
+html .cell-actions .art-table-btn {
+  flex: 0 0 auto;
+}
+
+html .cell-actions .el-button,
+html .el-table .el-button.is-link,
+html .el-table .el-button.is-text {
+  height: 32px;
+  padding: 0 8px;
+}
+
+/**
+ * Element 的 `.el-button + .el-button { margin-left: 8px }` 会和 flex 容器的
+ * gap 叠加（8 + 8 = 16px），同一条工具栏里就出现两种间距 —— 看起来忽宽忽窄。
+ * 凡是用 gap 自己排版的容器，把相邻外边距清掉。
+ */
+.el-space .el-button + .el-button,
+.form-buttons .el-button + .el-button,
+.dialog-footer .el-button + .el-button,
+.cell-actions .el-button + .el-button,
+.setting-footer .el-button + .el-button,
+.el-dialog__footer .el-button + .el-button,
+.el-drawer__footer .el-button + .el-button {
+  margin-left: 0;
+}
+
+/* 表格多选列：勾选框居中，不要比行内文字低半格 */
+.el-table .el-table-column--selection .cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0;
+}
+
+/* ==================================================================
+ * 描述列表（ElDescriptions border）
+ * ==================================================================
+ * Element 默认的 bordered 描述列表是「浅灰底 + 深描边」，
+ * 和 shadcn 的 table 观感是两套。这里对齐 table：muted 表头列 + 1px border。
+ */
+.el-descriptions {
+  --el-descriptions-item-bordered-label-background: var(--muted);
+
+  font-size: 14px;
+}
+
+.el-descriptions .el-descriptions__label {
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+.el-descriptions .el-descriptions__content {
+  color: var(--foreground);
+}
+
+.el-descriptions .el-descriptions__table.is-bordered .el-descriptions__cell {
+  padding: 8px 12px;
+  border-color: var(--border);
+}
+
+.el-descriptions .el-descriptions__table.is-bordered .is-bordered-label {
+  color: var(--muted-foreground);
+  background: var(--muted);
+}
+
+/* ==================================================================
+ * 提示条（ElAlert）
+ * ==================================================================
+ * shadcn 的 alert 只有「中性底 + 1px 描边 + 语义图标」，不给整条上高饱和底色。
+ * Element 的 is-light 是 10% 语义色底，四种提示排一屏就花了。
+ */
+.el-alert {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.el-alert.is-light {
+  color: var(--foreground);
+  background-color: var(--card);
+}
+
+.el-alert .el-alert__title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.el-alert .el-alert__description {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+}
+
+.el-alert.el-alert--success .el-alert__icon {
+  color: var(--success);
+}
+
+.el-alert.el-alert--warning .el-alert__icon {
+  color: var(--warning);
+}
+
+.el-alert.el-alert--error .el-alert__icon {
+  color: var(--destructive);
+}
+
+.el-alert.el-alert--info .el-alert__icon {
+  color: var(--muted-foreground);
+}
+
+/* ==================================================================
+ * 数字输入框 / 日期选择器
+ * ==================================================================
+ * 宽度只在表单里拉满（表单内容区是块级容器，100% 安全）。
+ * 不要写全局的 `.el-input-number{width:100%}`：它在 flex 行里会把
+ * 旁边的标签/按钮挤走，反而制造「排版错乱」。
+ */
+.el-form-item .el-input-number {
+  width: 100%;
+}
+
+.el-input-number .el-input-number__decrease,
+.el-input-number .el-input-number__increase {
+  color: var(--muted-foreground);
+  background: transparent;
+  border-color: var(--border);
+}
+
+.el-input-number .el-input-number__decrease:hover,
+.el-input-number .el-input-number__increase:hover {
+  color: var(--foreground);
+}
+
+/* 同理：日期 / 时间输入框只在表单里占满整行 */
+.el-form-item .el-date-editor.el-input,
+.el-form-item .el-date-editor.el-input__wrapper {
+  width: 100%;
+}
+
+.el-picker-panel {
+  font-family: var(--font-sans);
+  border-radius: var(--radius-md);
+}
+
+.el-date-table-cell__text {
+  border-radius: var(--radius-sm);
+}
+
+.el-date-table td.today .el-date-table-cell__text,
+.el-date-table td.current:not(.disabled) .el-date-table-cell__text {
+  color: var(--brand-foreground);
+  background: var(--brand);
+}
+
+/* ==================================================================
+ * 上传
+ * ================================================================== */
+.el-upload-list__item {
+  font-size: 13px;
+  color: var(--foreground);
+  border-radius: var(--radius-sm);
+}
+
+.el-upload-list__item:hover {
+  background: var(--accent);
+}
+
+/* ==================================================================
+ * 表单内容区允许收缩
+ * ==================================================================
+ * 长域名 / 长密钥塞进 el-input 时，content 的 min-width 是 auto，
+ * 会把整行撑出容器、出现横向滚动条（看起来像「排版错乱」）。
+ */
+.el-form-item__content {
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.el-form-item.is-required:not(.is-no-asterisk) > .el-form-item__label::before {
+  color: var(--destructive);
+}

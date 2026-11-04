@@ -1,10 +1,12 @@
 <!--
   登录页
   =========================================================
-  参照设计稿：浅灰底（#f1f2f5）上居中一张 860×420 的白色卡片，
-  左边是表单（右上角语言切换 / 大标题 / 副标题 / 两个输入框 / 主按钮），
-  右边是品牌区（蓝紫渐变 + 白色字标 + 浅色线稿插画）。
-  窄屏（≤900px）隐藏品牌区，卡片收成单列，不出现横向滚动。
+  视觉规范见 AGENTS 6.0（shadcn/ui 默认设计语言）：
+  · 页面底 = --background，卡片 = --card + 1px --border + rounded-lg，不用大投影；
+  · 左侧表单、右侧品牌区都只用语义令牌，深浅色自动跟随；
+  · 品牌区是「muted 面板 + 点阵纹理」，**不再用蓝紫渐变**——
+    那种渐变是最典型的「AI 生成」观感，也和 shadcn 的中性配色冲突；
+  · 窄屏（≤900px）隐藏品牌区，卡片收成单列，不出现横向滚动。
 -->
 <template>
   <div class="login-page">
@@ -107,16 +109,17 @@
         <p class="bottom-hint">忘记密码请联系管理员重置</p>
       </section>
 
-      <!-- 右：品牌区（蓝紫渐变） -->
+      <!-- 右：品牌区（中性面板 + 点阵纹理，颜色全部走语义令牌） -->
       <aside class="brand-side">
         <div class="brand-row">
           <img v-if="siteStore.logoUrl" class="brand-logo" :src="siteStore.logoUrl" alt="" />
           <span v-else class="brand-name">{{ siteStore.displayName }}</span>
         </div>
 
-        <!-- 线稿插画：证书 + 齿轮 + 弧线，纯内联 SVG（离线可用，不引外链） -->
+        <!-- 线稿插画：证书 + 齿轮 + 弧线，纯内联 SVG（离线可用，不引外链）。
+             描边统一用 currentColor，颜色由 .brand-art 的 color 决定。 -->
         <svg class="brand-art" viewBox="0 0 400 320" fill="none" aria-hidden="true">
-          <g stroke="#fff" stroke-opacity="0.26" stroke-width="1.6" stroke-linecap="round">
+          <g stroke="currentColor" stroke-opacity="0.55" stroke-width="1.6" stroke-linecap="round">
             <rect x="52" y="66" width="188" height="132" rx="10" />
             <path d="M76 100h84M76 124h140M76 148h116M76 170h72" />
             <circle cx="312" cy="120" r="42" />
@@ -125,13 +128,13 @@
             <path d="M120 232c-26-14-42-42-42-74" />
             <path d="M300 236c22-8 38-28 42-52" />
           </g>
-          <g fill="#fff" fill-opacity="0.2">
+          <g fill="currentColor" fill-opacity="0.3">
             <circle cx="156" cy="258" r="7" />
             <circle cx="212" cy="240" r="4" />
             <circle cx="252" cy="268" r="5" />
             <circle cx="96" cy="34" r="4" />
           </g>
-          <g stroke="#fff" stroke-opacity="0.14" stroke-width="1.2">
+          <g stroke="currentColor" stroke-opacity="0.22" stroke-width="1.2">
             <circle cx="200" cy="176" r="120" />
             <circle cx="200" cy="176" r="152" />
           </g>
@@ -442,26 +445,28 @@
     width: 100%;
     min-height: 100vh;
     padding: 24px;
-    background: #f1f2f5;
+    /* 和内容区同一套：浅灰画布 + 白卡片，卡片才立得住 */
+    background: var(--canvas);
   }
 
   .login-card {
     display: flex;
-    width: 860px;
+    width: 880px;
     max-width: 100%;
-    min-height: 420px;
+    min-height: 440px;
     overflow: hidden;
-    background: #fff;
-    border-radius: 10px;
-    box-shadow: 0 6px 24px rgb(0 0 0 / 8%);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
   }
 
   /* ================= 左：表单 ================= */
   .form-side {
     display: flex;
-    flex: 0 0 380px;
+    flex: 0 0 400px;
     flex-direction: column;
-    padding: 16px 40px 22px;
+    padding: 28px 40px 24px;
     box-sizing: border-box;
   }
 
@@ -476,85 +481,98 @@
     gap: 4px;
     align-items: center;
     font-size: 12px;
-    color: var(--art-gray-500);
+    color: var(--muted-foreground);
     cursor: pointer;
     outline: none;
-    transition: color 0.2s;
+    transition: color 0.15s ease;
   }
 
   .lang-switch:hover {
-    color: var(--el-color-primary);
+    color: var(--foreground);
   }
 
   .lang-icon {
-    font-size: 15px;
-    color: var(--el-color-primary);
+    font-size: 14px;
+    color: var(--muted-foreground);
   }
 
   .greeting {
-    margin: 8px 0 0;
-    font-size: 28px;
+    margin: 14px 0 0;
+    font-size: 26px;
     font-weight: 600;
     line-height: 1.25;
-    color: var(--el-color-primary);
+    letter-spacing: -0.02em;
+    color: var(--foreground);
   }
 
+  /* 副标题允许换两行：原来 nowrap + 省略号，长文案会被截在半句上 */
   .subtitle {
-    margin: 12px 0 0;
+    display: -webkit-box;
+    margin: 8px 0 0;
     overflow: hidden;
-    font-size: 13px;
+    font-size: 13.5px;
     line-height: 1.6;
-    color: var(--el-color-primary);
+    color: var(--muted-foreground);
     text-overflow: ellipsis;
-    white-space: nowrap;
-    opacity: 0.82;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 
   .login-form {
-    margin-top: 44px;
+    margin-top: 28px;
   }
 
   .login-form :deep(.el-form-item) {
-    margin-bottom: 17px;
+    margin-bottom: 14px;
   }
 
+  /*
+   * 登录输入框高度 40px（比全局 36px 大一档：登录是唯一的「焦点页」，
+   * 大一号更好点）。配色与焦点环仍走全局 shadcn 规则，这里只覆盖尺寸。
+   */
   .login-input :deep(.el-input__wrapper) {
     height: 40px;
     padding: 0 12px;
-    background: #fff;
-    border-radius: var(--custom-radius);
-    box-shadow: inset 0 0 0 1px #e8e8e8;
+    background: transparent;
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--input);
   }
 
   .login-input :deep(.el-input__wrapper:hover) {
-    box-shadow: inset 0 0 0 1px #d4d4d4;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 25%, transparent);
   }
 
   .login-input :deep(.el-input__wrapper.is-focus) {
-    box-shadow: inset 0 0 0 1px var(--el-color-primary);
+    box-shadow:
+      inset 0 0 0 1px var(--ring),
+      0 0 0 3px color-mix(in srgb, var(--ring) 15%, transparent);
   }
 
   .login-input :deep(.el-input__inner) {
     height: 40px;
-    font-size: 13px;
+    font-size: 14px;
+    color: var(--foreground);
   }
 
   .login-input :deep(.el-input__inner::placeholder) {
-    color: #999;
+    color: var(--muted-foreground);
   }
 
   .login-input :deep(.input-icon) {
-    margin-right: 12px;
-    font-size: 16px;
-    color: #b9bfc7;
+    margin-right: 8px;
+    font-size: 15px;
+    color: var(--muted-foreground);
   }
 
   .login-btn {
     width: 100%;
     height: 40px !important;
-    margin-top: 14px;
+    margin-top: 10px;
     font-size: 14px;
-    border-radius: var(--custom-radius);
+    font-weight: 500;
+    border-radius: var(--radius-md);
   }
 
   /* ---- 图形验证码 ---- */
@@ -575,14 +593,14 @@
     padding: 0;
     overflow: hidden;
     cursor: pointer;
-    background: #f8fafc;
-    border: 1px solid #e5e7eb;
-    border-radius: var(--custom-radius);
+    background: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
     transition: border-color 0.16s ease;
   }
 
   .captcha-img:hover {
-    border-color: var(--el-color-primary);
+    border-color: var(--ring);
   }
 
   .captcha-img img {
@@ -594,27 +612,37 @@
 
   .captcha-img-empty {
     font-size: 12px;
-    color: var(--art-gray-500);
+    color: var(--muted-foreground);
   }
 
   .bottom-hint {
     margin: auto 0 0;
-    padding-top: 22px;
+    padding-top: 20px;
     font-size: 12px;
-    color: var(--art-gray-500);
+    color: var(--muted-foreground);
     text-align: center;
   }
 
   /* ================= 右：品牌区 ================= */
+  /*
+   * 中性面板 + 点阵纹理。点阵用 radial-gradient 画「点」，
+   * 不是装饰性的颜色渐变（那是最典型的 AI 观感，shadcn 明确不用）。
+   * 面板色取 --muted，深浅色模式下都自动跟随，不需要第二套暗色覆盖。
+   */
   .brand-side {
     position: relative;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
     min-width: 0;
-    padding: 24px;
+    padding: 28px 32px;
     overflow: hidden;
-    background: linear-gradient(to top right, #6b75ff 0%, #3da2fd 100%);
+    color: var(--muted-foreground);
+    /* 面板比卡片再深一档、又比页面底色浅一档：三块颜色各不相同，卡片才有层次 */
+    background-color: color-mix(in srgb, var(--foreground) 4%, var(--card));
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 16px 16px;
+    border-left: 1px solid var(--border);
   }
 
   .brand-row {
@@ -626,10 +654,10 @@
   }
 
   .brand-name {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 600;
-    color: #fff;
-    letter-spacing: 0.5px;
+    letter-spacing: -0.01em;
+    color: var(--foreground);
   }
 
   .brand-logo {
@@ -640,9 +668,11 @@
 
   .brand-art {
     position: absolute;
-    inset: 66px 24px 20px;
+    inset: 72px 32px 32px;
     width: auto;
     height: auto;
+    /* 线稿要看得见，但仍是「中性灰线条」：0.32 在浅灰底上几乎消失 */
+    opacity: 1;
   }
 
   /* ================= 弹窗内的小样式 ================= */
@@ -650,7 +680,7 @@
     margin: 0 0 12px;
     font-size: 13px;
     line-height: 1.6;
-    color: var(--art-gray-500);
+    color: var(--muted-foreground);
   }
 
   .twofa-footer {
@@ -666,50 +696,35 @@
     align-items: flex-start;
   }
 
+  /* 二维码必须留白：背景不能跟卡片同色，否则扫码器读不出来 */
   .bind-qr {
+    flex: 0 0 auto;
     padding: 8px;
     background: #fff;
-    border-radius: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
   }
 
   .bind-main {
-    flex: 1;
-    min-width: 170px;
+    flex: 1 1 170px;
+    min-width: 0;
   }
 
   .bind-label {
     margin-bottom: 6px;
     font-size: 12px;
-    color: var(--art-gray-500);
+    color: var(--muted-foreground);
   }
 
   .bind-secret {
     padding: 6px 8px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.6;
+    color: var(--foreground);
     word-break: break-all;
-    background: var(--art-gray-100);
-    border-radius: 6px;
-  }
-
-  /* ================= 暗色 ================= */
-  :global(.dark) .login-page {
-    background: #0f1114;
-  }
-
-  :global(.dark) .login-card {
-    background: #17191d;
-    box-shadow: 0 6px 24px rgb(0 0 0 / 55%);
-  }
-
-  :global(.dark) .login-input :deep(.el-input__wrapper) {
-    background: #1d2025;
-    box-shadow: inset 0 0 0 1px #33373d;
-  }
-
-  :global(.dark) .login-input :deep(.el-input__wrapper.is-focus) {
-    box-shadow: inset 0 0 0 1px var(--el-color-primary);
+    background: var(--muted);
+    border-radius: var(--radius-sm);
   }
 
   /* ================= 响应式 ================= */
@@ -735,7 +750,7 @@
     }
 
     .greeting {
-      font-size: 24px;
+      font-size: 22px;
     }
   }
 </style>

@@ -5,6 +5,10 @@
  * 这里的每一项都是本系统（CertHub）自己的功能入口，和艺术模板的演示页无关。
  * routeName 必须与 src/router/modules/certd.ts 里的路由 name 一致，
  * 否则点击会跳不过去（handleNavigate 用的是 router.push({ name })）。
+ *
+ * iconColor 保留字段只是为了类型兼容：面板里图标已经统一用
+ * `text-muted-foreground`（hover 到 foreground），不再按入口配高饱和色。
+ * 一屏六个入口六种亮色是「AI 生成感」最明显的一处，别再改回去。
  */
 import type { FastEnterConfig } from '@/types/config'
 
@@ -17,7 +21,7 @@ const fastEnterConfig: FastEnterConfig = {
       name: '证书流水线',
       description: '签发 · 部署 · 通知全流程',
       icon: 'ri:node-tree',
-      iconColor: '#409eff',
+      iconColor: 'var(--muted-foreground)',
       enabled: true,
       order: 1,
       routeName: 'CertdPipeline'
@@ -26,7 +30,7 @@ const fastEnterConfig: FastEnterConfig = {
       name: '证书库',
       description: '已签发证书与到期时间',
       icon: 'ri:award-line',
-      iconColor: '#1e8e3e',
+      iconColor: 'var(--muted-foreground)',
       enabled: true,
       order: 2,
       routeName: 'CertdCert'
@@ -35,7 +39,7 @@ const fastEnterConfig: FastEnterConfig = {
       name: '授权管理',
       description: '云厂商 / 面板 / DNS 凭据',
       icon: 'ri:draft-line',
-      iconColor: '#7A7FFF',
+      iconColor: 'var(--muted-foreground)',
       enabled: true,
       order: 3,
       routeName: 'CertdAccess'
@@ -44,7 +48,7 @@ const fastEnterConfig: FastEnterConfig = {
       name: '通知渠道',
       description: '告警推送渠道配置',
       icon: 'ri:notification-3-line',
-      iconColor: '#13DEB9',
+      iconColor: 'var(--muted-foreground)',
       enabled: true,
       order: 4,
       routeName: 'CertdNotification'
@@ -53,7 +57,7 @@ const fastEnterConfig: FastEnterConfig = {
       name: '站点监控',
       description: '站点证书巡检与告警',
       icon: 'ri:radar-line',
-      iconColor: '#ffb100',
+      iconColor: 'var(--muted-foreground)',
       enabled: true,
       order: 5,
       routeName: 'CertdMonitor'
@@ -62,7 +66,7 @@ const fastEnterConfig: FastEnterConfig = {
       name: '执行历史',
       description: '每次运行的日志与结果',
       icon: 'ri:history-line',
-      iconColor: '#ff6b6b',
+      iconColor: 'var(--muted-foreground)',
       enabled: true,
       order: 6,
       routeName: 'CertdHistory'

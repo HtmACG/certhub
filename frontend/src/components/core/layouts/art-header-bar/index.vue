@@ -3,7 +3,9 @@
   <div
     class="w-full bg-[var(--default-bg-color)]"
     :class="[
-      tabStyle === 'tab-card' || tabStyle === 'tab-google' ? 'mb-5 max-sm:mb-3 !bg-box' : ''
+      /* 不再留 mb-5：顶栏 + 标签条是一整块白色区域，下面的间距由内容区 padding 给，
+         否则标签条和第一张卡片之间会空出 20(顶栏 mb) + 20(内容 padding) = 40px */
+      tabStyle === 'tab-card' || tabStyle === 'tab-google' ? '!bg-box' : ''
     ]"
   >
     <div

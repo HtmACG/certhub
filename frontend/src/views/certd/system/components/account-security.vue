@@ -12,41 +12,44 @@
     <ElRow :gutter="16">
       <ElCol :xs="24" :sm="24" :md="12" :lg="12">
         <div class="sec-block">
-          <div class="sec-title">基本资料</div>
+          <div class="sec-title">{{ $t('certd.security.profileTitle') }}</div>
           <ElForm label-position="top">
             <ElRow :gutter="16">
               <ElCol :xs="24" :sm="12">
-                <ElFormItem label="用户名">
+                <ElFormItem :label="$t('certd.security.userName')">
                   <ElInput :model-value="info.userName" disabled />
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12">
-                <ElFormItem label="角色">
-                  <ElInput :model-value="info.role === 'admin' ? '管理员' : '普通用户'" disabled />
+                <ElFormItem :label="$t('certd.security.role')">
+                  <ElInput
+                    :model-value="info.role === 'admin' ? $t('certd.user.roleAdmin') : $t('certd.user.roleUser')"
+                    disabled
+                  />
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12">
-                <ElFormItem label="昵称">
+                <ElFormItem :label="$t('certd.security.nickname')">
                   <ElInput v-model="profile.nickname" />
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12">
-                <ElFormItem label="邮箱">
-                  <ElInput v-model="profile.email" placeholder="到期提醒也会发到这里" />
+                <ElFormItem :label="$t('certd.security.email')">
+                  <ElInput v-model="profile.email" :placeholder="$t('certd.security.emailPh')" />
                 </ElFormItem>
               </ElCol>
             </ElRow>
-            <ElButton type="primary" :loading="savingProfile" @click="saveProfile">保存资料</ElButton>
+            <ElButton type="primary" :loading="savingProfile" @click="saveProfile">{{ $t('certd.security.saveProfile') }}</ElButton>
           </ElForm>
         </div>
 
         <div class="sec-block">
-          <div class="sec-title">修改密码</div>
+          <div class="sec-title">{{ $t('certd.security.changePwdTitle') }}</div>
           <ElForm label-position="top">
-            <ElFormItem label="当前密码">
+            <ElFormItem :label="$t('certd.security.oldPwd')">
               <ElInput v-model="password.oldPassword" type="password" show-password autocomplete="off" />
             </ElFormItem>
-            <ElFormItem label="新密码">
+            <ElFormItem :label="$t('certd.security.newPwd')">
               <ElInput
                 v-model="password.newPassword"
                 type="password"
@@ -54,7 +57,7 @@
                 autocomplete="new-password"
               />
               <div class="pwd-hint">
-                <div v-for="item in pwdChecks" :key="item.text" class="pwd-check" :class="{ ok: item.ok }">
+                <div v-for="item in pwdChecks" :key="item.key" class="pwd-check" :class="{ ok: item.ok }">
                   <ArtSvgIcon
                     :icon="item.ok ? 'ri:checkbox-circle-fill' : 'ri:checkbox-blank-circle-line'"
                     class="pwd-check-icon"
@@ -63,7 +66,7 @@
                 </div>
               </div>
             </ElFormItem>
-            <ElFormItem label="确认新密码">
+            <ElFormItem :label="$t('certd.security.confirmPwd')">
               <ElInput
                 v-model="password.confirmPassword"
                 type="password"
@@ -72,8 +75,8 @@
                 @keyup.enter="savePassword"
               />
             </ElFormItem>
-            <ElButton type="primary" :loading="savingPassword" @click="savePassword">修改密码</ElButton>
-            <span class="pwd-tip">修改成功后需要用新密码重新登录</span>
+            <ElButton type="primary" :loading="savingPassword" @click="savePassword">{{ $t('certd.security.changePwd') }}</ElButton>
+            <span class="pwd-tip">{{ $t('certd.security.changePwdTip') }}</span>
           </ElForm>
         </div>
       </ElCol>
@@ -81,44 +84,41 @@
       <ElCol :xs="24" :sm="24" :md="12" :lg="12">
         <div class="sec-block" v-loading="loadingTotp">
           <div class="sec-title">
-            两步验证
+            {{ $t('certd.security.totpTitle') }}
             <ElTag :type="info.totpEnabled ? 'success' : 'info'" size="small" effect="light">
-              {{ info.totpEnabled ? '已开启' : '未开启' }}
+              {{ info.totpEnabled ? $t('certd.security.on') : $t('certd.security.off') }}
             </ElTag>
           </div>
 
           <!-- 未开启：扫码绑定 -->
           <div v-if="!info.totpEnabled">
-            <p class="form-tip">
-              用 Google Authenticator / Microsoft Authenticator / 1Password 等 App
-              <b>扫描右侧二维码</b>，添加后填入 App 上的 6 位验证码即可开启。
-            </p>
+            <p class="form-tip">{{ $t('certd.security.totpBindTip') }}</p>
             <div class="totp-wrap">
               <div class="totp-qr">
                 <QrcodeVue v-if="totp.uri" :value="totp.uri" :size="150" level="M" />
-                <div v-else class="totp-qr-empty">二维码生成中…</div>
+                <div v-else class="totp-qr-empty">{{ $t('certd.security.qrLoading') }}</div>
                 <div class="totp-qr-label">{{ issuerLabel }}</div>
               </div>
               <div class="totp-main">
-                <div class="totp-label">扫描不了？手动输入密钥</div>
+                <div class="totp-label">{{ $t('certd.security.manualSecret') }}</div>
                 <div class="totp-secret">
                   <span class="mono">{{ totp.secret || '—' }}</span>
                   <ElButton link size="small" :disabled="!totp.secret" @click="copySecret">
-                    复制
+                    {{ $t('certd.security.copy') }}
                   </ElButton>
                 </div>
                 <ElInput
                   v-model="totpCode"
-                  placeholder="6 位验证码"
+                  :placeholder="$t('certd.security.codePh')"
                   maxlength="6"
                   class="mt-3"
                   @keyup.enter="enableTotp"
                 />
                 <div class="totp-actions">
                   <ElButton type="primary" :loading="savingTotp" @click="enableTotp">
-                    开启两步验证
+                    {{ $t('certd.security.enableTotp') }}
                   </ElButton>
-                  <ElButton link @click="loadTotpSecret">刷新二维码</ElButton>
+                  <ElButton link @click="loadTotpSecret">{{ $t('certd.security.refreshQr') }}</ElButton>
                 </div>
               </div>
             </div>
@@ -126,36 +126,33 @@
 
           <!-- 已开启：可继续扫码添加设备 + 关闭 -->
           <div v-else>
-            <p class="form-tip">
-              两步验证已开启，每次登录需要输入 App 上的 6 位验证码。换手机或多台设备时，用新设备
-              <b>扫描同一张二维码</b>即可，密钥不变、老设备照常可用。
-            </p>
+            <p class="form-tip">{{ $t('certd.security.totpOnTip') }}</p>
             <ElButton size="small" @click="toggleAddDevice">
-              {{ showAddDevice ? '收起二维码' : '添加设备（扫码）' }}
+              {{ showAddDevice ? $t('certd.security.collapseQr') : $t('certd.security.addDevice') }}
             </ElButton>
 
             <div v-if="showAddDevice" class="totp-wrap mt-3">
               <div class="totp-qr">
                 <QrcodeVue v-if="totp.uri" :value="totp.uri" :size="150" level="M" />
-                <div v-else class="totp-qr-empty">二维码生成中…</div>
+                <div v-else class="totp-qr-empty">{{ $t('certd.security.qrLoading') }}</div>
                 <div class="totp-qr-label">{{ issuerLabel }}</div>
               </div>
               <div class="totp-main">
-                <div class="totp-label">手动输入密钥</div>
+                <div class="totp-label">{{ $t('certd.security.manualSecret') }}</div>
                 <div class="totp-secret">
                   <span class="mono">{{ totp.secret || '—' }}</span>
                   <ElButton link size="small" :disabled="!totp.secret" @click="copySecret">
-                    复制
+                    {{ $t('certd.security.copy') }}
                   </ElButton>
                 </div>
               </div>
             </div>
 
             <div class="totp-disable">
-              <div class="totp-label">关闭两步验证</div>
-              <ElInput v-model="totpCode" placeholder="输入当前验证码以关闭" maxlength="6" />
+              <div class="totp-label">{{ $t('certd.security.disableTotpLabel') }}</div>
+              <ElInput v-model="totpCode" :placeholder="$t('certd.security.disableCodePh')" maxlength="6" />
               <ElButton type="danger" class="mt-2" :loading="savingTotp" @click="disableTotp">
-                关闭两步验证
+                {{ $t('certd.security.disableTotp') }}
               </ElButton>
             </div>
           </div>
@@ -177,6 +174,7 @@
   import { useUserStore } from '@/store/modules/user'
   import { useSiteStore } from '@/store/modules/site'
   import { ElMessage } from 'element-plus'
+  import { $t } from '@/locales'
 
   defineOptions({ name: 'AccountSecurity' })
 
@@ -207,7 +205,7 @@
     savingProfile.value = true
     try {
       await updateProfile({ nickname: profile.nickname, email: profile.email })
-      ElMessage.success('已保存')
+      ElMessage.success($t('certd.common.saved'))
       if (userStore.info) {
         userStore.setUserInfo({ ...(userStore.info as any), nickname: profile.nickname, email: profile.email })
       }
@@ -221,28 +219,28 @@
     const pwd = password.newPassword || ''
     const userName = (info.value as any).userName || ''
     return [
-      { text: '至少 8 个字符', ok: pwd.length >= 8 },
-      { text: '不能是纯数字', ok: pwd.length > 0 && !/^\d+$/.test(pwd) },
-      { text: '不能与用户名相同', ok: pwd.length > 0 && pwd !== userName },
+      { key: 'min8', text: $t('certd.user.pwdMin8'), ok: pwd.length >= 8 },
+      { key: 'notDigits', text: $t('certd.user.pwdNotDigits'), ok: pwd.length > 0 && !/^\d+$/.test(pwd) },
+      { key: 'notUserName', text: $t('certd.user.pwdNotUserName'), ok: pwd.length > 0 && pwd !== userName },
     ]
   })
 
   const savePassword = async () => {
     if (!password.oldPassword || !password.newPassword) {
-      ElMessage.warning('请填写当前密码与新密码')
+      ElMessage.warning($t('certd.security.oldNewRequired'))
       return
     }
     const bad = pwdChecks.value.find((item) => !item.ok)
     if (bad) {
-      ElMessage.warning(`新密码不符合要求：${bad.text}`)
+      ElMessage.warning($t('certd.security.newPwdInvalid', { reason: bad.text }))
       return
     }
     if (password.newPassword !== password.confirmPassword) {
-      ElMessage.warning('两次输入的新密码不一致')
+      ElMessage.warning($t('certd.security.pwdMismatch'))
       return
     }
     if (password.newPassword === password.oldPassword) {
-      ElMessage.warning('新密码不能与当前密码相同')
+      ElMessage.warning($t('certd.security.pwdSame'))
       return
     }
     savingPassword.value = true
@@ -254,7 +252,7 @@
       password.oldPassword = ''
       password.newPassword = ''
       password.confirmPassword = ''
-      ElMessage.success('密码已修改，请用新密码重新登录')
+      ElMessage.success($t('certd.security.pwdChanged'))
       // 旧 token 仍然有效（JWT 无法吊销），改了密码就该立刻换身份重新认证
       userStore.logOut()
     } finally {
@@ -290,21 +288,21 @@
     if (!totp.secret) return
     try {
       await navigator.clipboard.writeText(totp.secret)
-      ElMessage.success('密钥已复制')
+      ElMessage.success($t('certd.security.secretCopied'))
     } catch {
-      ElMessage.warning('复制失败，请手动选中密钥复制')
+      ElMessage.warning($t('certd.security.copyFailed'))
     }
   }
 
   const enableTotp = async () => {
     if (!totpCode.value) {
-      ElMessage.warning('请输入验证码')
+      ElMessage.warning($t('certd.security.codeRequired'))
       return
     }
     savingTotp.value = true
     try {
       await enable2fa(totpCode.value)
-      ElMessage.success('两步验证已开启')
+      ElMessage.success($t('certd.security.totpEnabled'))
       if (userStore.info) userStore.setUserInfo({ ...(userStore.info as any), totpEnabled: true })
       totpCode.value = ''
       showAddDevice.value = false
@@ -315,13 +313,13 @@
 
   const disableTotp = async () => {
     if (!totpCode.value) {
-      ElMessage.warning('请输入验证码')
+      ElMessage.warning($t('certd.security.codeRequired'))
       return
     }
     savingTotp.value = true
     try {
       await disable2fa(totpCode.value)
-      ElMessage.success('已关闭两步验证')
+      ElMessage.success($t('certd.security.totpDisabled'))
       if (userStore.info) userStore.setUserInfo({ ...(userStore.info as any), totpEnabled: false })
       totpCode.value = ''
       // 关闭后回到「扫码绑定」的初始态
@@ -365,7 +363,7 @@
     margin-bottom: 12px;
     font-size: 14px;
     font-weight: 600;
-    color: var(--art-text-gray-900, var(--g-text, #1f2937));
+    color: var(--foreground);
   }
 
   .form-tip {
@@ -418,9 +416,9 @@
     gap: 6px;
     align-items: center;
     padding: 10px;
-    background: var(--default-box-color);
-    border: 1px solid var(--art-card-border);
-    border-radius: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
   }
 
   .totp-qr-empty {
@@ -455,8 +453,9 @@
     align-items: center;
     justify-content: space-between;
     padding: 4px 8px;
-    background: var(--art-gray-100);
-    border-radius: 6px;
+    font-family: var(--font-mono);
+    background: var(--muted);
+    border-radius: var(--radius-sm);
   }
 
   .totp-actions {
@@ -474,7 +473,7 @@
   }
 
   .mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     word-break: break-all;
   }

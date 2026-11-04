@@ -65,21 +65,32 @@ export const setPageTitle = (to: RouteLocationNormalized): void => {
 
 /**
  * 格式化菜单标题
- * @param title 菜单标题，可以是 i18n 的 key，也可以是字符串
- * @returns 格式化后的菜单标题
+ *
+ * 路由 `meta.title` 允许写三种形态，这里统一收敛成「当前语言下的展示文本」：
+ *
+ * 1. **i18n key**（`certd.menu.pipeline` 或老脚手架的 `menus.xxx`）
+ *    —— 用 `te()` 判断词条是否存在，存在就翻译；不存在则把 key 当字面量返回，
+ *    这样历史路由即使词条漏写也不会出现空白菜单。
+ * 2. **后端下发的动态标题**（菜单从数据库来、按当前语言已翻译好）
+ *    —— 不在词条里，原样返回。
+ *
+ * ⚠️ 这里**不能**只认 `menus.` 前缀：certd 业务路由用的是 `certd.*` 命名空间。
+ *
+ * ⚠️ 本函数是「命令式取词」，返回的是**快照字符串**。放在 `computed` 里会有响应式依赖
+ * （调用链上读了 `i18n.global.locale`），切语言后自动重算；
+ * 但如果是在 `setup` 里直接调用一次并存进普通 ref，就不会跟着变。
+ * 所以业务侧做「语言切换后要跟随」的文案，一律走 `computed(() => formatMenuTitle(...))`。
+ *
+ * @param title 菜单标题（i18n key 或纯文本）
+ * @returns 当前语言下的展示文本
  */
 export const formatMenuTitle = (title: string): string => {
-  if (title) {
-    if (title.startsWith('menus.')) {
-      // 使用 te() 方法检查翻译键值是否存在，避免控制台警告
-      if (i18n.global.te(title)) {
-        return $t(title)
-      } else {
-        // 如果翻译不存在，返回键值的最后部分作为fallback
-        return title.split('.').pop() || title
-      }
-    }
-    return title
+  if (!title) return ''
+  // 读一次 locale，建立响应式依赖：切语言时外层 computed 会重算
+  // （legacy: false 下 locale 是 WritableComputedRef，类型上可能是 string，这里统一按 ref 取）
+  void (i18n.global.locale as unknown as { value: string }).value
+  if (title.indexOf('.') > 0 && i18n.global.te(title)) {
+    return $t(title)
   }
-  return ''
+  return title
 }

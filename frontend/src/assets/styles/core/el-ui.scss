@@ -28,10 +28,8 @@
 }
 
 // 优化 el-form-item 标签高度
-.el-form-item__label {
-  height: var(--el-component-custom-height) !important;
-  line-height: var(--el-component-custom-height) !important;
-}
+// 标签高度交给 shadcn-ui.scss 统一（height:auto + margin-bottom:8px），
+// 这里原来写死 36px 行高，会把「标签在上」的表单撑出一大块空白。
 
 // 日期选择器
 .el-date-range-picker {
@@ -66,8 +64,10 @@ html.dark .el-card {
 }
 
 .el-pager li {
-  padding: 0 10px !important;
-  // border: 1px solid red !important;
+  /* 分页按钮统一 32×32 的方块：原来 0 10px 的内边距会让两位数比一位数宽，
+     一排页码看起来就像「参差不齐」。宽度由 shadcn-ui.scss 的 min-width 管。 */
+  padding: 0 !important;
+  text-align: center;
 }
 
 // 优化菜单折叠展开动画（提升动画流畅度）
@@ -185,7 +185,7 @@ html.dark .el-card {
 }
 
 .el-dialog {
-  border-radius: calc(var(--custom-radius) + 2px) !important;
+  border-radius: var(--radius-lg) !important;
   overflow: hidden;
 }
 
@@ -196,7 +196,7 @@ html.dark .el-card {
 }
 
 .el-dialog__body {
-  padding: 25px 0 !important;
+  /* 内边距由 shadcn-ui.scss 统一给 24px（这里原来写死 25px 0，会把内容顶到边框上） */
   position: relative; // 为了兼容 el-pagination 样式，需要设置 relative，不然会影响 el-pagination 的样式，比如 el-pagination__jump--small 会被影响，导致 el-pagination__jump--small 按钮无法点击，详见 URL_ADDRESS.com/element-plus/element-plus/issues/5684#issuecomment-1176299275;
 }
 
@@ -240,8 +240,8 @@ html.dark .el-card {
 
 // 修改 el-dropdown 样式
 .el-dropdown-menu {
-  padding: 6px !important;
-  border-radius: 10px !important;
+  padding: 4px !important;
+  border-radius: var(--radius-md) !important;
   border: none !important;
 
   .el-dropdown-menu__item {
@@ -313,10 +313,6 @@ html.dark .el-card {
 .el-tag {
   font-weight: 500;
   transition: all 0s !important;
-
-  &.el-tag--default {
-    height: 26px !important;
-  }
 }
 
 .el-checkbox-group {
@@ -346,7 +342,7 @@ html.dark .el-card {
 
 .el-checkbox {
   .el-checkbox__inner {
-    border-radius: 2px !important;
+    border-radius: 4px !important;
   }
 }
 
@@ -403,7 +399,9 @@ html.dark .el-card {
 }
 
 .el-message-box {
-  padding: 25px 20px !important;
+  /* padding 交给 shadcn-ui.scss：外层清零，由 header / content / btns 各自控制间距。
+     这里原来写死 25px 20px，和 shadcn 的结构叠加成「双层内边距」。 */
+  padding: 0 !important;
 }
 
 .el-message-box__title {
@@ -433,9 +431,11 @@ html.dark .el-card {
 }
 
 // 修改 dialog 动画
+// shadcn 的 dialog 只有「淡入 + 极小的位移/缩放」，不做从 0.2 放大这种 zoom 动画：
+// 那个效果每次打开都像弹窗从屏幕深处飞出来，是「廉价感」最明显的一处。
 .dialog-fade-enter-active {
   .el-dialog:not(.is-draggable) {
-    animation: dialog-open 0.3s cubic-bezier(0.32, 0.14, 0.15, 0.86);
+    animation: dialog-open 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 
     // 修复 el-dialog 动画后宽度不自适应问题
     .el-select__selected-item {
@@ -445,34 +445,34 @@ html.dark .el-card {
 }
 
 .dialog-fade-leave-active {
-  animation: fade-out 0.2s linear;
+  animation: fade-out 0.12s ease-in;
 
   .el-dialog:not(.is-draggable) {
-    animation: dialog-close 0.5s;
+    animation: dialog-close 0.12s ease-in;
   }
 }
 
 @keyframes dialog-open {
   0% {
     opacity: 0;
-    transform: scale(0.2);
+    transform: translateY(4px) scale(0.98);
   }
 
   100% {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes dialog-close {
   0% {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0) scale(1);
   }
 
   100% {
     opacity: 0;
-    transform: scale(0.2);
+    transform: translateY(2px) scale(0.99);
   }
 }
 

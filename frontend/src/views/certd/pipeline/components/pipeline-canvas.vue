@@ -49,7 +49,8 @@
       @nodes-initialized="onNodesInitialized"
       @node-dblclick="onNodeDblClick"
     >
-      <Background :gap="16" :size="1.5" pattern-color="#cfd4dc" variant="dots" />
+      <!-- 点阵背景的颜色用语义令牌（暗色下自动变深），不要再写死 #cfd4dc -->
+      <Background :gap="16" :size="1.5" pattern-color="var(--border)" variant="dots" />
       <Controls :show-interactive="false" position="bottom-left" />
       <MiniMap
         position="bottom-right"
@@ -946,15 +947,15 @@
     )
   }
 
-  /** 小地图按环节上色，和卡片左边框一致 */
   /** 小地图按环节上色，和卡片左边框一致；停用阶段里的任务压成灰色，和画布上的降饱和对齐 */
   const miniMapColor = (node: Node) => {
     if (node.type === 'stage') return 'transparent'
-    if ((node.data as any)?.stageOff) return '#bdc1c6'
+    if ((node.data as any)?.stageOff) return 'var(--muted-foreground)'
     const kind = (node.data as any)?.kindKey
-    if (kind === 'cert') return '#1a73e8'
-    if (kind === 'notify') return '#e37400'
-    return '#1e8e3e'
+    // 取 shadcn-tokens 里的环节色令牌，不再写死 Google 的 #1a73e8 / #1e8e3e / #e37400
+    if (kind === 'cert') return 'var(--stage-cert)'
+    if (kind === 'notify') return 'var(--stage-notify)'
+    return 'var(--stage-deploy)'
   }
 
   defineExpose({ reflow, fitAll, getViewport })
@@ -968,11 +969,13 @@
     overflow: hidden;
     background: var(--g-surface);
     border: 1px solid var(--g-line);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
 
-    /* 连线颜色：Google blue 500，浅底上也看得清；hover / 运行中变深 */
-    --flow-edge: #4285f4;
-    --flow-edge-live: var(--g-blue);
+    /* 连线颜色统一走 shadcn 的中性层级：
+       普通连线 = 描边色加深（比卡片边框深一档，浅色底上能看清但不抢戏），
+       hover / 运行中 = 前景色（浅色近黑、暗色近白），表示「这条正在走」。 */
+    --flow-edge: color-mix(in srgb, var(--g-text) 45%, var(--g-surface));
+    --flow-edge-live: var(--g-text);
   }
 
   .pipeline-canvas :deep(.vue-flow) {
@@ -1024,7 +1027,7 @@
     padding: 0;
     background: color-mix(in srgb, var(--stage-color) 4%, var(--g-surface));
     border: 1.5px dashed color-mix(in srgb, var(--stage-color) 34%, transparent);
-    border-radius: 18px;
+    border-radius: var(--radius-lg);
     transition:
       border-color 0.16s ease,
       background 0.16s ease;
@@ -1084,21 +1087,21 @@
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     line-height: 1;
-    color: #fff;
+    color: var(--brand-foreground);
     background: var(--stage-color);
     border: 3px solid var(--g-surface);
     border-radius: 50%;
     box-shadow:
-      0 1px 2px rgba(60, 64, 67, 0.16),
-      0 3px 7px color-mix(in srgb, var(--stage-color) 32%, transparent);
+      var(--shadow-sm),
+      0 3px 7px color-mix(in srgb, var(--stage-color) 24%, transparent);
   }
 
-  /* 暗色下 --g-blue 是浅蓝（#8ab4f8），白字读不清，反过来用深色字 */
+  /* 暗色下环节色令牌已经是浅色（zinc-300 一档），序号文字翻成深色 */
   .dark .stage-node-index {
-    color: #202124;
+    color: var(--background);
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.5),
-      0 3px 8px color-mix(in srgb, var(--stage-color) 26%, transparent);
+      var(--shadow-sm),
+      0 3px 8px color-mix(in srgb, var(--stage-color) 20%, transparent);
   }
 
   /*
@@ -1115,7 +1118,7 @@
     cursor: pointer;
     background: var(--g-line);
     border: 0;
-    border-radius: 100px;
+    border-radius: var(--radius-full);
     transition: background 0.16s ease;
   }
 
@@ -1125,12 +1128,14 @@
     left: 2px;
     width: 14px;
     height: 14px;
-    /* 写死白色而不是 --g-surface：暗色模式下 --g-surface 是深灰，
-       关态（深灰轨道 + 深灰滑块）几乎看不出滑块在哪 */
-    background: #fff;
+    /* 关态：轨道是 border 色，滑块取 foreground —— 浅色下是深点、暗色下是亮点，
+       两端都有对比。选中态轨道变成环节色，滑块换成 primary-foreground 反色。 */
+    background: var(--foreground);
     border-radius: 50%;
-    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.35);
-    transition: transform 0.16s ease;
+    box-shadow: var(--shadow-sm);
+    transition:
+      transform 0.16s ease,
+      background-color 0.16s ease;
   }
 
   .stage-node-switch.is-on {
@@ -1138,6 +1143,7 @@
   }
 
   .stage-node-switch.is-on .knob {
+    background: var(--primary-foreground);
     transform: translateX(12px);
   }
 
@@ -1167,7 +1173,7 @@
 
   .stage-node.is-off .stage-node-index {
     background: var(--g-text-3);
-    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.14);
+    box-shadow: var(--shadow-sm);
   }
 
   .stage-node.is-off .stage-node-add {
@@ -1193,8 +1199,8 @@
     font-size: 11px;
     color: var(--stage-color);
     white-space: nowrap;
-    background: color-mix(in srgb, var(--stage-color) 12%, transparent);
-    border-radius: 100px;
+    background: color-mix(in srgb, var(--stage-color) 10%, transparent);
+    border-radius: var(--radius-sm);
     transition: opacity 0.14s ease;
   }
 
@@ -1214,8 +1220,8 @@
     padding: 2px 4px;
     background: var(--g-surface);
     border: 1px solid var(--g-line-2);
-    border-radius: 100px;
-    box-shadow: 0 2px 8px rgba(60, 64, 67, 0.14);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
     opacity: 0;
     transform: translateY(-50%);
     transition: opacity 0.16s ease;
@@ -1241,7 +1247,7 @@
     cursor: pointer;
     background: transparent;
     border: 0;
-    border-radius: 50%;
+    border-radius: var(--radius-sm);
     transition:
       color 0.14s ease,
       background 0.14s ease;
@@ -1281,7 +1287,7 @@
     cursor: pointer;
     background: color-mix(in srgb, var(--stage-color) 5%, transparent);
     border: 1px dashed color-mix(in srgb, var(--stage-color) 42%, transparent);
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     transition:
       background 0.14s ease,
       border-color 0.14s ease;
@@ -1315,7 +1321,7 @@
     cursor: not-allowed;
     background: var(--g-fill);
     border: 1px dashed var(--g-line);
-    border-radius: 10px;
+    border-radius: var(--radius-md);
   }
 
   /* ---------------- 任务卡片 ---------------- */
@@ -1327,8 +1333,8 @@
     padding: 12px 13px 9px;
     background: var(--g-surface);
     border: 1px solid var(--g-line);
-    border-radius: 14px;
-    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.1);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
     transition:
       box-shadow 0.16s ease,
       border-color 0.16s ease,
@@ -1344,7 +1350,7 @@
 
   .task-node:hover {
     border-color: color-mix(in srgb, var(--node-color) 45%, var(--g-line));
-    box-shadow: 0 6px 16px rgba(60, 64, 67, 0.14);
+    box-shadow: var(--shadow-md);
   }
 
   .task-node.is-selected {
@@ -1446,7 +1452,7 @@
     color: var(--g-text-2);
     white-space: nowrap;
     background: var(--g-fill-hover);
-    border-radius: 100px;
+    border-radius: var(--radius-sm);
   }
 
   .task-node-state .dot {
@@ -1671,16 +1677,24 @@
     white-space: nowrap;
     pointer-events: none;
     border: 1px solid transparent;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     transform: translateY(-100%);
   }
 
   .flow-port-label.is-out {
     top: calc(50% - 4px);
-    /* 比连线深一点：10px 小字纯 #4285f4 对比度偏低，混一点正文色保证看得清 */
-    color: color-mix(in srgb, var(--flow-edge) 72%, var(--g-text));
+    /* 10px 小字用中性色最稳：shadcn 的 muted-foreground 在明暗两端都在 4.5:1 以上，
+       混连线色会掉到 3:1 附近，暗色下基本看不清。 */
+    color: var(--muted-foreground);
     background: color-mix(in srgb, var(--flow-edge) 8%, var(--g-surface));
     border-color: color-mix(in srgb, var(--flow-edge) 30%, transparent);
+  }
+
+  /* 暗色下 muted-foreground 已经足够亮，但浅灰描边会糊在深底上，提一档 */
+  .dark & .flow-port-label.is-out {
+    color: var(--foreground);
+    background: var(--muted);
+    border-color: var(--border);
   }
 
   .flow-port-label.is-err {
@@ -1790,7 +1804,7 @@
     pointer-events: auto;
     background: color-mix(in srgb, var(--g-surface) 88%, transparent);
     border: 1px solid var(--g-line-2);
-    border-radius: 100px;
+    border-radius: var(--radius-md);
     backdrop-filter: blur(6px);
   }
 
@@ -1811,7 +1825,7 @@
     cursor: pointer;
     background: var(--g-surface);
     border: 1px solid var(--g-line);
-    border-radius: 100px;
+    border-radius: var(--radius-md);
     transition:
       color 0.14s ease,
       border-color 0.14s ease,
@@ -1830,8 +1844,8 @@
     padding: 4px;
     background: var(--g-surface);
     border: 1px solid var(--g-line);
-    border-radius: 12px;
-    box-shadow: 0 2px 6px rgba(60, 64, 67, 0.12);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
   }
 
   .pipeline-canvas :deep(.vue-flow__controls-button) {
@@ -1840,7 +1854,7 @@
     color: var(--g-text-2);
     background: transparent;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
   }
 
   .pipeline-canvas :deep(.vue-flow__controls-button:hover) {
@@ -1856,7 +1870,7 @@
     overflow: hidden;
     background: var(--g-fill);
     border: 1px solid var(--g-line);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
   }
 
   .pipeline-canvas :deep(.vue-flow__minimap-mask) {

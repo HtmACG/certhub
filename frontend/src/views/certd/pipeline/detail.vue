@@ -21,28 +21,28 @@
           <div class="detail-title-wrap">
             <div class="detail-title-row">
               <h1 class="detail-title" :class="{ 'is-empty': !form.title }">
-                {{ form.title || '未命名的流水线' }}
+                {{ form.title || $t('certd.detail.untitled') }}
               </h1>
-              <ElTooltip content="重命名流水线" placement="top">
+              <ElTooltip :content="$t('certd.detail.rename')" placement="top">
                 <button type="button" class="title-edit-btn" @click="openTitleDialog('pipeline')">
                   <ArtSvgIcon icon="ri:pencil-line" />
                 </button>
               </ElTooltip>
             </div>
             <div class="detail-meta">
-              <ElTag v-if="isNew" size="small" type="warning" effect="plain">未保存</ElTag>
-              <ElTag v-else-if="dirty" size="small" type="warning" effect="plain">有改动未保存</ElTag>
-              <ElTag v-if="detail.running" size="small" type="warning" effect="dark">运行中</ElTag>
-              <ElTag v-if="form.disabled" size="small" type="info" effect="plain">已停用</ElTag>
+              <ElTag v-if="isNew" size="small" type="warning" effect="plain">{{ $t('certd.detail.unsaved') }}</ElTag>
+              <ElTag v-else-if="dirty" size="small" type="warning" effect="plain">{{ $t('certd.detail.hasChanges') }}</ElTag>
+              <ElTag v-if="detail.running" size="small" type="warning" effect="dark">{{ $t('certd.detail.running') }}</ElTag>
+              <ElTag v-if="form.disabled" size="small" type="info" effect="plain">{{ $t('certd.detail.disabled') }}</ElTag>
               <span class="detail-meta-text">
-                {{ stages.length }} 个阶段<template v-if="offStageCount">
-                  （{{ offStageCount }} 个已停用）</template
-                >
-                · {{ taskCount }} 个任务<template v-if="disabledTaskCount">
-                  （{{ disabledTaskCount }} 步已停用）</template
-                ><template v-if="unlinkedTaskCount">
-                  （{{ unlinkedTaskCount }} 步未连线，不会执行）</template
-                >
+                {{ $t('certd.detail.stageCount', { n: stages.length }) }}<template v-if="offStageCount">{{
+                  $t('certd.detail.offStageCount', { n: offStageCount })
+                }}</template>
+                · {{ $t('certd.detail.taskCountText', { n: taskCount }) }}<template v-if="disabledTaskCount">{{
+                  $t('certd.detail.taskOffCount', { n: disabledTaskCount })
+                }}</template><template v-if="unlinkedTaskCount">{{
+                  $t('certd.detail.taskUnlinkedCount', { n: unlinkedTaskCount })
+                }}</template>
               </span>
             </div>
           </div>
@@ -52,7 +52,7 @@
              启用状态在「证书流水线」列表的表格里直接开关 -->
         <div class="detail-head-right">
           <!-- 画布 / 列表：画布看「真实流水」（节点 + 连线 + 拖动拼接），列表适合窄屏和逐项核对 -->
-          <div class="view-switch" role="tablist" aria-label="视图切换">
+          <div class="view-switch" role="tablist" :aria-label="$t('certd.detail.viewSwitch')">
             <button
               type="button"
               role="tab"
@@ -60,7 +60,7 @@
               :class="{ 'is-active': viewMode === 'canvas' }"
               @click="viewMode = 'canvas'"
             >
-              <ArtSvgIcon icon="ri:flow-chart" />画布
+              <ArtSvgIcon icon="ri:flow-chart" />{{ $t('certd.detail.viewCanvas') }}
             </button>
             <button
               type="button"
@@ -69,33 +69,37 @@
               :class="{ 'is-active': viewMode === 'list' }"
               @click="viewMode = 'list'"
             >
-              <ArtSvgIcon icon="ri:list-check-2" />列表
+              <ArtSvgIcon icon="ri:list-check-2" />{{ $t('certd.detail.viewList') }}
             </button>
           </div>
           <!-- 添加阶段紧挨保存：编辑动作集中在一处，不用滚到画布底部找按钮 -->
           <ElButton @click="addStage">
-            <ArtSvgIcon icon="ri:add-line" class="mr-1" />添加阶段
+            <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.detail.addStage') }}
           </ElButton>
           <ElButton :loading="saving" @click="save()">
-            <ArtSvgIcon icon="ri:save-3-line" class="mr-1" />保存
+            <ArtSvgIcon icon="ri:save-3-line" class="mr-1" />{{ $t('certd.detail.save') }}
           </ElButton>
           <ElTooltip
-            :content="timerEnabled && cron ? '当前定时：' + cron + '（点开可改）' : '还没设定时任务，点开设置'"
+            :content="
+              timerEnabled && cron
+                ? $t('certd.detail.timerTipOn', { cron })
+                : $t('certd.detail.timerTipOff')
+            "
           >
             <ElButton @click="scheduleDrawerVisible = true">
-              <ArtSvgIcon icon="ri:calendar-schedule-line" class="mr-1" />定时任务
+              <ArtSvgIcon icon="ri:calendar-schedule-line" class="mr-1" />{{ $t('certd.detail.cronTask') }}
               <span class="btn-badge" :class="{ 'is-muted': !cronSummary }">
-                {{ cronSummary || '未设置' }}
+                {{ cronSummary || $t('certd.detail.notSet') }}
               </span>
             </ElButton>
           </ElTooltip>
           <ElButton type="primary" :loading="running" :disabled="!stages.length" @click="runAndWatch">
-            <ArtSvgIcon icon="ri:play-circle-line" class="mr-1" />保存并运行
+            <ArtSvgIcon icon="ri:play-circle-line" class="mr-1" />{{ $t('certd.detail.saveAndRun') }}
           </ElButton>
         </div>
       </div>
       <div class="detail-remark">
-        <ElInput v-model="form.remark" placeholder="备注（可选）：这条流水线管哪些域名 / 部署到哪里" />
+        <ElInput v-model="form.remark" :placeholder="$t('certd.detail.remarkPh')" />
       </div>
     </ElCard>
 
@@ -103,7 +107,7 @@
     <ElDrawer
       v-model="scheduleDrawerVisible"
       class="g-scope schedule-drawer"
-      title="触发方式与执行设置"
+      :title="$t('certd.detail.scheduleTitle')"
       size="min(760px, 96vw)"
       destroy-on-close
     >
@@ -112,38 +116,38 @@
         <section class="setting-block">
           <header class="setting-title">
             <ArtSvgIcon icon="ri:time-line" />
-            <span class="setting-title-text">定时执行</span>
-            <span class="setting-title-hint">{{ timerEnabled ? '已开启' : '已关闭' }}</span>
+            <span class="setting-title-text">{{ $t('certd.detail.scheduled') }}</span>
+            <span class="setting-title-hint">{{ timerEnabled ? $t('certd.detail.timerOn') : $t('certd.detail.timerOff') }}</span>
             <ElTooltip
-              :content="timerEnabled ? '定时器已开启，保存后按下面的计划执行' : '定时器已关闭，只保留手动 / Webhook 触发'"
+              :content="timerEnabled ? $t('certd.detail.timerHintOn') : $t('certd.detail.timerHintOff')"
             >
               <ElSwitch v-model="timerEnabled" size="small" class="setting-title-switch" />
             </ElTooltip>
           </header>
 
           <div class="setting-grid">
-            <span class="setting-label">执行频率</span>
+            <span class="setting-label">{{ $t('certd.detail.frequency') }}</span>
             <ElRadioGroup
               v-model="scheduleMode"
               size="small"
               class="setting-radio"
               @change="onScheduleModeChange"
             >
-              <ElRadioButton value="daily">每天</ElRadioButton>
-              <ElRadioButton value="weekly">每周</ElRadioButton>
-              <ElRadioButton value="monthly">每月</ElRadioButton>
-              <ElRadioButton value="once">指定日期</ElRadioButton>
-              <ElRadioButton value="custom">自定义</ElRadioButton>
+              <ElRadioButton value="daily">{{ $t('certd.detail.daily') }}</ElRadioButton>
+              <ElRadioButton value="weekly">{{ $t('certd.detail.weekly') }}</ElRadioButton>
+              <ElRadioButton value="monthly">{{ $t('certd.detail.monthly') }}</ElRadioButton>
+              <ElRadioButton value="once">{{ $t('certd.detail.specificDate') }}</ElRadioButton>
+              <ElRadioButton value="custom">{{ $t('certd.detail.custom') }}</ElRadioButton>
             </ElRadioGroup>
 
             <template
               v-if="scheduleMode === 'daily' || scheduleMode === 'weekly' || scheduleMode === 'monthly'"
             >
-              <span class="setting-label">执行时间</span>
+              <span class="setting-label">{{ $t('certd.detail.execTime') }}</span>
               <div class="setting-inline">
                 <ElTimePicker
                   v-model="scheduleTime"
-                  placeholder="选择时间"
+                  :placeholder="$t('certd.detail.timePh')"
                   format="HH:mm"
                   value-format="HH:mm"
                   :step="15"
@@ -151,10 +155,10 @@
                   class="setting-time"
                 />
                 <template v-if="scheduleMode === 'weekly'">
-                  <span class="setting-label">星期</span>
+                  <span class="setting-label">{{ $t('certd.detail.weekday') }}</span>
                   <ElSelect v-model="scheduleWeekday" class="schedule-select">
                     <ElOption
-                      v-for="item in WEEKDAY_OPTIONS"
+                      v-for="item in weekdayOptions"
                       :key="item.value"
                       :label="item.label"
                       :value="item.value"
@@ -162,20 +166,25 @@
                   </ElSelect>
                 </template>
                 <template v-if="scheduleMode === 'monthly'">
-                  <span class="setting-label">日期</span>
+                  <span class="setting-label">{{ $t('certd.detail.date') }}</span>
                   <ElSelect v-model="scheduleDay" class="schedule-select">
-                    <ElOption v-for="day in 28" :key="day" :label="day + ' 号'" :value="day" />
+                    <ElOption
+                      v-for="day in 28"
+                      :key="day"
+                      :label="$t('certd.detail.dayOfMonth', { n: day })"
+                      :value="day"
+                    />
                   </ElSelect>
                 </template>
               </div>
             </template>
 
             <template v-else-if="scheduleMode === 'once'">
-              <span class="setting-label">执行时间</span>
+              <span class="setting-label">{{ $t('certd.detail.execTime') }}</span>
               <ElDatePicker
                 v-model="scheduleDate"
                 type="datetime"
-                placeholder="点这里选日期 + 时间"
+                :placeholder="$t('certd.detail.dateTimePh')"
                 format="YYYY-MM-DD HH:mm"
                 :clearable="false"
               />
@@ -190,17 +199,17 @@
           <!-- 当前计划 + 下次执行，单独一条高亮，避免和编辑器混在一起 -->
           <div class="schedule-summary">
             <span class="summary-item">
-              <span class="setting-label">计划</span>
-              <code class="cron-badge">{{ cron || '未填写' }}</code>
+              <span class="setting-label">{{ $t('certd.detail.plan') }}</span>
+              <code class="cron-badge">{{ cron || $t('certd.detail.notFilled') }}</code>
             </span>
             <span v-if="nextRunText" class="summary-item">
               <ArtSvgIcon icon="ri:calendar-check-line" />
-              <span class="setting-label">下次执行 {{ nextRunText }}</span>
+              <span class="setting-label">{{ $t('certd.detail.nextRun', { time: nextRunText }) }}</span>
             </span>
           </div>
 
           <div class="preset-wrap">
-            <span class="setting-label preset-label">常用</span>
+            <span class="setting-label preset-label">{{ $t('certd.detail.presets') }}</span>
             <ElTag
               v-for="preset in CRON_PRESETS"
               :key="preset.value"
@@ -209,36 +218,35 @@
               effect="light"
               @click="applyPreset(preset.value)"
             >
-              {{ preset.label }}
+              {{ $t(preset.labelKey) }}
             </ElTag>
           </div>
-          <p class="form-tip">
-            建议每天跑一次：证书剩余天数不足时才会真正续签，重复执行不会重复申请。
-          </p>
+          <p class="form-tip">{{ $t('certd.detail.cronHint') }}</p>
         </section>
 
         <!-- ② Webhook 触发 -->
         <section class="setting-block">
           <header class="setting-title">
             <ArtSvgIcon icon="ri:webhook-line" />
-            <span class="setting-title-text">Webhook 触发</span>
-            <span class="setting-title-hint">外部系统调接口触发这条流水线</span>
+            <span class="setting-title-text">{{ $t('certd.detail.webhookTrigger') }}</span>
+            <span class="setting-title-hint">{{ $t('certd.detail.webhookHint') }}</span>
           </header>
           <div class="setting-grid">
-            <span class="setting-label">触发密钥</span>
+            <span class="setting-label">{{ $t('certd.detail.triggerKey') }}</span>
             <div class="setting-inline">
               <ElInput
                 v-model="triggerKey"
-                placeholder="点右侧「重新生成」获取密钥"
+                :placeholder="$t('certd.detail.keyPh')"
                 class="setting-grow"
               />
-              <ElButton @click="regenerateKey">重新生成</ElButton>
-              <ElButton :disabled="!triggerKey" @click="copyTrigger">复制</ElButton>
+              <ElButton @click="regenerateKey">{{ $t('certd.detail.regenerate') }}</ElButton>
+              <ElButton :disabled="!triggerKey" @click="copyTrigger">{{ $t('certd.detail.copy') }}</ElButton>
             </div>
           </div>
           <p class="form-tip">
-            POST <code>/api/pipeline/{{ form.id || ':id' }}/trigger</code> ，body 传
-            <code>{ "key": "上面这串" }</code> ，可用于外部 CI / 云函数等场景。
+            POST <code>/api/pipeline/{{ form.id || ':id' }}/trigger</code>
+            <template v-if="false" />
+            <code>{ "key": "..." }</code>{{ $t('certd.detail.webhookUsage') }}
           </p>
         </section>
 
@@ -246,10 +254,10 @@
         <section class="setting-block">
           <header class="setting-title">
             <ArtSvgIcon icon="ri:history-line" />
-            <span class="setting-title-text">执行历史</span>
+            <span class="setting-title-text">{{ $t('certd.detail.runHistory') }}</span>
           </header>
           <div class="setting-grid">
-            <span class="setting-label">保留条数</span>
+            <span class="setting-label">{{ $t('certd.detail.keepCount') }}</span>
             <div class="setting-inline">
               <ElInputNumber
                 v-model="form.keepHistoryCount"
@@ -258,8 +266,8 @@
                 size="small"
                 class="setting-count"
               />
-              <span class="setting-label">条</span>
-              <span class="form-tip inline">超出后自动清理最早的记录，不影响证书本身</span>
+              <span class="setting-label">{{ $t('certd.detail.countUnit') }}</span>
+              <span class="form-tip inline">{{ $t('certd.detail.keepHint') }}</span>
             </div>
           </div>
         </section>
@@ -267,9 +275,9 @@
 
       <template #footer>
         <div class="dialog-footer">
-          <span class="form-tip inline">改完记得保存，否则只改了界面</span>
-          <ElButton @click="scheduleDrawerVisible = false">关闭</ElButton>
-          <ElButton type="primary" :loading="saving" @click="saveSchedule">保存</ElButton>
+          <span class="form-tip inline">{{ $t('certd.detail.saveReminder') }}</span>
+          <ElButton @click="scheduleDrawerVisible = false">{{ $t('certd.detail.close') }}</ElButton>
+          <ElButton type="primary" :loading="saving" @click="saveSchedule">{{ $t('certd.detail.save') }}</ElButton>
         </div>
       </template>
     </ElDrawer>
@@ -277,14 +285,16 @@
     <!-- 编辑标题：标题本身是纯文本，点旁边的铅笔图标才打开这个弹窗 -->
     <ElDialog
       v-model="titleDialog.visible"
-      :title="titleDialog.mode === 'pipeline' ? '重命名流水线' : '重命名阶段'"
+      :title="titleDialog.mode === 'pipeline' ? $t('certd.detail.rename') : $t('certd.detail.renameStage')"
       width="min(440px, 92vw)"
       append-to-body
       destroy-on-close
       @closed="onTitleDialogClosed"
     >
       <ElForm label-position="top" @submit.prevent>
-        <ElFormItem :label="titleDialog.mode === 'pipeline' ? '流水线名称' : '阶段名称'">
+        <ElFormItem
+          :label="titleDialog.mode === 'pipeline' ? $t('certd.detail.pipelineName') : $t('certd.detail.stageName')"
+        >
           <ElInput
             ref="titleInputRef"
             v-model="titleDialog.value"
@@ -292,7 +302,9 @@
             show-word-limit
             clearable
             :placeholder="
-              titleDialog.mode === 'pipeline' ? '例如：example.com 泛域名 + Nginx' : '例如：申请证书'
+              titleDialog.mode === 'pipeline'
+                ? $t('certd.detail.pipelineNamePh')
+                : $t('certd.detail.stageNamePh')
             "
             @keyup.enter="confirmTitleDialog"
           />
@@ -300,8 +312,8 @@
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="titleDialog.visible = false">取消</ElButton>
-          <ElButton type="primary" @click="confirmTitleDialog">保存</ElButton>
+          <ElButton @click="titleDialog.visible = false">{{ $t('certd.detail.cancel') }}</ElButton>
+          <ElButton type="primary" @click="confirmTitleDialog">{{ $t('certd.detail.save') }}</ElButton>
         </div>
       </template>
     </ElDialog>
@@ -364,9 +376,9 @@
                 <div class="stage-title-wrap">
                   <div class="stage-title-row">
                     <span class="stage-title" :class="{ 'is-empty': !stage.title }">
-                      {{ stage.title || '未命名阶段' }}
+                      {{ stage.title || $t('certd.detail.untitledStage') }}
                     </span>
-                    <ElTooltip content="重命名阶段" placement="top">
+                    <ElTooltip :content="$t('certd.detail.renameStage')" placement="top">
                       <button
                         type="button"
                         class="title-edit-btn is-small"
@@ -377,27 +389,31 @@
                     </ElTooltip>
                   </div>
                   <div class="stage-sub">
-                    <span class="stage-kind">{{ kindOfStage(stage).text }}</span>
+                    <span class="stage-kind">{{ $t(kindOfStage(stage).textKey) }}</span>
                     <span class="stage-sep">·</span>
                     <span>
-                      {{ stage.tasks.length }} 个任务<template v-if="stage.enabled !== false">
+                      {{ $t('certd.detail.stageTasks', { n: stage.tasks.length }) }}<template
+                        v-if="stage.enabled !== false"
+                      >
                         <template
                           v-if="stage.tasks.filter((task) => task.enabled === false).length"
                         >
-                          （{{
-                            stage.tasks.filter((task) => task.enabled === false).length
-                          }}
-                          步已停用）</template
+                          {{
+                            $t('certd.detail.stageTaskOff', {
+                              n: stage.tasks.filter((task) => task.enabled === false).length,
+                            })
+                          }}</template
                         ><template v-if="stage.tasks.filter((task) => task.linked === false).length">
-                          （{{
-                            stage.tasks.filter((task) => task.linked === false).length
-                          }}
-                          步未连线）</template
+                          {{
+                            $t('certd.detail.stageTaskUnlinked', {
+                              n: stage.tasks.filter((task) => task.linked === false).length,
+                            })
+                          }}</template
                         >
                       </template>
                     </span>
                     <!-- 阶段被关掉时整段都不跑，光看单步计数会以为还有任务在执行 -->
-                    <span v-if="stage.enabled === false" class="stage-off-tag">整段已停用</span>
+                    <span v-if="stage.enabled === false" class="stage-off-tag">{{ $t('certd.detail.stageDisabled') }}</span>
                     <!-- 停用的阶段不再显示上次执行结果：跟「已停用」并排会出现「已停用 · 上次成功」的自相矛盾 -->
                     <template v-if="stageStateText(stage) && stage.enabled !== false">
                       <span class="stage-sep">·</span>
@@ -413,8 +429,8 @@
                 <ElTooltip
                   :content="
                     stage.enabled === false
-                      ? '该阶段已停用：运行时会整段跳过，点击启用'
-                      : '启停这个阶段：关闭后运行时整段跳过'
+                      ? $t('certd.detail.stageOffTipOn')
+                      : $t('certd.detail.stageOffTipOff')
                   "
                   placement="top"
                 >
@@ -427,12 +443,12 @@
                     />
                   </span>
                 </ElTooltip>
-                <ElTooltip content="上移" placement="top">
+                <ElTooltip :content="$t('certd.detail.moveUp')" placement="top">
                   <ElButton link :disabled="stageIndex === 0" @click="moveStage(stageIndex, -1)">
                     <ArtSvgIcon icon="ri:arrow-up-line" />
                   </ElButton>
                 </ElTooltip>
-                <ElTooltip content="下移" placement="top">
+                <ElTooltip :content="$t('certd.detail.moveDown')" placement="top">
                   <ElButton
                     link
                     :disabled="stageIndex === stages.length - 1"
@@ -441,7 +457,7 @@
                     <ArtSvgIcon icon="ri:arrow-down-line" />
                   </ElButton>
                 </ElTooltip>
-                <ElTooltip content="添加任务到本阶段" placement="top">
+                <ElTooltip :content="$t('certd.detail.addTaskHere')" placement="top">
                   <ElButton link type="primary" @click="openPicker(stageIndex)">
                     <ArtSvgIcon icon="ri:add-line" />
                   </ElButton>
@@ -449,8 +465,8 @@
                 <ElTooltip
                   :content="
                     isStageRunning(stage) || stage.id === stageRunningId
-                      ? '本阶段正在执行'
-                      : '单独运行本阶段'
+                      ? $t('certd.detail.stageRunning')
+                      : $t('certd.detail.runStage')
                   "
                   placement="top"
                 >
@@ -464,12 +480,12 @@
                     <ArtSvgIcon icon="ri:play-line" />
                   </ElButton>
                 </ElTooltip>
-                <ElTooltip content="查看本阶段日志（在底部终端里）" placement="top">
+                <ElTooltip :content="$t('certd.detail.stageLog')" placement="top">
                   <ElButton link @click="openStageLog(stage)">
                     <ArtSvgIcon icon="ri:terminal-box-line" />
                   </ElButton>
                 </ElTooltip>
-                <ElTooltip content="删除阶段" placement="top">
+                <ElTooltip :content="$t('certd.detail.deleteStage')" placement="top">
                   <ElButton link type="danger" @click="removeStage(stageIndex)">
                     <ArtSvgIcon icon="ri:delete-bin-5-line" />
                   </ElButton>
@@ -490,7 +506,9 @@
                 <span class="task-seq">{{ taskIndex + 1 }}</span>
                 <!-- 图标兼作「日志入口」：执行中换成带动画的执行者图标，点一下看这个任务的日志 -->
                 <ElTooltip
-                  :content="isTaskRunning(task.id) ? '正在执行，点击查看实时日志' : '点击查看该任务的日志'"
+                  :content="
+                    isTaskRunning(task.id) ? $t('certd.detail.taskRunningTip') : $t('certd.detail.taskLogTip')
+                  "
                   placement="top"
                 >
                   <button
@@ -527,7 +545,7 @@
                   effect="plain"
                   class="task-state"
                 >
-                  已停用
+                  {{ $t('certd.detail.disabled') }}
                 </ElTag>
                 <!-- 没连线的步骤不会执行：列表视图也要标出来，和画布上的红字一致 -->
                 <ElTag
@@ -537,7 +555,7 @@
                   effect="plain"
                   class="task-state"
                 >
-                  未连线
+                  {{ $t('certd.detail.unlinked') }}
                 </ElTag>
                 <ElTag
                   v-else-if="taskStatus(task.id)"
@@ -550,7 +568,9 @@
                 </ElTag>
                 <!-- 单步开关：关掉后运行时会跳过这一步（立刻落库，不用再点保存） -->
                 <ElTooltip
-                  :content="task.enabled === false ? '已停用：运行时会跳过这一步，点击启用' : '启停这一步：关闭后运行时会跳过'"
+                  :content="
+                    task.enabled === false ? $t('certd.detail.taskOffTip') : $t('certd.detail.taskOffTipOn')
+                  "
                   placement="top"
                 >
                   <span class="task-switch" @click.stop>
@@ -576,9 +596,9 @@
               </dl>
 
               <div class="task-foot">
-                <span class="task-foot-hint">点击卡片配置参数</span>
+                <span class="task-foot-hint">{{ $t('certd.detail.clickCardToConfig') }}</span>
                 <div class="task-actions" @click.stop>
-                  <ElTooltip content="前移" placement="top">
+                  <ElTooltip :content="$t('certd.detail.moveLeft')" placement="top">
                     <ElButton
                       link
                       :disabled="taskIndex === 0"
@@ -587,7 +607,7 @@
                       <ArtSvgIcon icon="ri:arrow-left-s-line" />
                     </ElButton>
                   </ElTooltip>
-                  <ElTooltip content="后移" placement="top">
+                  <ElTooltip :content="$t('certd.detail.moveRight')" placement="top">
                     <ElButton
                       link
                       :disabled="taskIndex === stage.tasks.length - 1"
@@ -596,12 +616,12 @@
                       <ArtSvgIcon icon="ri:arrow-right-s-line" />
                     </ElButton>
                   </ElTooltip>
-                  <ElTooltip content="配置" placement="top">
+                  <ElTooltip :content="$t('certd.detail.config')" placement="top">
                     <ElButton link @click="openTaskDialog(stageIndex, taskIndex)">
                       <ArtSvgIcon icon="ri:settings-3-line" />
                     </ElButton>
                   </ElTooltip>
-                  <ElTooltip content="删除任务" placement="top">
+                  <ElTooltip :content="$t('certd.detail.deleteTask')" placement="top">
                     <ElButton link type="danger" @click="removeTask(stageIndex, taskIndex)">
                       <ArtSvgIcon icon="ri:delete-bin-5-line" />
                     </ElButton>
@@ -624,17 +644,17 @@
               <span class="task-add-text">
                 {{
                   stage.tasks.length >= MAX_TASKS_PER_STAGE
-                    ? '本阶段已满 ' + MAX_TASKS_PER_STAGE + ' 个任务'
+                    ? $t('certd.detail.stageFull', { n: MAX_TASKS_PER_STAGE })
                     : stage.tasks.length
-                      ? '添加任务'
-                      : '添加第一个任务'
+                      ? $t('certd.detail.addTask')
+                      : $t('certd.detail.addFirstTask')
                 }}
               </span>
               <span v-if="!stage.tasks.length" class="task-add-hint">
-                从任务库里选一个签发方式 / 部署目标 / 通知渠道
+                {{ $t('certd.detail.pickTask') }}
               </span>
               <span v-else-if="stage.tasks.length < MAX_TASKS_PER_STAGE" class="task-add-hint">
-                每个阶段最多 {{ MAX_TASKS_PER_STAGE }} 个任务
+                {{ $t('certd.detail.stageMaxHint', { n: MAX_TASKS_PER_STAGE }) }}
               </span>
             </button>
           </div>
@@ -666,16 +686,16 @@
         <div
           v-if="!logDockCollapsed"
           class="log-dock-resizer"
-          title="拖动调整高度"
+          :title="$t('certd.detail.resizeDock')"
           @pointerdown="startDockResize"
         />
 
         <header class="log-dock-head">
           <div class="log-dock-brand">
             <ArtSvgIcon icon="ri:terminal-box-line" />
-            <span class="log-dock-brand-text">执行日志</span>
-            <span class="log-dock-count">{{ dockLines.length }} 行</span>
-            <ElTag v-if="logRunning" size="small" type="warning" effect="light">运行中</ElTag>
+            <span class="log-dock-brand-text">{{ $t('certd.detail.execLog') }}</span>
+            <span class="log-dock-count">{{ $t('certd.detail.lineCount', { n: dockLines.length }) }}</span>
+            <ElTag v-if="logRunning" size="small" type="warning" effect="light">{{ $t('certd.detail.running') }}</ElTag>
           </div>
 
           <div class="log-dock-tabs">
@@ -685,7 +705,7 @@
               :class="{ 'is-active': logScope === 'all' }"
               @click="selectLogScope('all')"
             >
-              全部
+              {{ $t('certd.detail.all') }}
               <span class="log-dock-tab-count">{{ logTotalCount }}</span>
             </button>
             <button
@@ -695,7 +715,7 @@
               :class="{ 'is-active': logScope === 'prep' }"
               @click="selectLogScope('prep')"
             >
-              运行准备
+              {{ $t('certd.detail.preparing') }}
               <span class="log-dock-tab-count">{{ preparingLines.length }}</span>
             </button>
             <button
@@ -709,15 +729,17 @@
             >
               <i v-if="isStageRunning(stage)" class="log-dock-dot" />
               <i v-else class="log-dock-tab-dot" />
-              阶段 {{ stageIndex + 1 }} · {{ stage.title || kindOfStage(stage).text }}
+              {{ $t('certd.detail.stageTaskPrefix', { n: stageIndex + 1 }) }} · {{
+                stage.title || $t(kindOfStage(stage).textKey)
+              }}
               <span class="log-dock-tab-count">{{ stageLogLines(stage).length }}</span>
             </button>
           </div>
 
           <div class="log-dock-actions">
             <span v-if="logTaskFilter" class="log-dock-filter">
-              只看「{{ logTaskFilter }}」
-              <button type="button" title="取消任务过滤" @click="logTaskFilter = ''">
+              {{ $t('certd.detail.onlyThis', { name: logTaskFilter }) }}
+              <button type="button" :title="$t('certd.detail.clearTaskFilter')" @click="logTaskFilter = ''">
                 <ArtSvgIcon icon="ri:close-line" />
               </button>
             </span>
@@ -727,7 +749,7 @@
               :disabled="!dockLines.length"
               @click="copyDockLog"
             >
-              复制
+              {{ $t('certd.detail.copy') }}
             </ElButton>
             <ElButton
               link
@@ -735,12 +757,12 @@
               :disabled="!logTotalCount"
               @click="clearDockLog"
             >
-              清空
+              {{ $t('certd.detail.clear') }}
             </ElButton>
             <ElButton link @click="logDockCollapsed = !logDockCollapsed">
-              {{ logDockCollapsed ? '展开' : '收起' }}
+              {{ logDockCollapsed ? $t('certd.detail.expand') : $t('certd.detail.collapse') }}
             </ElButton>
-            <ElButton link @click="logDockVisible = false">关闭</ElButton>
+            <ElButton link @click="logDockVisible = false">{{ $t('certd.detail.close') }}</ElButton>
           </div>
         </header>
 
@@ -750,7 +772,7 @@
             height="100%"
             :show-header="false"
             :accent="dockAccent"
-            empty-text="暂无日志。点「保存并运行」后这里会实时追加，也可以点阶段或任务的日志入口回看。"
+            :empty-text="$t('certd.detail.emptyLog')"
           />
         </div>
       </section>
@@ -760,7 +782,7 @@
     <ElDialog
       v-model="pickerVisible"
       class="g-scope"
-      title="选择任务类型"
+      :title="$t('certd.detail.pickTaskTitle')"
       width="min(960px, 94vw)"
       destroy-on-close
     >
@@ -774,7 +796,7 @@
             @click="pickerGroup = group.key"
           >
             <ArtSvgIcon :icon="group.icon" />
-            <span>{{ group.name }}</span>
+            <span>{{ $t(group.nameKey) }}</span>
             <span class="picker-tab-count">{{ group.items.length }}</span>
           </div>
         </div>
@@ -803,7 +825,7 @@
               </div>
             </div>
           </div>
-          <ElEmpty v-if="!pickerSections.length" description="这个分类下暂时没有任务" />
+          <ElEmpty v-if="!pickerSections.length" :description="$t('certd.detail.pickEmpty')" />
         </div>
       </div>
     </ElDialog>
@@ -818,26 +840,26 @@
     >
       <div v-if="editingTask" class="task-editor">
         <ElForm label-width="96px" label-position="top">
-          <ElFormItem label="任务名称">
-            <ElInput v-model="editingTask.title" placeholder="给这个任务起个名字" />
+          <ElFormItem :label="$t('certd.detail.taskNameLabel')">
+            <ElInput v-model="editingTask.title" :placeholder="$t('certd.detail.taskNamePh')" />
           </ElFormItem>
-          <ElFormItem label="失败后继续">
+          <ElFormItem :label="$t('certd.detail.continueOnError')">
             <div class="flex items-center gap-2">
               <ElSwitch v-model="editingTask.continueOnError" @change="onContinueChange" />
-              <span class="form-tip">开启后该任务失败不会中断整条流水线（部署类常用）</span>
+              <span class="form-tip">{{ $t('certd.detail.ignoreErrors') }}</span>
             </div>
           </ElFormItem>
           <!--
             「失败后跳转」= 这一步挂了就去跑指定的那一步，中间的任务跳过。
             与「失败后继续」互斥：既然要跳到别处，就不该再顺着往下走。
           -->
-          <ElFormItem label="失败后跳转到">
+          <ElFormItem :label="$t('certd.detail.onErrorTarget')">
             <ElSelect
               v-model="editingTask.onErrorTaskId"
               class="w-full"
               clearable
               filterable
-              placeholder="不跳转（失败即中断整条流水线）"
+              :placeholder="$t('certd.detail.noJumpPh')"
               :disabled="editingTask.continueOnError"
               @change="onErrorTargetChange"
             >
@@ -848,13 +870,10 @@
                 :value="item.id"
               />
             </ElSelect>
-            <p class="field-tip">
-              只能在「本任务之后」的任务里选。配了跳转后，失败会直接从目标任务继续执行，
-              中间那些任务会被跳过；画布上会从这一步右侧的「失败后」出口连一条线到目标。
-            </p>
+            <p class="field-tip">{{ $t('certd.detail.onErrorHint') }}</p>
           </ElFormItem>
         </ElForm>
-        <ElDivider content-position="left">任务参数</ElDivider>
+        <ElDivider content-position="left">{{ $t('certd.detail.taskParams') }}</ElDivider>
         <PluginForm
           v-if="editingPlugin"
           v-model="editingTask.input"
@@ -864,13 +883,13 @@
           :cert-domains="certDomains"
         />
         <p v-if="outputKeys.length" class="form-tip mt-2">
-          该任务会输出变量：{{ outputKeys.join('、') }}
+          {{ $t('certd.detail.outputVars', { list: outputKeys.join('、') }) }}
         </p>
       </div>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="taskVisible = false">取消</ElButton>
-          <ElButton type="primary" @click="confirmTask">确定</ElButton>
+          <ElButton @click="taskVisible = false">{{ $t('certd.detail.cancel') }}</ElButton>
+          <ElButton type="primary" @click="confirmTask">{{ $t('certd.detail.confirm') }}</ElButton>
         </div>
       </template>
     </ElDrawer>
@@ -907,6 +926,7 @@
   import type { CanvasLayout } from './components/canvas-types'
   import { MAX_TASKS_PER_STAGE } from './components/canvas-types'
   import { useRunLog } from '../composables/use-run-log'
+  import { $t, i18n } from '@/locales'
 
   defineOptions({ name: 'CertdPipelineDetail' })
 
@@ -949,15 +969,20 @@
 
   /* ---------------- 定时计划：用日历 / 时间选择器，而不是让人背 cron ---------------- */
   type ScheduleMode = 'daily' | 'weekly' | 'monthly' | 'once' | 'custom'
+  /** 存 key 而不是文案：模块顶层取值会在首次 import 时把语言烤死 */
   const WEEKDAY_OPTIONS = [
-    { label: '周一', value: 1 },
-    { label: '周二', value: 2 },
-    { label: '周三', value: 3 },
-    { label: '周四', value: 4 },
-    { label: '周五', value: 5 },
-    { label: '周六', value: 6 },
-    { label: '周日', value: 0 },
+    { labelKey: 'certd.time.mon', value: 1 },
+    { labelKey: 'certd.time.tue', value: 2 },
+    { labelKey: 'certd.time.wed', value: 3 },
+    { labelKey: 'certd.time.thu', value: 4 },
+    { labelKey: 'certd.time.fri', value: 5 },
+    { labelKey: 'certd.time.sat', value: 6 },
+    { labelKey: 'certd.time.sun', value: 0 },
   ]
+  /** 响应式版本：切语言后下拉选项跟着变 */
+  const weekdayOptions = computed(() =>
+    WEEKDAY_OPTIONS.map((item) => ({ value: item.value, label: $t(item.labelKey) }))
+  )
   const scheduleMode = ref<ScheduleMode>('daily')
   /** HH:mm */
   const scheduleTime = ref('03:00')
@@ -1037,13 +1062,16 @@
     const [minute, hour, day, month, weekday] = parts
     if (!/^\d+$/.test(minute) || !/^\d+$/.test(hour)) return text
     const time = pad(+hour) + ':' + pad(+minute)
-    if (day === '*' && month === '*' && weekday === '*') return '每天 ' + time
+    if (day === '*' && month === '*' && weekday === '*') return $t('certd.detail.cronDaily', { time })
     if (day === '*' && month === '*' && /^\d+$/.test(weekday)) {
-      const label = WEEKDAY_OPTIONS.find((item) => item.value === +weekday)?.label
-      return (label || '每' + weekday) + ' ' + time
+      const label = WEEKDAY_OPTIONS.find((item) => item.value === +weekday)
+      return $t('certd.detail.cronWeekly', {
+        day: label ? $t(label.labelKey) : $t('certd.detail.cronEveryWeekday', { day: weekday }),
+        time,
+      })
     }
     if (/^\d+$/.test(day) && month === '*' && weekday === '*') {
-      return '每月 ' + day + ' 号 ' + time
+      return $t('certd.detail.cronMonthly', { day, time })
     }
     return text
   })
@@ -1105,7 +1133,7 @@
       if (target.getTime() <= now.getTime()) target.setMonth(target.getMonth() + 1, Number(day))
       return formatDateTime(target)
     }
-    return '保存后由调度器计算'
+    return $t('certd.detail.cronScheduler')
   })
 
   const taskCount = computed(() =>
@@ -1208,9 +1236,9 @@
   /** 阶段整体状态文案（配合描边颜色，让「上次跑成什么样」不用去历史里翻） */
   const stageStateText = (stage: PipelineStage): string => {
     const state = stageStateClass(stage)
-    if (state === 'is-success') return '上次执行成功'
-    if (state === 'is-failed') return '上次执行失败'
-    if (state === 'is-running') return '正在执行'
+    if (state === 'is-success') return $t('certd.detail.stateSuccess')
+    if (state === 'is-failed') return $t('certd.detail.stateFailed')
+    if (state === 'is-running') return $t('certd.detail.stateRunning')
     return ''
   }
 
@@ -1232,7 +1260,7 @@
   const accessOptions = ref<{ id: number; name: string; typeName?: string }[]>([])
   const accessName = (id: any): string => {
     const hit = accessOptions.value.find((item) => String(item.id) === String(id))
-    return hit?.name || '已选择授权'
+    return hit?.name || $t('certd.detail.accessPicked')
   }
 
   /** 下拉选项文案去掉括注：「Let's Encrypt（免费 DV，90 天）」→「Let's Encrypt」 */
@@ -1247,8 +1275,8 @@
     const title = task.title || name
     const parts: string[] = []
     if (title !== name) parts.push(name)
-    if (task.continueOnError) parts.push('失败继续')
-    if (task.onErrorTaskId) parts.push('失败后跳转')
+    if (task.continueOnError) parts.push($t('certd.detail.continueOnErrorTag'))
+    if (task.onErrorTaskId) parts.push($t('certd.detail.onErrorJumpTag'))
     return parts.join(' · ')
   }
 
@@ -1268,7 +1296,7 @@
       if (filled) {
         entries.push({ label, value: Array.isArray(value) ? value.join('、') : String(value) })
       } else if (certDomains.value.length) {
-        entries.push({ label, value: '运行时按证书域名自动匹配' })
+        entries.push({ label, value: $t('certd.detail.autoMatchDomains') })
       }
     }
 
@@ -1283,7 +1311,7 @@
       // 开关类字段是边缘配置，卡片上不占行，进详情看
       if (field.component === 'switch') continue
       if (field.component === 'password') {
-        entries.push({ label, value: '已填写' })
+        entries.push({ label, value: $t('certd.detail.filled') })
         continue
       }
       if (field.component === 'access') {
@@ -1364,7 +1392,11 @@
   const confirmTitleDialog = () => {
     const value = String(titleDialog.value || '').trim()
     if (!value) {
-      ElMessage.warning(titleDialog.mode === 'pipeline' ? '流水线名称不能为空' : '阶段名称不能为空')
+      ElMessage.warning(
+        titleDialog.mode === 'pipeline'
+          ? $t('certd.detail.titleRequiredPipeline')
+          : $t('certd.detail.titleRequiredStage')
+      )
       return
     }
     if (titleDialog.mode === 'pipeline') {
@@ -1406,7 +1438,7 @@
       if (!id) {
         // 空白新建
         isNew.value = true
-        form.title = '新的证书流水线'
+        form.title = $t('certd.detail.newPipelineTitle')
         stages.value = []
         return
       }
@@ -1449,7 +1481,7 @@
       }
       dirty.value = false
     } catch (error: any) {
-      ElMessage.error(error?.message || '加载失败')
+      ElMessage.error(error?.message || $t('certd.detail.loadFailed'))
     } finally {
       loading.value = false
     }
@@ -1457,7 +1489,7 @@
 
   /* ---------------- 阶段 / 任务编辑 ---------------- */
   const addStage = () => {
-    stages.value.push({ id: shortId('stage'), title: '新阶段', tasks: [] })
+    stages.value.push({ id: shortId('stage'), title: $t('certd.detail.newStageTitle'), tasks: [] })
     markDirty()
   }
 
@@ -1468,7 +1500,10 @@
       markDirty()
       return
     }
-    await ElMessageBox.confirm('该阶段下还有任务，确定删除整个阶段吗？', '删除阶段', {
+    await ElMessageBox.confirm($t('certd.detail.confirmDeleteStage'), $t('certd.detail.deleteStage'), {
+      confirmButtonText: $t('certd.common.confirm'),
+      cancelButtonText: $t('certd.common.cancel'),
+     
       type: 'warning',
     })
     stages.value.splice(index, 1)
@@ -1553,7 +1588,11 @@
   }
 
   const removeTask = async (stageIndex: number, taskIndex: number) => {
-    await ElMessageBox.confirm('确定删除这个任务吗？', '删除任务', { type: 'warning' })
+    await ElMessageBox.confirm($t('certd.detail.confirmDeleteTask'), $t('certd.detail.deleteTask'), {
+      type: 'warning',
+      confirmButtonText: $t('certd.common.confirm'),
+      cancelButtonText: $t('certd.common.cancel'),
+    })
     const [removed] = stages.value[stageIndex].tasks.splice(taskIndex, 1)
     // 别的任务可能把它当作「失败后跳转」的目标，删了要顺手断掉，否则画布会留一条指向空气的红线
     if (removed) {
@@ -1572,9 +1611,24 @@
   const pickerStageIndex = ref(0)
 
   const pickerGroups = computed(() => [
-    { key: 'cert' as const, name: '证书申请', icon: 'ri:file-shield-2-line', items: pluginStore.pluginsByGroup.cert || [] },
-    { key: 'deploy' as const, name: '证书部署', icon: 'ri:rocket-2-line', items: pluginStore.pluginsByGroup.deploy || [] },
-    { key: 'notify' as const, name: '通知', icon: 'ri:notification-3-line', items: pluginStore.pluginsByGroup.notify || [] },
+    {
+      key: 'cert' as const,
+      nameKey: 'certd.detail.pickerCert',
+      icon: 'ri:file-shield-2-line',
+      items: pluginStore.pluginsByGroup.cert || [],
+    },
+    {
+      key: 'deploy' as const,
+      nameKey: 'certd.detail.pickerDeploy',
+      icon: 'ri:rocket-2-line',
+      items: pluginStore.pluginsByGroup.deploy || [],
+    },
+    {
+      key: 'notify' as const,
+      nameKey: 'certd.detail.pickerNotify',
+      icon: 'ri:notification-3-line',
+      items: pluginStore.pluginsByGroup.notify || [],
+    },
   ])
 
   /** 部署类按「主机 / 面板 / 集群 / 云 CDN / 对象存储 / 其它」再分块，方便定位 */
@@ -1594,7 +1648,7 @@
     if (!stage) return
     // 一个阶段最多 5 个任务：再多卡片就排成一长条，画布缩放后看不清
     if ((stage.tasks || []).length >= MAX_TASKS_PER_STAGE) {
-      ElMessage.warning('每个阶段最多 ' + MAX_TASKS_PER_STAGE + ' 个任务')
+      ElMessage.warning($t('certd.detail.stageMaxWarn', { n: MAX_TASKS_PER_STAGE }))
       return
     }
     pickerStageIndex.value = stageIndex
@@ -1607,7 +1661,7 @@
     // 弹窗开着的时候可能已经加满了（多端 / 快速连点），落库前再拦一次
     if ((stage.tasks || []).length >= MAX_TASKS_PER_STAGE) {
       pickerVisible.value = false
-      ElMessage.warning('每个阶段最多 ' + MAX_TASKS_PER_STAGE + ' 个任务')
+      ElMessage.warning($t('certd.detail.stageMaxWarn', { n: MAX_TASKS_PER_STAGE }))
       return
     }
     const task: PipelineTask = {
@@ -1626,7 +1680,7 @@
     pickerVisible.value = false
     markDirty()
     if (task.linked === false) {
-      ElMessage.info('已添加，把它连到流程上才会执行（从上一张卡片右侧蓝点拖过来）')
+      ElMessage.info($t('certd.detail.addedUnlinked'))
     }
     // 直接打开配置，省掉「再点一次」的步骤
     openTaskDialog(pickerStageIndex.value, stage.tasks.length - 1)
@@ -1659,7 +1713,7 @@
   )
   const taskDialogTitle = computed(() => {
     const plugin = editingPlugin.value
-    return plugin ? '配置：' + plugin.name : '配置任务'
+    return plugin ? $t('certd.detail.configPlugin', { name: plugin.name }) : $t('certd.detail.configTask')
   })
 
   /** 编辑副本，取消时不影响原任务 */
@@ -1681,7 +1735,7 @@
             stageIndex +
             1 +
             '. ' +
-            (stage.title || '未命名阶段') +
+            (stage.title || $t('certd.detail.untitledStage')) +
             ' / ' +
             (task.title || task.type),
         })
@@ -1725,7 +1779,7 @@
       return value === undefined || value === null || value === '' || (Array.isArray(value) && !value.length)
     })
     if (missing) {
-      ElMessage.warning('请填写「' + missing.title + '」')
+      ElMessage.warning($t('certd.detail.missingField', { name: missing.title }))
       return
     }
     stages.value[editingStageIndex.value].tasks[editingTaskIndex.value] = task
@@ -1786,42 +1840,48 @@
     if (kind === 'error') {
       try {
         await ElMessageBox.confirm(
-          '删除后「' + name(sourceTask) + '」失败时不再跳到「' + name(targetTask) + '」。',
-          '删除这条「失败后」连线？',
-          { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+          $t('certd.detail.confirmRemoveFailEdge', { from: name(sourceTask), to: name(targetTask) }),
+          $t('certd.detail.removeFailEdgeTitle'),
+          {
+            type: 'warning',
+            confirmButtonText: $t('certd.common.delete'),
+            cancelButtonText: $t('certd.common.cancel'),
+          }
         )
       } catch {
         return
       }
       sourceTask.onErrorTaskId = ''
       markDirty()
-      ElMessage.success('已删除「失败后」连线')
+      ElMessage.success($t('certd.detail.removedFailEdge'))
       return
     }
 
     try {
       await ElMessageBox.confirm(
-        '断开后「' +
-          name(targetTask) +
-          '」会变成「未连线」，运行时跳过、不再执行；任务仍留在原来的阶段里。',
-        '删除这条连线？',
-        { type: 'warning', confirmButtonText: '断开', cancelButtonText: '取消' }
+        $t('certd.detail.confirmDisconnect', { name: name(targetTask) }),
+        $t('certd.detail.disconnectTitle'),
+        {
+          type: 'warning',
+          confirmButtonText: $t('certd.detail.disconnect'),
+          cancelButtonText: $t('certd.common.cancel'),
+        }
       )
     } catch {
       return
     }
     targetTask.linked = false
     markDirty()
-    ElMessage.success('已断开：「' + name(targetTask) + '」不再执行')
+    ElMessage.success($t('certd.detail.disconnected', { name: name(targetTask) }))
   }
 
   const save = async (silent = false): Promise<boolean> => {
     if (!form.title.trim()) {
-      ElMessage.warning('请填写流水线名称')
+      ElMessage.warning($t('certd.detail.pipelineNameRequired'))
       return false
     }
     if (!stages.value.some((stage) => stage.tasks.length)) {
-      ElMessage.warning('至少给一个阶段添加任务')
+      ElMessage.warning($t('certd.detail.stageTaskRequired'))
       return false
     }
     saving.value = true
@@ -1843,10 +1903,10 @@
         router.replace('/certd/pipeline/detail/' + result.id)
       }
       dirty.value = false
-      if (!silent) ElMessage.success('已保存')
+      if (!silent) ElMessage.success($t('certd.detail.saved'))
       return true
     } catch (error: any) {
-      ElMessage.error(error?.message || '保存失败')
+      ElMessage.error(error?.message || $t('certd.detail.saveFailed'))
       return false
     } finally {
       saving.value = false
@@ -1958,9 +2018,9 @@
   const copyDockLog = async () => {
     try {
       await navigator.clipboard.writeText(dockLines.value.join('\n'))
-      ElMessage.success('日志已复制')
+      ElMessage.success($t('certd.detail.logCopied'))
     } catch {
-      ElMessage.error('复制失败')
+      ElMessage.error($t('certd.detail.copyFailed'))
     }
   }
 
@@ -2023,7 +2083,7 @@
       // 不 await —— 这个流要等整条流水线跑完才结束，不能把按钮一直卡在 loading。
       void runLog.connect(result?.historyId || null)
     } catch (error: any) {
-      ElMessage.error(error?.message || '启动失败')
+      ElMessage.error(error?.message || $t('certd.detail.startFailed'))
     } finally {
       running.value = false
     }
@@ -2036,11 +2096,11 @@
    */
   const runStage = async (stage: PipelineStage) => {
     if (stage.enabled === false) {
-      ElMessage.warning('该阶段已停用，请先启用再单独运行')
+      ElMessage.warning($t('certd.detail.stageOffCannotRun'))
       return
     }
     if (!stage.tasks?.length) {
-      ElMessage.warning('该阶段还没有任务，无法单独运行')
+      ElMessage.warning($t('certd.detail.stageNoTask'))
       return
     }
     if (anyRunActive.value) return
@@ -2057,7 +2117,7 @@
       // 不 await —— 流要等该阶段跑完才结束
       void runLog.connect(result?.historyId || null)
     } catch (error: any) {
-      ElMessage.error(error?.message || '启动失败')
+      ElMessage.error(error?.message || $t('certd.detail.startFailed'))
     } finally {
       stageRunningId.value = ''
     }
@@ -2075,9 +2135,9 @@
     const text = 'curl -X POST ' + location.origin + api + ' -H "Content-Type: application/json" -d \'{"key":"' + triggerKey.value + '"}\''
     try {
       await navigator.clipboard.writeText(text)
-      ElMessage.success('触发命令已复制')
+      ElMessage.success($t('certd.detail.triggerCopied'))
     } catch {
-      ElMessage.error('复制失败')
+      ElMessage.error($t('certd.detail.copyFailed'))
     }
   }
 
@@ -2140,17 +2200,16 @@
         return n + ti
       }
       if (flatIndex(targetStageIndex, targetTaskIndex) <= flatIndex(sourceStageIndex, sourceTaskIndex)) {
-        ElMessage.warning('「失败后跳转」只能指向排在这一步后面的任务')
+        ElMessage.warning($t('certd.detail.jumpOnlyForward'))
         return
       }
       sourceTask.onErrorTaskId = targetTask.id
       markDirty()
       ElMessage.success(
-        '「' +
-          (sourceTask.title || sourceTask.type) +
-          '」失败后将跳转到「' +
-          (targetTask.title || targetTask.type) +
-          '」'
+        $t('certd.detail.jumpToast', {
+          from: sourceTask.title || sourceTask.type,
+          to: targetTask.title || targetTask.type,
+        })
       )
       return
     }
@@ -2167,7 +2226,7 @@
     if (
       flatIndexOf(targetStageIndex, targetTaskIndex) <= flatIndexOf(sourceStageIndex, sourceTaskIndex)
     ) {
-      ElMessage.warning('只能连到排在这一步后面的任务（任务不会跨阶段搬家）')
+      ElMessage.warning($t('certd.detail.connectOnlyForward'))
       return
     }
 
@@ -2177,10 +2236,10 @@
     sourceTask.linked = true
     markDirty()
     if (wasUnlinked) {
-      ElMessage.success('已把「' + (targetTask.title || targetTask.type) + '」接进执行流程')
+      ElMessage.success($t('certd.detail.connected', { name: targetTask.title || targetTask.type }))
     } else {
       // 两步本来就在同一条链上：连线是自动画的，再拖一次不会改变顺序
-      ElMessage.info('这两步本来就在同一条执行链上（点连线可以断开）')
+      ElMessage.info($t('certd.detail.alreadyLinked'))
     }
   }
 
@@ -2208,10 +2267,10 @@
   onBeforeRouteLeave(async () => {
     if (!dirty.value) return true
     try {
-      await ElMessageBox.confirm('有未保存的改动，离开会丢失，确定离开吗？', '离开确认', {
+      await ElMessageBox.confirm($t('certd.detail.leaveConfirm'), $t('certd.detail.leaveTitle'), {
         type: 'warning',
-        confirmButtonText: '离开',
-        cancelButtonText: '留下',
+        confirmButtonText: $t('certd.detail.leave'),
+        cancelButtonText: $t('certd.detail.stay'),
       })
       return true
     } catch {
@@ -2222,11 +2281,12 @@
 
 <style scoped>
   /*
-   * Google 风格（Material 3 / Google Cloud Console 观感）
+   * shadcn/ui 设计语言（AGENTS 6.0）
    * =========================================================
-   * 设计令牌在文件末尾的非 scoped 块里（--g-*），这里只消费。
-   * 要点：白底卡片 + 1px #dadce0 描边 + 12px 圆角、hover 抬升阴影、
-   *       胶囊 chip 承载环节色、填充式输入框、胶囊按钮。
+   * 设计令牌在 shadcn-tokens.scss（--g-* 是它的历史别名），这里只消费。
+   * 形态要点：卡片 = 白底 + 1px 描边 + 10px 圆角、**不用 hover 抬升阴影**；
+   * 分段控件 / chip 用 rounded-md（6px），不再用 Material 的胶囊（100px）；
+   * 阴影只有 --shadow-sm / --shadow-md 两档。
    */
 
   .certd-pipeline-detail {
@@ -2244,12 +2304,12 @@
     flex: 0 0 auto;
   }
 
-  /* 页面内的图标按钮统一成 28px 圆形（Google 的 icon button） */
+  /* 页面内的图标按钮：28px 的 ghost icon button（圆角 6px，不做成圆形） */
   .certd-pipeline-detail :deep(.el-button.is-link) {
     width: 28px;
     height: 28px;
     padding: 0;
-    border-radius: 50%;
+    border-radius: var(--radius-sm);
   }
 
   .certd-pipeline-detail :deep(.el-button.is-link:hover) {
@@ -2362,33 +2422,34 @@
     align-items: center;
   }
 
-  /* 画布 / 列表切换：分段控件（两个 icon + 文字，当前项白底 + 主色） */
+  /* 画布 / 列表切换：shadcn 的 segmented（muted 轨道 + 白底选中有 1px 描边） */
   .view-switch {
     display: inline-flex;
     flex: 0 0 auto;
     gap: 2px;
     padding: 2px;
-    background: var(--g-fill-hover);
-    border-radius: 100px;
+    background: var(--g-fill);
+    border-radius: var(--radius-md);
   }
 
   .view-switch button {
     display: inline-flex;
     gap: 4px;
     align-items: center;
-    height: 26px;
-    padding: 0 11px;
+    height: 28px;
+    padding: 0 10px;
     font-family: var(--g-font);
-    font-size: 12px;
+    font-size: 12.5px;
+    font-weight: 500;
     color: var(--g-text-2);
     cursor: pointer;
     background: transparent;
-    border: 0;
-    border-radius: 100px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
     transition:
       color 0.14s ease,
       background 0.14s ease,
-      box-shadow 0.14s ease;
+      border-color 0.14s ease;
   }
 
   .view-switch button:hover {
@@ -2396,9 +2457,10 @@
   }
 
   .view-switch button.is-active {
-    color: var(--g-blue);
+    color: var(--g-text);
     background: var(--g-surface);
-    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.18);
+    border-color: var(--g-line);
+    box-shadow: var(--shadow-sm);
   }
 
   /* 按钮角标：日志按钮显示行数、定时任务按钮显示当前 cron；
@@ -2411,22 +2473,22 @@
     height: 18px;
     margin-left: 6px;
     padding: 0 7px;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
     font-weight: 500;
     line-height: 18px;
-    color: var(--g-text-2, var(--art-gray-600, #5f6368));
-    background: var(--g-fill-hover, var(--art-gray-200, #f1f3f4));
-    border-radius: 4px;
+    color: var(--muted-foreground);
+    background: var(--muted);
+    border-radius: var(--radius-sm);
     white-space: nowrap;
     opacity: 1;
   }
 
   /* 没内容时压暗，但仍然要显示出来（虚线框 + 浅字） */
   .btn-badge.is-muted {
-    color: var(--g-text-3, var(--art-gray-500, #909399));
+    color: var(--muted-foreground);
     background: transparent;
-    border: 1px dashed var(--g-line, var(--art-card-border, #dcdfe6));
+    border: 1px dashed var(--border);
   }
 
   /* ---------------- 触发方式与执行设置（抽屉） ----------------
@@ -2574,7 +2636,7 @@
     opacity: 1;
   }
 
-  /* 步骤序号：Google 的 stepper 就是「圆圈 + 数字」 */
+  /* 步骤序号：方形小徽标（shadcn 的 badge 形态），不是 Material 的 stepper 圆点 */
   .stage-index {
     display: inline-flex;
     flex: 0 0 auto;
@@ -2582,11 +2644,11 @@
     justify-content: center;
     width: 26px;
     height: 26px;
-    font-size: 12.5px;
-    font-weight: 500;
+    font-size: 12px;
+    font-weight: 600;
     color: var(--stage-color, var(--g-blue));
-    background: color-mix(in srgb, var(--stage-color, var(--g-blue)) 10%, transparent);
-    border-radius: 50%;
+    background: color-mix(in srgb, var(--stage-color, var(--g-blue)) 9%, transparent);
+    border-radius: var(--radius-sm);
   }
 
   .stage-icon {
@@ -2637,13 +2699,13 @@
     color: var(--g-text-2);
   }
 
-  /* 环节 chip：胶囊 + 淡色底，Google 的标签就是这个形状 */
+  /* 环节 chip：shadcn badge（rounded-md + 淡色底），不是胶囊 */
   .stage-kind {
-    padding: 1px 10px;
+    padding: 1px 8px;
     font-weight: 500;
     color: var(--stage-color, var(--g-blue));
-    background: color-mix(in srgb, var(--stage-color, var(--g-blue)) 10%, transparent);
-    border-radius: 100px;
+    background: color-mix(in srgb, var(--stage-color, var(--g-blue)) 9%, transparent);
+    border-radius: var(--radius-sm);
   }
 
   .stage-sep {
@@ -2680,7 +2742,7 @@
     font-size: 11px;
     color: var(--g-text-3);
     background: var(--g-fill-hover);
-    border-radius: 100px;
+    border-radius: var(--radius-sm);
   }
 
   /* 整段停用：卡片降饱和 + 虚线边，和「某一步停用」区分开 */
@@ -2698,12 +2760,8 @@
     background: var(--g-fill-hover);
   }
 
-  /* 暗色模式：环节色是 JS 内联的固定值，深底上要提亮才看得清 */
-  .dark .stage-index,
-  .dark .stage-icon,
-  .dark .stage-kind {
-    color: color-mix(in srgb, var(--stage-color, var(--g-blue)) 45%, #ffffff);
-  }
+  /* 暗色模式：环节色令牌本身已经是提亮后的值（见 shadcn-tokens 的 --stage-*），
+     这里不再做二次混色 —— 混 #fff 会把绿/橙冲成近白，反而丢了环节区分 */
 
   /* ---------------- 任务卡 ---------------- */
   .task-grid {
@@ -2724,13 +2782,14 @@
     cursor: pointer;
     background: var(--g-surface);
     border: 1px solid var(--g-line);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     transition: border-color 0.2s, box-shadow 0.2s;
   }
 
   .task-card:hover {
-    border-color: transparent;
-    box-shadow: var(--g-elev-2);
+    /* shadcn 的卡片 hover 只换描边深浅，不做「描边消失 + 浮起阴影」——
+       那个效果会让整块内容跟着位移，一屏多张卡一起 hover 时像在抖。 */
+    border-color: color-mix(in srgb, var(--g-text) 22%, var(--g-line));
   }
 
   .task-card.is-success {
@@ -2745,10 +2804,11 @@
     border-color: var(--g-amber);
   }
 
-  /* 跳过的步骤（证书未到期 / 已存在 / 刚申请过）：蓝色虚线，别和失败混淆 */
+  /* 跳过的步骤（证书未到期 / 已存在 / 刚申请过）：信息蓝虚线，别和失败混淆。
+     用 --info 而不是 --g-blue：后者已转指 --brand（近黑/近白），跳过会看起来像「停用」。 */
   .task-card.is-skipped {
     border-style: dashed;
-    border-color: var(--g-blue);
+    border-color: var(--info);
   }
 
   /* 停用的步骤：整卡变淡 + 图标去色，一眼看出这次不会执行它 */
@@ -2791,10 +2851,10 @@
     width: 20px;
     height: 20px;
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--g-text-2);
     background: var(--g-fill-hover);
-    border-radius: 50%;
+    border-radius: var(--radius-sm);
   }
 
   .task-title-wrap {
@@ -2852,7 +2912,7 @@
     font-size: 12px;
     line-height: 1.55;
     background: var(--g-fill);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
   }
 
   .task-meta-row {
@@ -2936,7 +2996,7 @@
     cursor: pointer;
     background: transparent;
     border: 1px dashed var(--g-line);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     transition: all 0.2s;
   }
 
@@ -2981,7 +3041,7 @@
     padding: 14px 16px;
     background: var(--g-fill);
     border: 1px solid var(--g-line-2);
-    border-radius: calc(var(--custom-radius) + 4px);
+    border-radius: var(--radius-lg);
   }
 
   .setting-title {
@@ -3095,16 +3155,16 @@
   .form-tip code {
     display: inline-block;
     padding: 1px 6px;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--g-text);
     white-space: nowrap;
     background: var(--g-fill-hover);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
   }
 
   .cron-input :deep(.el-input__inner) {
-    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 13px;
     letter-spacing: 1px;
   }
@@ -3184,13 +3244,15 @@
     display: flex;
     gap: 8px;
     align-items: center;
-    padding: 10px 12px;
+    padding: 8px 10px;
     font-size: 13px;
     font-weight: 500;
     color: var(--g-text-2);
     cursor: pointer;
-    border-radius: 100px;
-    transition: background 0.15s, color 0.15s;
+    border-radius: var(--radius-sm);
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
   }
 
   .picker-tab:hover {
@@ -3240,14 +3302,15 @@
     padding: 10px;
     cursor: pointer;
     border: 1px solid var(--g-line);
-    border-radius: 12px;
-    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    border-radius: var(--radius-md);
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
   }
 
   .picker-item:hover {
-    background: var(--g-surface);
-    border-color: transparent;
-    box-shadow: var(--g-elev-2);
+    background: var(--g-fill-hover);
+    border-color: color-mix(in srgb, var(--g-text) 22%, var(--g-line));
   }
 
   .picker-item-main {
@@ -3287,7 +3350,7 @@
     cursor: pointer;
     background: transparent;
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
   }
 
   .task-icon:hover {
@@ -3348,7 +3411,7 @@
     overflow: hidden;
     background: #0b0e14;
     border-top: 1px solid #1f2430;
-    box-shadow: 0 -10px 30px rgb(0 0 0 / 20%);
+    box-shadow: var(--shadow-md);
   }
 
   /*
@@ -3453,7 +3516,7 @@
     cursor: pointer;
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 100px;
+    border-radius: var(--radius-sm);
     transition:
       background 0.15s,
       color 0.15s;
@@ -3519,7 +3582,7 @@
     padding: 0 9px;
     font-size: 12px;
     color: #9aa4b2;
-    border-radius: 100px;
+    border-radius: var(--radius-sm);
   }
 
   .log-dock-actions :deep(.el-button:hover) {
@@ -3544,7 +3607,7 @@
     white-space: nowrap;
     background: #232b37;
     border: 1px solid #303a48;
-    border-radius: 100px;
+    border-radius: var(--radius-sm);
   }
 
   .log-dock-filter button {
@@ -3618,11 +3681,11 @@
 
   .cron-badge {
     padding: 1px 8px;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     color: var(--g-text);
     background: var(--g-fill-hover);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
   }
 
   @media (max-width: 900px) {

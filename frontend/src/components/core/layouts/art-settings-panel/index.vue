@@ -10,8 +10,11 @@
       <MenuLayoutSettings />
       <!-- 菜单风格 -->
       <MenuStyleSettings />
-      <!-- 系统主题色 -->
-      <ColorSettings />
+      <!--
+        系统主题色：已按 shadcn/ui 规范移除。
+        shadcn 的 primary 是语义令牌（浅色近黑 / 暗色近白），不由用户挑色，
+        否则暗色下会出现「白底白字」。想换品牌色请改 shadcn-tokens.scss 的 --brand。
+      -->
       <!-- 盒子样式 -->
       <BoxStyleSettings />
       <!-- 容器宽度 -->
@@ -32,7 +35,6 @@
   import ThemeSettings from './widget/ThemeSettings.vue'
   import MenuLayoutSettings from './widget/MenuLayoutSettings.vue'
   import MenuStyleSettings from './widget/MenuStyleSettings.vue'
-  import ColorSettings from './widget/ColorSettings.vue'
   import BoxStyleSettings from './widget/BoxStyleSettings.vue'
   import ContainerSettings from './widget/ContainerSettings.vue'
   import BasicSettings from './widget/BasicSettings.vue'

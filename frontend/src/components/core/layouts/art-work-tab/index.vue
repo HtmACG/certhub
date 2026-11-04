@@ -19,57 +19,35 @@
         }"
       >
         <li
-          class="art-card-xs inline-flex flex-cc h-8 mr-1.5 text-xs c-p hover:text-theme group"
-          :class="[
-            item.path === activeTab ? 'activ-tab !text-theme' : 'text-g-600 dark:text-g-800',
-            tabStyle === 'tab-google' ? 'google-tab relative !h-8 !leading-8 !border-none' : ''
-          ]"
-          :style="{
-            padding: item.fixedTab ? '0 10px' : '0 8px 0 12px',
-            borderRadius:
-              tabStyle === 'tab-google'
-                ? 'calc(var(--custom-radius) * 0.6) !important'
-                : 'calc(var(--custom-radius) * 0.45) !important'
-          }"
           v-for="(item, index) in list"
           :key="item.path"
           :ref="item.path"
           :id="`scroll-li-${index}`"
+          class="work-tab"
+          :class="[
+            { 'is-active': item.path === activeTab },
+            tabStyle === 'tab-google' ? 'google-tab' : ''
+          ]"
           @click="clickTab(item)"
           @contextmenu.prevent="(e: MouseEvent) => showMenu(e, item.path)"
         >
-          <ArtSvgIcon
-            v-show="item.icon"
-            :icon="item.icon"
-            class="text-base mr-1 group-hover:text-theme"
-            :class="item.path === activeTab ? 'text-theme' : 'text-g-600'"
-          />
-          {{ item.customTitle || formatMenuTitle(item.title) }}
+          <ArtSvgIcon v-show="item.icon" :icon="item.icon" class="work-tab-icon" />
+          <span class="work-tab-title">{{ item.customTitle || formatMenuTitle(item.title) }}</span>
           <span
             v-if="list.length > 1 && !item.fixedTab"
-            class="inline-flex flex-cc relative ml-0.5 p-1 rounded-custom-xs tad-200 hover:bg-g-200"
+            class="work-tab-close"
+            title="关闭"
             @click.stop="closeWorktab('current', item.path)"
           >
-            <ArtSvgIcon icon="ri:close-large-fill" class="text-[10px] text-g-600" />
+            <ArtSvgIcon icon="ri:close-large-fill" />
           </span>
-          <div
-            v-if="tabStyle === 'tab-google'"
-            class="line absolute top-0 bottom-0 left-0 w-px h-4 my-auto bg-g-400 transition-opacity duration-150"
-          />
         </li>
       </ul>
     </div>
 
     <div class="flex">
-      <div
-        class="flex-cc art-card-xs relative top-0 size-8 leading-8 text-center c-p tad-200 hover:!bg-hover-color"
-        :style="{
-          borderRadius: 'var(--custom-radius)',
-          marginTop: tabStyle === 'tab-google' ? '-2px' : ''
-        }"
-        @click="(e: MouseEvent) => showMenu(e, activeTab)"
-      >
-        <ArtSvgIcon icon="iconamoon:arrow-down-2-thin" class="text-2xl text-g-700" />
+      <div class="work-tab-more" title="页签操作" @click="(e: MouseEvent) => showMenu(e, activeTab)">
+        <ArtSvgIcon icon="iconamoon:arrow-down-2-thin" class="text-xl" />
       </div>
     </div>
 
@@ -480,105 +458,127 @@
 </script>
 
 <style scoped>
-  .google-tab.activ-tab {
-    color: var(--theme-color) !important;
-    background-color: var(--el-color-primary-light-9) !important;
-    border-bottom: 0 !important;
-    border-bottom-right-radius: 0 !important;
-    border-bottom-left-radius: 0 !important;
+  /*
+   * 页签条：shadcn 的胶囊（rounded-md + 选中白底 + 1px 描边 + sm 阴影）
+   * ==================================================================
+   * 这里只定义「单个页签」的形态；条的高度 / 背景 / 下边框在 shadcn-shell.scss。
+   *
+   * 两条不要碰的红线：
+   * 1. 不要在 li 上写内联 border-radius（原来 `calc(var(--custom-radius) * 0.6) !important`
+   *    会把圆角钉在 4.8px，全局令牌改成 6/8/10 都无效）；
+   * 2. 不要再用 Tailwind 的 `!h-8` / `!border-none` 这类「带 !」的原子类 ——
+   *    它们在 utilities 层里是 important，按 CSS 层叠规则会压过无层样式，
+   *    连 shadcn-shell 的 `html .g-tabbar .google-tab` 都打不过。
+   *    尺寸统一写在下面这条 `.work-tab` 里。
+   */
+  .work-tab {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 6px;
+    align-items: center;
+    height: 28px;
+    padding: 0 6px 0 8px;
+    margin-right: 4px;
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    transition:
+      background-color 0.12s ease,
+      color 0.12s ease,
+      border-color 0.12s ease;
   }
 
-  .google-tab.activ-tab::before,
-  .google-tab.activ-tab::after {
-    position: absolute;
-    bottom: 0;
-    width: 20px;
-    height: 20px;
-    content: '';
-    border-radius: 50%;
-    box-shadow: 0 0 0 30px var(--el-color-primary-light-9);
+  .work-tab:hover {
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--foreground) 6%, transparent);
   }
 
-  .google-tab.activ-tab::before {
-    left: -20px;
-    clip-path: inset(50% -10px 0 50%);
+  .work-tab.is-active {
+    color: var(--foreground);
+    background: var(--background);
+    border-color: var(--border);
+    box-shadow: var(--shadow-sm);
   }
 
-  .google-tab.activ-tab::after {
-    right: -20px;
-    clip-path: inset(50% 50% 0 -10px);
+  .work-tab-icon {
+    flex: 0 0 auto;
+    font-size: 14px;
+    color: var(--muted-foreground);
   }
 
-  .dark .google-tab.activ-tab {
-    color: var(--art-gray-800) !important;
-    background-color: var(--art-hover-color) !important;
+  .work-tab.is-active .work-tab-icon {
+    color: var(--foreground);
   }
 
-  .dark .google-tab.activ-tab::before,
-  .dark .google-tab.activ-tab::after {
-    box-shadow: 0 0 0 30px var(--art-hover-color);
+  .work-tab-title {
+    max-width: 168px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .google-tab:not(.activ-tab):hover {
-    box-sizing: border-box;
-    color: var(--art-gray-600) !important;
-    background-color: var(--art-gray-200) !important;
-    border-bottom: 1px solid var(--default-box-color) !important;
-    border-radius: calc(var(--custom-radius) * 0.6) !important;
-  }
-
-  .dark .google-tab:not(.activ-tab):hover {
-    background-color: var(--art-hover-color) !important;
-  }
-
-  .google-tab:hover .line,
-  .google-tab.activ-tab .line,
-  .google-tab:first-child .line {
+  /*
+   * 关闭按钮：平时隐藏，hover / 激活才出现。
+   * 屏幕上开了十来个页签时，十个常驻的 × 是最大的视觉噪音源。
+   */
+  .work-tab-close {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 2px;
+    border-radius: var(--radius-sm);
     opacity: 0;
+    transition:
+      opacity 0.12s ease,
+      background-color 0.12s ease;
   }
 
-  .google-tab:hover + .google-tab .line,
-  .google-tab.activ-tab + .google-tab .line {
-    opacity: 0;
+  .work-tab:hover .work-tab-close,
+  .work-tab.is-active .work-tab-close {
+    opacity: 1;
   }
 
-  .google-tab::before,
-  .google-tab::after {
-    position: absolute;
-    bottom: 0;
-    width: 20px;
-    height: 20px;
-    content: '';
-    border-radius: 50%;
-    box-shadow: 0 0 0 30px transparent;
+  .work-tab-close:hover {
+    background: color-mix(in srgb, var(--foreground) 10%, transparent);
   }
 
-  .google-tab::before {
-    left: -20px;
-    clip-path: inset(50% -10px 0 50%);
+  .work-tab-close :deep(svg) {
+    font-size: 11px;
+    color: var(--muted-foreground);
   }
 
-  .google-tab::after {
-    right: -20px;
-    clip-path: inset(50% 50% 0 -10px);
+  .work-tab-close:hover :deep(svg) {
+    color: var(--foreground);
   }
 
-  .google-tab i:hover {
-    color: var(--art-gray-700);
-    background: var(--art-gray-300);
+  /* 右侧「页签操作」按钮：和页签同高，ghost 形态 */
+  .work-tab-more {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition:
+      color 0.12s ease,
+      background-color 0.12s ease;
   }
 
-  @media only screen and (width <= 768px) {
-    .box-border.flex.justify-between {
-      padding-right: 0.625rem;
-      padding-left: 0.625rem;
-    }
-  }
-
-  @media only screen and (width <= 640px) {
-    .box-border.flex.justify-between {
-      padding-right: 0.9375rem;
-      padding-left: 0.9375rem;
-    }
+  .work-tab-more:hover {
+    color: var(--foreground);
+    background: var(--accent);
   }
 </style>

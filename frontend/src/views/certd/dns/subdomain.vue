@@ -19,7 +19,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton type="primary" @click="openCreate">
-              <ArtSvgIcon icon="ri:add-line" class="mr-1" />新增子域名托管
+              <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.dns.subdomainCreate') }}
             </ElButton>
           </ElSpace>
         </template>
@@ -36,22 +36,22 @@
       >
         <template #domain="{ row }">
           <div class="cell-main">{{ row.domain }}</div>
-          <div class="cell-sub">作为独立主域名解析</div>
+          <div class="cell-sub">{{ $t('certd.dns.subdomainIndependent') }}</div>
         </template>
         <template #accessId="{ row }">
-          <span v-if="!row.accessId" class="cell-sub">未绑定</span>
+          <span v-if="!row.accessId" class="cell-sub">{{ $t('certd.dns.unbound') }}</span>
           <span v-else>{{ accessName(row.accessId) }}</span>
         </template>
         <template #disabled="{ row }">
           <ElTag :type="row.disabled ? 'info' : 'success'" size="small" effect="plain">
-            {{ row.disabled ? '已停用' : '已启用' }}
+            {{ row.disabled ? $t('certd.common.disabled') : $t('certd.common.enabled') }}
           </ElTag>
         </template>
         <template #operation="{ row }">
           <div class="cell-actions">
-            <ElButton link :loading="busyId === row.id" @click="verify(row)">校验 NS</ElButton>
-            <ElButton link @click="openEdit(row)">编辑</ElButton>
-            <ElButton link type="danger" @click="remove(row)">删除</ElButton>
+            <ElButton link :loading="busyId === row.id" @click="verify(row)">{{ $t('certd.dns.subdomainVerifyNs') }}</ElButton>
+            <ElButton link @click="openEdit(row)">{{ $t('certd.dns.edit') }}</ElButton>
+            <ElButton link type="danger" @click="remove(row)">{{ $t('certd.dns.delete') }}</ElButton>
           </div>
         </template>
       </ArtTable>
@@ -59,21 +59,19 @@
 
     <ElDialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑子域名托管' : '新增子域名托管'"
+      :title="editingId ? $t('certd.dns.subdomainEdit') : $t('certd.dns.subdomainCreate')"
       width="min(520px, 94vw)"
       destroy-on-close
     >
       <ElForm label-position="top">
-        <ElFormItem label="子域名">
+        <ElFormItem :label="$t('certd.dns.subdomainLabel')">
           <ElInput v-model="form.domain" placeholder="apps.example.com" />
-          <div class="form-tip">
-            需要先在上级域名添加 NS 委派记录，校验通过后才会作为独立 zone 使用。
-          </div>
+          <div class="form-tip">{{ $t('certd.dns.subdomainHint') }}</div>
         </ElFormItem>
-        <ElFormItem label="DNS 授权">
+        <ElFormItem :label="$t('certd.dns.colAccess')">
           <ElSelect
             v-model="form.accessId"
-            placeholder="可选，绑定后可校验 zone 是否可读"
+            :placeholder="$t('certd.dns.subdomainAccessPh')"
             clearable
             class="w-full"
           >
@@ -85,18 +83,18 @@
             />
           </ElSelect>
         </ElFormItem>
-        <ElFormItem label="启用">
+        <ElFormItem :label="$t('certd.group.enableLabel')">
           <ElSwitch v-model="form.disabled" :active-value="false" :inactive-value="true" />
-          <span class="switch-text">{{ form.disabled ? '已停用' : '已启用' }}</span>
+          <span class="switch-text">{{ form.disabled ? $t('certd.common.disabled') : $t('certd.common.enabled') }}</span>
         </ElFormItem>
-        <ElFormItem label="备注">
-          <ElInput v-model="form.remark" placeholder="可选" />
+        <ElFormItem :label="$t('certd.table.remark')">
+          <ElInput v-model="form.remark" :placeholder="$t('certd.common.optional')" />
         </ElFormItem>
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="dialogVisible = false">取消</ElButton>
-          <ElButton type="primary" :loading="saving" @click="save">保存</ElButton>
+          <ElButton @click="dialogVisible = false">{{ $t('certd.dns.cancel') }}</ElButton>
+          <ElButton type="primary" :loading="saving" @click="save">{{ $t('certd.dns.save') }}</ElButton>
         </div>
       </template>
     </ElDialog>
@@ -114,12 +112,18 @@
     verifySubdomain,
   } from '@/api/certd'
   import { ElMessage, ElMessageBox } from 'element-plus'
+  import { $t } from '@/locales'
 
   defineOptions({ name: 'CertdDnsSubdomain' })
 
   const searchForm = ref<Record<string, any>>({ keyword: undefined })
   const searchItems = [
-    { key: 'keyword', label: '子域名', type: 'input', placeholder: '搜索子域名或备注' },
+    {
+      key: 'keyword',
+      label: $t('certd.dns.subdomainLabel'),
+      type: 'input',
+      placeholder: $t('certd.dns.subdomainKeywordPh'),
+    },
   ]
 
   const {
@@ -139,12 +143,12 @@
       apiFn: fetchSubdomainList,
       apiParams: { current: 1, size: 20 },
       columnsFactory: () => [
-        { prop: 'domain', label: '子域名', minWidth: 260, useSlot: true },
-        { prop: 'accessId', label: 'DNS 授权', minWidth: 180, useSlot: true },
-        { prop: 'disabled', label: '状态', width: 110, useSlot: true },
-        { prop: 'remark', label: '备注', minWidth: 160 },
-        { prop: 'createTime', label: '添加时间', width: 170 },
-        { prop: 'operation', label: '操作', width: 190, fixed: 'right', useSlot: true },
+        { prop: 'domain', label: $t('certd.dns.subdomainLabel'), minWidth: 260, useSlot: true },
+        { prop: 'accessId', label: $t('certd.dns.colAccess'), minWidth: 180, useSlot: true },
+        { prop: 'disabled', label: $t('certd.dns.colStatus'), width: 110, useSlot: true },
+        { prop: 'remark', label: $t('certd.table.remark'), minWidth: 160 },
+        { prop: 'createTime', label: $t('certd.table.createdAt'), width: 190 },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 200, fixed: 'right', useSlot: true },
       ],
     },
   })
@@ -195,7 +199,7 @@
 
   const save = async () => {
     if (!form.domain.trim()) {
-      ElMessage.warning('请填写子域名')
+      ElMessage.warning($t('certd.dns.subdomainRequired'))
       return
     }
     const payload = {
@@ -220,10 +224,18 @@
     try {
       const res = await verifySubdomain(row.id)
       if (res?.success) {
-        const detail = res.ns?.length ? '已委派到：\n' + res.ns.join('\n') : 'NS 委派正常'
-        ElMessageBox.alert(detail, '校验通过', { type: 'success' })
+        const detail = res.ns?.length
+          ? $t('certd.dns.nsDelegatedTo') + '\n' + res.ns.join('\n')
+          : $t('certd.dns.nsOk')
+        ElMessageBox.alert(detail, $t('certd.dns.verifyPassed'), {
+          type: 'success',
+          confirmButtonText: $t('certd.common.confirm'),
+        })
       } else {
-        ElMessageBox.alert(res?.message || '校验未通过', '校验未通过', { type: 'warning' })
+        ElMessageBox.alert(res?.message || $t('certd.dns.verifyFailed'), $t('certd.dns.verifyFailed'), {
+          type: 'warning',
+          confirmButtonText: $t('certd.common.confirm'),
+        })
       }
     } finally {
       busyId.value = 0
@@ -231,11 +243,11 @@
   }
 
   const remove = async (row: any) => {
-    await ElMessageBox.confirm(
-      '确定删除子域名托管「' + row.domain + '」吗？删除后解析记录将退回上级域名。',
-      '删除子域名托管',
-      { type: 'warning' }
-    )
+    await ElMessageBox.confirm($t('certd.dns.confirmDeleteSubdomain', { name: row.domain }), $t('certd.dns.deleteSubdomainTitle'), {
+      type: 'warning',
+      confirmButtonText: $t('certd.common.confirm'),
+      cancelButtonText: $t('certd.common.cancel'),
+    })
     await deleteSubdomain(row.id)
     refreshData()
   }

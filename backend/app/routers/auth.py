@@ -15,7 +15,7 @@ from ..db import get_db
 from ..deps import audit, fail, get_bind_user, get_current_user, ok, site_name
 from ..models import Setting, User
 from ..security import create_token, decode_token, hash_password, validate_password, verify_password
-from ..services import captcha
+from ..services import captcha, login_mail
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -120,11 +120,15 @@ def login(params: LoginParams, request: Request, db: Session = Depends(get_db)):
 
     if not verify_password(params.password, user.password):
         sec = _security_setting(db)
-        limit = int(sec.get("loginFailLimit") or 5)
+        limit = max(1, int(sec.get("loginFailLimit") or 5))
+        lock_min = max(1, int(sec.get("lockMinutes") or 10))
         user.login_fail_count = (user.login_fail_count or 0) + 1
-        if limit and user.login_fail_count >= limit:
-            user.locked_until = dt.datetime.now() + dt.timedelta(minutes=int(sec.get("lockMinutes") or 10))
+        if user.login_fail_count >= limit:
+            user.locked_until = dt.datetime.now() + dt.timedelta(minutes=lock_min)
             user.login_fail_count = 0
+            db.commit()
+            audit(db, user, "登录失败", f"密码错误 {limit} 次，账号锁定 {lock_min} 分钟；IP {ip}", ip)
+            return fail(f"密码错误次数过多，账号已锁定 {lock_min} 分钟，请稍后再试")
         db.commit()
         return {"code": 400, "msg": "账号或密码错误",
                 "data": {"needCaptcha": captcha_enabled}}
@@ -140,15 +144,15 @@ def login(params: LoginParams, request: Request, db: Session = Depends(get_db)):
         if not totp.verify(params.code, valid_window=1):
             # 验证码错误同样计入失败次数：否则知道密码的攻击者可以无限撞 6 位码
             sec = _security_setting(db)
-            limit = int(sec.get("loginFailLimit") or 5)
+            limit = max(1, int(sec.get("loginFailLimit") or 5))
+            lock_min = max(1, int(sec.get("lockMinutes") or 10))
             user.login_fail_count = (user.login_fail_count or 0) + 1
-            if limit and user.login_fail_count >= limit:
-                user.locked_until = dt.datetime.now() + dt.timedelta(
-                    minutes=int(sec.get("lockMinutes") or 10))
+            if user.login_fail_count >= limit:
+                user.locked_until = dt.datetime.now() + dt.timedelta(minutes=lock_min)
                 user.login_fail_count = 0
                 db.commit()
-                audit(db, user, "登录失败", f"两步验证码错误次数过多，已锁定；IP {ip}", ip)
-                return fail("两步验证码错误次数过多，账号已临时锁定")
+                audit(db, user, "登录失败", f"两步验证码错误次数过多，已锁定 {lock_min} 分钟；IP {ip}", ip)
+                return fail(f"两步验证码错误次数过多，账号已锁定 {lock_min} 分钟，请稍后再试")
             db.commit()
             audit(db, user, "登录失败", f"两步验证码错误；IP {ip}", ip)
             return fail("两步验证码错误")
@@ -166,6 +170,9 @@ def login(params: LoginParams, request: Request, db: Session = Depends(get_db)):
     user.last_login_time = dt.datetime.now()
     db.commit()
     audit(db, user, "登录", f"IP {ip}", ip)
+    login_mail.schedule_login_alert(user.id, ip,
+                                    request.headers.get("user-agent", ""),
+                                    site_name(db))
 
     return ok({
         "token": create_token(user.id, user.username, user.role),
@@ -210,8 +217,8 @@ def bind_secret(user: User = Depends(get_bind_user), db: Session = Depends(get_d
 
 
 @router.post("/2fa/bind")
-def bind_2fa(params: BindCodeParams, user: User = Depends(get_bind_user),
-             db: Session = Depends(get_db)):
+def bind_2fa(params: BindCodeParams, request: Request,
+             user: User = Depends(get_bind_user), db: Session = Depends(get_db)):
     if not user.totp_secret:
         return fail("请先获取密钥")
     if not params.code:
@@ -224,6 +231,9 @@ def bind_2fa(params: BindCodeParams, user: User = Depends(get_bind_user),
     user.last_login_time = dt.datetime.now()
     db.commit()
     audit(db, user, "绑定两步验证")
+    login_mail.schedule_login_alert(
+        user.id, request.client.host if request.client else "",
+        request.headers.get("user-agent", ""), site_name(db))
     return ok({
         "token": create_token(user.id, user.username, user.role),
         "refreshToken": create_token(user.id, user.username, user.role,

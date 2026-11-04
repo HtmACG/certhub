@@ -20,7 +20,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton type="primary" @click="openCreate">
-              <ArtSvgIcon icon="ri:add-line" class="mr-1" />添加监控站点
+              <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.monitor.create') }}
             </ElButton>
             <ElButton
               type="danger"
@@ -30,7 +30,7 @@
               @click="removeSelected"
             >
               <ArtSvgIcon icon="ri:delete-bin-line" class="mr-1" />
-              批量删除<template v-if="selectedIds.length">（{{ selectedIds.length }}）</template>
+              {{ $t('certd.common.batchDelete') }}<template v-if="selectedIds.length"> ({{ selectedIds.length }})</template>
             </ElButton>
           </ElSpace>
         </template>
@@ -49,7 +49,7 @@
         <template #url="{ row }">
           <div class="cell-url">
             <span class="cell-title">{{ row.url }}</span>
-            <span class="cell-sub">{{ row.error || row.issuer || '尚未获取证书信息' }}</span>
+            <span class="cell-sub">{{ row.error || row.issuer || $t('certd.monitor.noCertInfo') }}</span>
           </div>
         </template>
         <template #status="{ row }">
@@ -59,21 +59,21 @@
         </template>
         <template #daysLeft="{ row }">
           <ElTag v-if="row.daysLeft !== null" :type="certStatusMeta(row.daysLeft).type" size="small" effect="light">
-            {{ row.daysLeft }} 天
+            {{ $t('certd.monitor.daysLeft', { days: row.daysLeft }) }}
           </ElTag>
           <span v-else class="cell-sub">-</span>
           <div class="cell-sub">{{ row.expireTime }}</div>
         </template>
         <template #lastCheckTime="{ row }">
-          <span class="cell-sub">{{ row.lastCheckTime || '未检测' }}</span>
+          <span class="cell-sub">{{ row.lastCheckTime || $t('certd.monitor.notChecked') }}</span>
         </template>
         <template #operation="{ row }">
           <div class="cell-actions">
             <ElButton link type="primary" :loading="checkingId === row.id" @click="check(row)">
-              检测
+              {{ $t('certd.monitor.check') }}
             </ElButton>
-            <ElButton link @click="openEdit(row)">编辑</ElButton>
-            <ElButton link type="danger" @click="remove(row)">删除</ElButton>
+            <ElButton link @click="openEdit(row)">{{ $t('certd.common.edit') }}</ElButton>
+            <ElButton link type="danger" @click="remove(row)">{{ $t('certd.common.delete') }}</ElButton>
           </div>
         </template>
       </ArtTable>
@@ -81,29 +81,29 @@
 
     <ElDialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑监控站点' : '添加监控站点'"
+      :title="editingId ? $t('certd.monitor.editTitle') : $t('certd.monitor.create')"
       width="min(520px, 94vw)"
       destroy-on-close
     >
       <ElForm label-position="top">
-        <ElFormItem label="站点地址">
+        <ElFormItem :label="$t('certd.monitor.siteLabel')">
           <ElInput v-model="form.url" placeholder="https://example.com" />
         </ElFormItem>
-        <ElFormItem label="端口">
+        <ElFormItem :label="$t('certd.monitor.portLabel')">
           <ElInputNumber v-model="form.port" :min="1" :max="65535" />
         </ElFormItem>
-        <ElFormItem label="启用监控">
+        <ElFormItem :label="$t('certd.monitor.enabledLabel')">
           <ElSwitch v-model="form.enabled" />
         </ElFormItem>
-        <ElFormItem label="到期提醒">
+        <ElFormItem :label="$t('certd.monitor.notifyLabel')">
           <ElSwitch v-model="form.notifyEnabled" />
-          <span class="cell-sub ml-2">到期前按系统设置的提前天数推送</span>
+          <span class="cell-sub ml-2">{{ $t('certd.monitor.leadDaysHint') }}</span>
         </ElFormItem>
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="dialogVisible = false">取消</ElButton>
-          <ElButton type="primary" :loading="saving" @click="save">保存</ElButton>
+          <ElButton @click="dialogVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
+          <ElButton type="primary" :loading="saving" @click="save">{{ $t('certd.common.save') }}</ElButton>
         </div>
       </template>
     </ElDialog>
@@ -121,13 +121,21 @@
   } from '@/api/certd'
   import type { SiteItem } from '@/api/certd'
   import { ElMessage, ElMessageBox } from 'element-plus'
+  import { $t } from '@/locales'
   import { useBatchDelete } from '../composables/use-batch-delete'
   import { certStatusMeta, siteStatusMeta } from '@/utils/certd'
 
   defineOptions({ name: 'CertdMonitor' })
 
   const searchForm = ref<Record<string, any>>({ keyword: undefined })
-  const searchItems = [{ key: 'keyword', label: '站点', type: 'input', placeholder: '搜索站点地址' }]
+  const searchItems = computed(() => [
+    {
+      key: 'keyword',
+      label: $t('certd.monitor.colSite'),
+      type: 'input',
+      placeholder: $t('certd.monitor.searchPlaceholder'),
+    },
+  ])
 
   const {
     columns,
@@ -147,11 +155,11 @@
       apiParams: { current: 1, size: 20 },
       columnsFactory: () => [
         { type: 'selection', width: 48 },
-        { prop: 'url', label: '站点', minWidth: 240, useSlot: true },
-        { prop: 'status', label: '状态', width: 100, useSlot: true },
-        { prop: 'daysLeft', label: '证书有效期', width: 160, useSlot: true },
-        { prop: 'lastCheckTime', label: '最近检测', width: 170, useSlot: true },
-        { prop: 'operation', label: '操作', width: 170, fixed: 'right', useSlot: true },
+        { prop: 'url', label: $t('certd.monitor.colSite'), minWidth: 240, useSlot: true },
+        { prop: 'status', label: $t('certd.monitor.colStatus'), width: 110, useSlot: true },
+        { prop: 'daysLeft', label: $t('certd.monitor.colCertExpiry'), width: 160, useSlot: true },
+        { prop: 'lastCheckTime', label: $t('certd.monitor.colLastCheck'), width: 175, useSlot: true },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 180, fixed: 'right', useSlot: true },
       ],
     },
   })
@@ -159,7 +167,7 @@
   /* ---------------- 多选批量删除 ---------------- */
   const { selectedIds, removing, handleSelectionChange, removeSelected } = useBatchDelete(
     deleteSite,
-    { label: '监控站点', nameOf: (row: any) => row.url, onDone: () => refreshData() }
+    { label: () => $t('certd.monitor.itemLabel'), nameOf: (row: any) => row.url, onDone: () => refreshData() }
   )
 
   const handleSearch = (params: Record<string, any>) => {
@@ -196,7 +204,7 @@
 
   const save = async () => {
     if (!form.url.trim()) {
-      ElMessage.warning('请填写站点地址')
+      ElMessage.warning($t('certd.monitor.siteRequired'))
       return
     }
     saving.value = true
@@ -214,8 +222,9 @@
     checkingId.value = row.id
     try {
       const result = await checkSite(row.id)
-      if (result?.status === 'ok') ElMessage.success('检测成功，证书到期时间 ' + result.expireTime)
-      else ElMessage.warning(result?.error || '检测失败')
+      if (result?.status === 'ok')
+        ElMessage.success($t('certd.monitor.checkOk', { time: result.expireTime || '-' }))
+      else ElMessage.warning(result?.error || $t('certd.monitor.checkFail'))
       refreshData()
     } finally {
       checkingId.value = 0
@@ -223,7 +232,11 @@
   }
 
   const remove = async (row: SiteItem) => {
-    await ElMessageBox.confirm('确定删除监控「' + row.url + '」吗？', '删除监控', { type: 'warning' })
+    await ElMessageBox.confirm($t('certd.monitor.confirmDelete', { name: row.url }), $t('certd.monitor.deleteTitle'), {
+      type: 'warning',
+      confirmButtonText: $t('certd.common.confirm'),
+      cancelButtonText: $t('certd.common.cancel'),
+    })
     await deleteSite(row.id)
     refreshData()
   }

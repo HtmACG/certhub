@@ -6,13 +6,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import audit, fail, get_current_user, ok, page_no
+from ..deps import audit, fail, get_current_user, ok, page_no, require_perm
 from ..models import Notification, User
 from ..plugins import NOTIFY_TYPES
 from ..security import decrypt_json, encrypt_json, merge_secret
 from ..services import notify
 
-router = APIRouter(prefix="/api/notification", tags=["notification"])
+router = APIRouter(prefix="/api/notification", tags=["notification"],
+                   dependencies=[Depends(require_perm("notifications"))])
 
 
 def _fmt(dt) -> str:

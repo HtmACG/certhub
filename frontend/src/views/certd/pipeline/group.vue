@@ -23,7 +23,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton type="primary" @click="openCreate">
-              <ArtSvgIcon icon="ri:add-line" class="mr-1" />新建分组
+              <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.group.create') }}
             </ElButton>
           </ElSpace>
         </template>
@@ -41,7 +41,7 @@
         <template #name="{ row }">
           <div class="cell-main">{{ row.name }}</div>
           <div class="cell-sub">
-            {{ row.items.length }} 条流水线
+            {{ $t('certd.group.pipelineCount', { n: row.items.length }) }}
             <template v-if="row.remark"> · {{ row.remark }}</template>
           </div>
         </template>
@@ -51,7 +51,7 @@
             <template v-for="(item, index) in row.items" :key="item.pipelineId">
               <ElTag v-if="index" size="small" type="info" effect="plain" class="chain-arrow">
                 <template v-if="row.items[index - 1].onFailurePipelineId === item.pipelineId">
-                  失败后 →
+                  {{ $t('certd.group.onFailureArrow') }}
                 </template>
                 <template v-else>→</template>
               </ElTag>
@@ -65,14 +65,14 @@
               </ElTag>
             </template>
             <div v-if="fallbackOf(row)" class="cell-sub">
-              失败后执行：{{ fallbackOf(row) }}
+              {{ $t('certd.group.fallbackRun', { name: fallbackOf(row) }) }}
             </div>
           </div>
         </template>
 
         <template #enabled="{ row }">
           <ElTag size="small" :type="row.enabled ? 'success' : 'info'" effect="light">
-            {{ row.enabled ? '已启用' : '已停用' }}
+            {{ row.enabled ? $t('certd.common.enabled') : $t('certd.common.disabled') }}
           </ElTag>
         </template>
 
@@ -83,12 +83,12 @@
             </ElTag>
             <div class="cell-sub">{{ row.lastRun.startTime }}</div>
           </template>
-          <span v-else class="cell-sub">还没运行过</span>
+          <span v-else class="cell-sub">{{ $t('certd.group.neverRun') }}</span>
         </template>
 
         <template #operation="{ row }">
           <div class="cell-actions">
-            <ElTooltip content="运行分组">
+            <ElTooltip :content="$t('certd.group.run')">
               <ElButton
                 link
                 type="primary"
@@ -98,17 +98,17 @@
                 <ArtSvgIcon icon="ri:play-circle-line" />
               </ElButton>
             </ElTooltip>
-            <ElTooltip content="执行记录">
+            <ElTooltip :content="$t('certd.group.runs')">
               <ElButton link @click="openRuns(row)">
                 <ArtSvgIcon icon="ri:history-line" />
               </ElButton>
             </ElTooltip>
-            <ElTooltip content="编辑">
+            <ElTooltip :content="$t('certd.common.edit')">
               <ElButton link @click="openEdit(row)">
                 <ArtSvgIcon icon="ri:edit-line" />
               </ElButton>
             </ElTooltip>
-            <ElTooltip content="删除">
+            <ElTooltip :content="$t('certd.common.delete')">
               <ElButton link type="danger" @click="remove(row)">
                 <ArtSvgIcon icon="ri:delete-bin-line" />
               </ElButton>
@@ -121,36 +121,36 @@
     <!-- 新建 / 编辑 -->
     <ElDialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑分组' : '新建分组'"
+      :title="editingId ? $t('certd.group.editTitle') : $t('certd.group.create')"
       width="min(720px, 94vw)"
       destroy-on-close
     >
       <ElForm label-position="top">
         <ElRow :gutter="16">
           <ElCol :xs="24" :sm="14">
-            <ElFormItem label="分组名称">
-              <ElInput v-model="form.name" placeholder="例如：htmacg.cn 主备 CA" />
+            <ElFormItem :label="$t('certd.group.nameLabel')">
+              <ElInput v-model="form.name" :placeholder="$t('certd.group.namePh')" />
             </ElFormItem>
           </ElCol>
           <ElCol :xs="24" :sm="10">
-            <ElFormItem label="启用">
+            <ElFormItem :label="$t('certd.group.enableLabel')">
               <ElSwitch v-model="form.enabled" />
             </ElFormItem>
           </ElCol>
           <ElCol :span="24">
-            <ElFormItem label="备注">
-              <ElInput v-model="form.remark" placeholder="可选：这个分组管哪些域名" />
+            <ElFormItem :label="$t('certd.table.remark')">
+              <ElInput v-model="form.remark" :placeholder="$t('certd.group.remarkPh')" />
             </ElFormItem>
           </ElCol>
         </ElRow>
 
-        <ElDivider content-position="left">执行顺序（失败后按这里的配置往下走）</ElDivider>
+        <ElDivider content-position="left">{{ $t('certd.group.orderLabel') }}</ElDivider>
 
         <div v-for="(item, index) in form.items" :key="index" class="item-row">
           <span class="item-index">{{ index + 1 }}</span>
           <ElSelect
             v-model="item.pipelineId"
-            placeholder="选择流水线"
+            :placeholder="$t('certd.group.selectPipelinePh')"
             filterable
             class="item-select"
           >
@@ -162,10 +162,10 @@
               :disabled="usedPipelineIds(index).includes(option.id)"
             />
           </ElSelect>
-          <span class="item-label">失败后执行</span>
+          <span class="item-label">{{ $t('certd.group.onFailureLabel') }}</span>
           <ElSelect
             v-model="item.onFailurePipelineId"
-            placeholder="不执行（直接判失败）"
+            :placeholder="$t('certd.group.onFailurePh')"
             clearable
             filterable
             class="item-select"
@@ -178,22 +178,19 @@
             />
           </ElSelect>
           <ElButton link type="danger" :disabled="form.items.length <= 1" @click="removeItem(index)">
-            删除
+            {{ $t('certd.common.delete') }}
           </ElButton>
         </div>
 
         <ElButton size="small" @click="addItem">
-          <ArtSvgIcon icon="ri:add-line" class="mr-1" />添加流水线
+          <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.group.addPipeline') }}
         </ElButton>
-        <p class="form-tip">
-          分组按顺序「试一试」：某条成功就结束；某条失败就跳它这一行的「失败后执行」，
-          没配就直接判分组失败。同一条流水线在一次分组里只会跑一次。
-        </p>
+        <p class="form-tip">{{ $t('certd.group.tip') }}</p>
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="dialogVisible = false">取消</ElButton>
-          <ElButton type="primary" :loading="saving" @click="save">保存</ElButton>
+          <ElButton @click="dialogVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
+          <ElButton type="primary" :loading="saving" @click="save">{{ $t('certd.common.save') }}</ElButton>
         </div>
       </template>
     </ElDialog>
@@ -201,18 +198,18 @@
     <!-- 执行记录 -->
     <ElDrawer
       v-model="runsVisible"
-      :title="'执行记录 · ' + (currentGroup?.name || '')"
+      :title="$t('certd.group.runsTitle') + (currentGroup?.name ? ' · ' + currentGroup.name : '')"
       size="min(720px, 96vw)"
       destroy-on-close
     >
       <div v-loading="runsLoading" class="runs-panel">
-        <div v-if="!runs.length" class="cell-sub">这个分组还没有执行记录。</div>
+        <div v-if="!runs.length" class="cell-sub">{{ $t('certd.group.runsEmpty') }}</div>
         <ElCard v-for="run in runs" :key="run.id" shadow="never" class="run-card">
           <div class="run-head">
             <ElTag size="small" :type="runStatusMeta(run.status).type" effect="light">
               {{ runStatusMeta(run.status).text }}
             </ElTag>
-            <span class="cell-sub">{{ run.startTime }} → {{ run.endTime || '进行中' }}</span>
+            <span class="cell-sub">{{ run.startTime }} → {{ run.endTime || $t('certd.group.runningEnd') }}</span>
           </div>
           <ul class="run-steps">
             <li v-for="step in run.steps" :key="step.index + '-' + step.pipelineId" class="run-step">
@@ -222,7 +219,7 @@
                 {{ runStatusMeta(step.status).text }}
               </ElTag>
               <span v-if="step.nextPipelineTitle" class="step-next">
-                → 失败后转 {{ step.nextPipelineTitle }}
+                {{ $t('certd.group.stepFallback', { name: step.nextPipelineTitle }) }}
               </span>
               <ElButton
                 v-if="step.historyId"
@@ -231,7 +228,7 @@
                 class="step-log"
                 @click="openHistory(step.historyId)"
               >
-                日志
+                {{ $t('certd.group.log') }}
               </ElButton>
             </li>
           </ul>
@@ -255,15 +252,21 @@
   } from '@/api/certd'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { runStatusMeta } from '@/utils/certd'
+  import { $t } from '@/locales'
 
   defineOptions({ name: 'CertdPipelineGroup' })
 
   const router = useRouter()
 
   const searchForm = ref<Record<string, any>>({ keyword: undefined })
-  const searchItems = [
-    { key: 'keyword', label: '关键字', type: 'input', placeholder: '分组名称 / 备注' },
-  ]
+  const searchItems = computed(() => [
+    {
+      key: 'keyword',
+      label: $t('certd.group.keywordLabel'),
+      type: 'input',
+      placeholder: $t('certd.group.keywordPh'),
+    },
+  ])
 
   const {
     columns,
@@ -282,11 +285,11 @@
       apiFn: fetchPipelineGroupList,
       apiParams: { current: 1, size: 10 },
       columnsFactory: () => [
-        { prop: 'name', label: '分组 / 备注', minWidth: 200, useSlot: true },
-        { prop: 'chain', label: '执行顺序', minWidth: 320, useSlot: true },
-        { prop: 'enabled', label: '状态', width: 100, useSlot: true },
-        { prop: 'lastRun', label: '最近运行', width: 170, useSlot: true },
-        { prop: 'operation', label: '操作', width: 170, fixed: 'right', useSlot: true },
+        { prop: 'name', label: $t('certd.group.colName'), minWidth: 200, useSlot: true },
+        { prop: 'chain', label: $t('certd.group.colChain'), minWidth: 320, useSlot: true },
+        { prop: 'enabled', label: $t('certd.group.colStatus'), width: 110, useSlot: true },
+        { prop: 'lastRun', label: $t('certd.group.colLastRun'), width: 180, useSlot: true },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 170, fixed: 'right', useSlot: true },
       ],
     },
   })
@@ -305,7 +308,7 @@
   const pipelineOptions = ref<{ id: number; title: string }[]>([])
 
   const loadPipelines = async () => {
-    const result = await fetchPipelineList({ current: 1, size: 200 })
+    const result: any = await fetchPipelineList({ current: 1, size: 200 })
     const records = Array.isArray(result) ? result : result?.records || []
     pipelineOptions.value = records.map((row: any) => ({ id: row.id, title: row.title }))
   }
@@ -366,7 +369,7 @@
 
   const save = async () => {
     if (!form.name.trim()) {
-      ElMessage.warning('请填写分组名称')
+      ElMessage.warning($t('certd.group.nameRequired'))
       return
     }
     const items = form.items
@@ -376,7 +379,7 @@
         onFailurePipelineId: item.onFailurePipelineId || 0,
       }))
     if (!items.length) {
-      ElMessage.warning('请至少添加一条流水线')
+      ElMessage.warning($t('certd.group.pipelineRequired'))
       return
     }
     const payload = {
@@ -404,7 +407,7 @@
   const currentGroup = ref<any>(null)
 
   const loadRuns = async (groupId: number) => {
-    const result = await fetchPipelineGroupRuns({ current: 1, size: 20, groupId })
+    const result: any = await fetchPipelineGroupRuns({ current: 1, size: 20, groupId })
     runs.value = Array.isArray(result) ? result : result?.records || []
   }
 
@@ -425,12 +428,12 @@
     runningId.value = row.id
     try {
       const result = await runPipelineGroup(row.id)
-      ElMessage.success('已提交，正在按顺序执行')
+      ElMessage.success($t('certd.group.submitted'))
       const runId = result?.runId || 0
       if (runId) {
         const final = await waitRun(runId)
-        if (final?.status === 'success') ElMessage.success('分组执行成功')
-        else if (final?.status) ElMessage.warning('分组执行失败，可以打开「执行记录」看是哪一步')
+        if (final?.status === 'success') ElMessage.success($t('certd.group.runSuccess'))
+        else if (final?.status) ElMessage.warning($t('certd.group.runFailed'))
       }
       refreshData()
       if (runsVisible.value && currentGroup.value?.id === row.id) await loadRuns(row.id)
@@ -454,13 +457,13 @@
   }
 
   const remove = async (row: any) => {
-    await ElMessageBox.confirm(
-      '确定删除分组「' + row.name + '」吗？执行记录会一起删除，流水线本身不受影响。',
-      '删除分组',
-      { type: 'warning' }
-    )
+    await ElMessageBox.confirm($t('certd.group.confirmDelete', { name: row.name }), $t('certd.group.deleteTitle'), {
+      type: 'warning',
+      confirmButtonText: $t('certd.common.confirm'),
+      cancelButtonText: $t('certd.common.cancel'),
+    })
     await deletePipelineGroup(row.id)
-    ElMessage.success('已删除')
+    ElMessage.success($t('certd.common.deleted'))
     refreshData()
   }
 </script>
@@ -485,7 +488,7 @@
     align-items: center;
   }
 
-  /* 执行顺��：标签 + 箭头 */
+  /* 执行顺序：标签 + 箭头 */
   .chain {
     display: flex;
     flex-wrap: wrap;
@@ -495,7 +498,7 @@
   }
 
   .chain-node {
-    max-width: 160px;
+    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -508,7 +511,7 @@
    */
   .chain-node :deep(.el-tag__content) {
     display: block;
-    max-width: 128px;
+    max-width: 148px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

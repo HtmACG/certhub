@@ -55,6 +55,14 @@ _COLUMN_PATCHES: dict[str, list[tuple[str, str]]] = {
         ("write_count", "INTEGER DEFAULT 0"),
         ("cleaned_time", "DATETIME"),
     ],
+    "sys_user": [
+        # 用户组：老库补列，默认 0（未分组）
+        ("group_id", "INTEGER DEFAULT 0"),
+    ],
+    "sys_user_group": [
+        # 功能权限键（JSON 数组）
+        ("permissions", "TEXT DEFAULT '[]'"),
+    ],
 }
 
 

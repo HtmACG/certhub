@@ -18,7 +18,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton type="primary" @click="openCreate">
-              <ArtSvgIcon icon="ri:add-line" class="mr-1" />新增用户
+              <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.user.create') }}
             </ElButton>
             <ElButton
               type="danger"
@@ -28,7 +28,7 @@
               @click="removeSelected"
             >
               <ArtSvgIcon icon="ri:delete-bin-line" class="mr-1" />
-              批量删除<template v-if="selectedIds.length">（{{ selectedIds.length }}）</template>
+              {{ $t('certd.common.batchDelete') }}<template v-if="selectedIds.length"> ({{ selectedIds.length }})</template>
             </ElButton>
           </ElSpace>
         </template>
@@ -46,18 +46,18 @@
       >
         <template #role="{ row }">
           <ElTag :type="row.role === 'admin' ? 'primary' : 'info'" size="small" effect="light">
-            {{ row.role === 'admin' ? '管理员' : '普通用户' }}
+            {{ row.role === 'admin' ? $t('certd.user.roleAdmin') : $t('certd.user.roleUser') }}
           </ElTag>
         </template>
         <template #status="{ row }">
           <ElTag :type="row.status === 1 ? 'success' : 'info'" size="small" effect="light">
-            {{ row.status === 1 ? '启用' : '禁用' }}
+            {{ row.status === 1 ? $t('certd.user.statusEnabled') : $t('certd.user.statusDisabled') }}
           </ElTag>
         </template>
         <template #operation="{ row }">
           <div class="cell-actions">
-            <ElButton link @click="openEdit(row)">编辑</ElButton>
-            <ElButton link @click="openResetPwd(row)">重置密码</ElButton>
+            <ElButton link @click="openEdit(row)">{{ $t('certd.common.edit') }}</ElButton>
+            <ElButton link @click="openResetPwd(row)">{{ $t('certd.user.resetPwdBtn') }}</ElButton>
             <ElButton link type="danger" :disabled="row.id === userStore.info?.userId" @click="remove(row)">
               删除
             </ElButton>
@@ -68,49 +68,54 @@
 
     <ElDialog v-model="dialogVisible" :title="editingId ? '编辑用户' : '新增用户'" width="min(520px, 94vw)" destroy-on-close>
       <ElForm label-position="top">
-        <ElFormItem label="用户名">
-          <ElInput v-model="form.userName" :disabled="!!editingId" placeholder="登录账号" />
+        <ElFormItem :label="$t('certd.user.userNameLabel')">
+          <ElInput v-model="form.userName" :disabled="!!editingId" :placeholder="$t('certd.user.userNamePh')" />
         </ElFormItem>
-        <ElFormItem :label="editingId ? '重置密码（留空不改）' : '密码'">
+        <ElFormItem :label="editingId ? $t('certd.user.passwordKeepLabel') : $t('certd.user.passwordLabel')">
           <ElInput v-model="form.password" type="password" show-password autocomplete="new-password" />
         </ElFormItem>
-        <ElFormItem label="昵称">
+        <ElFormItem :label="$t('certd.user.nicknameLabel')">
           <ElInput v-model="form.nickname" />
         </ElFormItem>
-        <ElFormItem label="邮箱">
+        <ElFormItem :label="$t('certd.user.emailLabel')">
           <ElInput v-model="form.email" />
         </ElFormItem>
-        <ElFormItem label="角色">
+        <ElFormItem :label="$t('certd.user.roleLabel')">
           <ElRadioGroup v-model="form.role">
-            <ElRadioButton label="admin">管理员</ElRadioButton>
-            <ElRadioButton label="user">普通用户</ElRadioButton>
+            <ElRadioButton label="admin">{{ $t('certd.user.roleAdmin') }}</ElRadioButton>
+            <ElRadioButton label="user">{{ $t('certd.user.roleUser') }}</ElRadioButton>
           </ElRadioGroup>
         </ElFormItem>
-        <ElFormItem label="状态">
+        <ElFormItem :label="$t('certd.user.statusLabel')">
           <ElSwitch v-model="form.status" :active-value="1" :inactive-value="0" />
         </ElFormItem>
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="dialogVisible = false">取消</ElButton>
-          <ElButton type="primary" :loading="saving" @click="save">保存</ElButton>
+          <ElButton @click="dialogVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
+          <ElButton type="primary" :loading="saving" @click="save">{{ $t('certd.common.save') }}</ElButton>
         </div>
       </template>
     </ElDialog>
 
     <!-- 重置密码：单独一个入口，不用进「编辑」里翻 -->
-    <ElDialog v-model="resetPwdVisible" title="重置密码" width="min(440px, 94vw)" destroy-on-close>
+    <ElDialog
+      v-model="resetPwdVisible"
+      :title="$t('certd.user.resetPwdTitle')"
+      width="min(440px, 94vw)"
+      destroy-on-close
+    >
       <p class="reset-tip">
-        为「{{ resetPwdRow?.userName }}」设置新密码。重置后该账号的失败锁定会被清除，用户可用新密码直接登录。
+        {{ $t('certd.user.resetPwdTip', { name: resetPwdRow?.userName || '' }) }}
       </p>
       <ElForm label-position="top">
-        <ElFormItem label="新密码">
+        <ElFormItem :label="$t('certd.user.newPasswordLabel')">
           <ElInput v-model="resetPwdForm.password" type="password" show-password autocomplete="new-password" />
           <div class="reset-actions">
-            <ElButton link size="small" @click="genRandomPassword">生成随机强密码</ElButton>
+            <ElButton link size="small" @click="genRandomPassword">{{ $t('certd.user.genRandom') }}</ElButton>
           </div>
           <div class="pwd-hint">
-            <div v-for="item in resetPwdChecks" :key="item.text" class="pwd-check" :class="{ ok: item.ok }">
+            <div v-for="item in resetPwdChecks" :key="item.key" class="pwd-check" :class="{ ok: item.ok }">
               <ArtSvgIcon
                 :icon="item.ok ? 'ri:checkbox-circle-fill' : 'ri:checkbox-blank-circle-line'"
                 class="pwd-check-icon"
@@ -122,8 +127,8 @@
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="resetPwdVisible = false">取消</ElButton>
-          <ElButton type="primary" :loading="resettingPwd" @click="submitResetPwd">确定重置</ElButton>
+          <ElButton @click="resetPwdVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
+          <ElButton type="primary" :loading="resettingPwd" @click="submitResetPwd">{{ $t('certd.user.confirmReset') }}</ElButton>
         </div>
       </template>
     </ElDialog>
@@ -136,12 +141,15 @@
   import { useUserStore } from '@/store/modules/user'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { useBatchDelete } from '../composables/use-batch-delete'
+  import { $t } from '@/locales'
 
   defineOptions({ name: 'CertdSystemUser' })
 
   const userStore = useUserStore()
   const searchForm = ref<Record<string, any>>({ keyword: undefined })
-  const searchItems = [{ key: 'keyword', label: '用户名', type: 'input', placeholder: '账号 / 昵称' }]
+  const searchItems = computed(() => [
+    { key: 'keyword', label: $t('certd.user.colUserName'), type: 'input', placeholder: $t('certd.user.searchPh') },
+  ])
 
   const {
     columns,
@@ -161,13 +169,13 @@
       apiParams: { current: 1, size: 20 },
       columnsFactory: () => [
         { type: 'selection', width: 48 },
-        { prop: 'userName', label: '用户名', minWidth: 140 },
-        { prop: 'nickname', label: '昵称', minWidth: 140 },
-        { prop: 'email', label: '邮箱', minWidth: 180 },
-        { prop: 'role', label: '角色', width: 110, useSlot: true },
-        { prop: 'status', label: '状态', width: 100, useSlot: true },
-        { prop: 'lastLoginTime', label: '最近登录', width: 170 },
-        { prop: 'operation', label: '操作', width: 200, fixed: 'right', useSlot: true },
+        { prop: 'userName', label: $t('certd.user.colUserName'), minWidth: 140 },
+        { prop: 'nickname', label: $t('certd.user.colNickname'), minWidth: 140 },
+        { prop: 'email', label: $t('certd.user.colEmail'), minWidth: 180 },
+        { prop: 'role', label: $t('certd.user.colRole'), width: 110, useSlot: true },
+        { prop: 'status', label: $t('certd.user.colStatus'), width: 110, useSlot: true },
+        { prop: 'lastLoginTime', label: $t('certd.user.colLastLogin'), width: 190 },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 220, fixed: 'right', useSlot: true },
       ],
     },
   })
@@ -175,7 +183,7 @@
   /* ---------------- 多选批量删除 ---------------- */
   const { selectedIds, removing, handleSelectionChange, removeSelected } = useBatchDelete(
     deleteUser,
-    { label: '用户', nameOf: (row: any) => row.userName, onDone: () => refreshData() }
+    { label: () => $t('certd.user.itemLabel'), nameOf: (row: any) => row.userName, onDone: () => refreshData() }
   )
 
   const handleSearch = (params: Record<string, any>) => {
@@ -217,13 +225,13 @@
 
   const save = async () => {
     if (!form.userName.trim()) {
-      ElMessage.warning('请填写用户名')
+      ElMessage.warning($t('certd.user.userNameRequired'))
       return
     }
     if (!editingId.value) {
       const bad = checkPassword(form.password, form.userName).find((item) => !item.ok)
       if (bad) {
-        ElMessage.warning(`密码不符合要求：${bad.text}`)
+        ElMessage.warning($t('certd.user.pwdInvalid', { reason: bad.text }))
         return
       }
     }
@@ -246,9 +254,9 @@
 
   // 密码规则与后端 security.validate_password 一致
   const checkPassword = (pwd: string, userName: string) => [
-    { text: '至少 8 个字符', ok: pwd.length >= 8 },
-    { text: '不能是纯数字', ok: pwd.length > 0 && !/^\d+$/.test(pwd) },
-    { text: '不能与用户名相同', ok: pwd.length > 0 && pwd !== userName },
+    { key: 'min8', text: $t('certd.user.pwdMin8'), ok: pwd.length >= 8 },
+    { key: 'notDigits', text: $t('certd.user.pwdNotDigits'), ok: pwd.length > 0 && !/^\d+$/.test(pwd) },
+    { key: 'notUserName', text: $t('certd.user.pwdNotUserName'), ok: pwd.length > 0 && pwd !== userName },
   ]
   const resetPwdChecks = computed(() => checkPassword(resetPwdForm.password, resetPwdRow.value?.userName || ''))
 
@@ -265,14 +273,14 @@
     crypto.getRandomValues(arr)
     const pwd = Array.from(arr, (n) => chars[n % chars.length]).join('')
     resetPwdForm.password = pwd
-    ElMessage.success('已生成随机密码，记得复制给用户')
+    ElMessage.success($t('certd.user.pwdGenerated'))
   }
 
   const submitResetPwd = async () => {
     if (!resetPwdRow.value) return
     const bad = resetPwdChecks.value.find((item) => !item.ok)
     if (bad) {
-      ElMessage.warning(`新密码不符合要求：${bad.text}`)
+      ElMessage.warning($t('certd.user.newPwdInvalid', { reason: bad.text }))
       return
     }
     resettingPwd.value = true
@@ -286,7 +294,7 @@
         status: row.status,
         password: resetPwdForm.password,
       })
-      ElMessage.success('密码已重置')
+      ElMessage.success($t('certd.user.pwdReset'))
       resetPwdVisible.value = false
       resetPwdForm.password = ''
       refreshData()
@@ -296,9 +304,13 @@
   }
 
   const remove = async (row: any) => {
-    await ElMessageBox.confirm('确定删除用户「' + row.userName + '」吗？', '删除用户', { type: 'warning' })
+    await ElMessageBox.confirm($t('certd.user.confirmDelete', { name: row.userName }), $t('certd.user.deleteTitle'), {
+      type: 'warning',
+      confirmButtonText: $t('certd.common.confirm'),
+      cancelButtonText: $t('certd.common.cancel'),
+    })
     await deleteUser(row.id)
-    ElMessage.success('已删除')
+    ElMessage.success($t('certd.common.deleted'))
     refreshData()
   }
 </script>

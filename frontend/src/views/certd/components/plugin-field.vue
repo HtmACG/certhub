@@ -84,7 +84,7 @@
           </template>
         </ElSelect>
         <ElTooltip v-if="item.remote" content="重新从对端拉取列表">
-          <ElButton :loading="remoteLoading" @click="refreshRemote">
+          <ElButton :loading="remoteLoading" @click="loadRemote(true)">
             <ArtSvgIcon icon="ri:refresh-line" />
           </ElButton>
         </ElTooltip>
@@ -861,7 +861,7 @@
   }
 
   .otp-dialog-input :deep(.el-input__inner) {
-    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 16px;
     letter-spacing: 4px;
     text-align: center;
@@ -885,11 +885,11 @@
   }
 
   .match-tip.is-auto {
-    color: var(--theme-color);
+    color: var(--info);
   }
 
   .match-tip.is-warn {
-    color: var(--el-color-danger);
+    color: var(--destructive);
   }
 
   .domain-picker-toolbar {
@@ -920,11 +920,11 @@
     height: auto;
     padding: 6px 8px;
     margin: 0;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
   }
 
   .domain-picker-item:hover {
-    background: var(--default-box-color);
+    background: var(--accent);
   }
 
   .domain-picker-item :deep(.el-checkbox__label) {

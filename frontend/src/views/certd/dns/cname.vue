@@ -26,7 +26,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton type="primary" @click="openCreate">
-              <ArtSvgIcon icon="ri:add-line" class="mr-1" />新增 CNAME 记录
+              <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.dns.cnameCreate') }}
             </ElButton>
           </ElSpace>
         </template>
@@ -44,7 +44,7 @@
         <template #domain="{ row }">
           <div class="cell-main">{{ row.domain }}</div>
           <div class="cell-sub">
-            主域名 {{ row.mainDomain }} · 主机记录 {{ row.hostRecord }}
+            {{ $t('certd.dns.domainMain', { main: row.mainDomain, host: row.hostRecord }) }}
           </div>
         </template>
         <template #recordValue="{ row }">
@@ -63,7 +63,7 @@
           </ElTooltip>
         </template>
         <template #accessId="{ row }">
-          <span v-if="!row.accessId" class="cell-sub">仅本地登记</span>
+          <span v-if="!row.accessId" class="cell-sub">{{ $t('certd.dns.cnameLocalOnly') }}</span>
           <span v-else>{{ accessName(row.accessId) }}</span>
         </template>
         <template #status="{ row }">
@@ -75,14 +75,16 @@
         </template>
         <template #updateTime="{ row }">
           <template v-if="isManual(row)">
-            <div class="cell-sub">{{ row.verifyTime ? '最近校验 ' + row.verifyTime : '未校验' }}</div>
+            <div class="cell-sub">
+              {{ row.verifyTime ? $t('certd.dns.verifiedAt', { time: row.verifyTime }) : $t('certd.dns.notVerified') }}
+            </div>
           </template>
           <template v-else>
-            <div class="cell-sub">写入 {{ row.writeCount || 1 }} 次</div>
+            <div class="cell-sub">{{ $t('certd.dns.writeCount', { n: row.writeCount || 1 }) }}</div>
             <div class="cell-sub">
               {{ row.status === 'cleaned'
-                ? '清理于 ' + (row.cleanedTime || row.updateTime)
-                : '最近 ' + (row.updateTime || row.createTime) }}
+                ? $t('certd.dns.cleanedAt', { time: row.cleanedTime || row.updateTime })
+                : $t('certd.dns.latestAt', { time: row.updateTime || row.createTime }) }}
             </div>
           </template>
         </template>
@@ -90,15 +92,15 @@
           <!-- 自动登记的验证记录由流水线写入 / 清理，页面只读，不提供同步与校验 -->
           <div v-if="isManual(row)" class="cell-actions">
             <ElButton link :disabled="!row.accessId" :loading="busyId === row.id" @click="sync(row)">
-              同步
+              {{ $t('certd.dns.cnameSync') }}
             </ElButton>
-            <ElButton link :loading="busyId === row.id" @click="verify(row)">校验</ElButton>
-            <ElButton link @click="openEdit(row)">编辑</ElButton>
-            <ElButton link type="danger" @click="remove(row)">删除</ElButton>
+            <ElButton link :loading="busyId === row.id" @click="verify(row)">{{ $t('certd.dns.cnameVerify') }}</ElButton>
+            <ElButton link @click="openEdit(row)">{{ $t('certd.dns.edit') }}</ElButton>
+            <ElButton link type="danger" @click="remove(row)">{{ $t('certd.dns.delete') }}</ElButton>
           </div>
           <div v-else class="cell-actions">
-            <span class="cell-sub">自动登记</span>
-            <ElButton link type="danger" @click="remove(row)">删除</ElButton>
+            <span class="cell-sub">{{ $t('certd.dns.cnameAuto') }}</span>
+            <ElButton link type="danger" @click="remove(row)">{{ $t('certd.dns.delete') }}</ElButton>
           </div>
         </template>
       </ArtTable>
@@ -106,21 +108,21 @@
 
     <ElDialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑 CNAME 记录' : '新增 CNAME 记录'"
+      :title="editingId ? $t('certd.dns.cnameEditTitle') : $t('certd.dns.cnameCreate')"
       width="min(560px, 94vw)"
       destroy-on-close
     >
       <ElForm label-position="top">
-        <ElFormItem label="域名（记录名）">
-          <ElInput v-model="form.domain" placeholder="_acme-challenge.example.com 或 www.example.com" />
+        <ElFormItem :label="$t('certd.dns.domainLabel')">
+          <ElInput v-model="form.domain" :placeholder="$t('certd.dns.domainPh')" />
         </ElFormItem>
-        <ElFormItem label="记录值（CNAME 目标）">
+        <ElFormItem :label="$t('certd.dns.valueLabel')">
           <ElInput v-model="form.recordValue" placeholder="abc123.cname.example.net" />
         </ElFormItem>
-        <ElFormItem label="DNS 授权">
+        <ElFormItem :label="$t('certd.dns.colAccess')">
           <ElSelect
             v-model="form.accessId"
-            placeholder="可选，绑定后可直接同步到服务商"
+            :placeholder="$t('certd.dns.accessPh')"
             clearable
             class="w-full"
           >
@@ -132,19 +134,19 @@
             />
           </ElSelect>
         </ElFormItem>
-        <ElFormItem v-if="form.accessId" label="保存后立即同步">
+        <ElFormItem v-if="form.accessId" :label="$t('certd.dns.syncOnSave')">
           <ElSwitch v-model="form.sync" />
         </ElFormItem>
-        <ElFormItem label="备注">
-          <ElInput v-model="form.remark" placeholder="可选" />
+        <ElFormItem :label="$t('certd.table.remark')">
+          <ElInput v-model="form.remark" :placeholder="$t('certd.common.optional')" />
         </ElFormItem>
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton :loading="checking" @click="checkNow">校验当前指向</ElButton>
+          <ElButton :loading="checking" @click="checkNow">{{ $t('certd.dns.cnameVerifyCurrent') }}</ElButton>
           <div class="dialog-footer-right">
-            <ElButton @click="dialogVisible = false">取消</ElButton>
-            <ElButton type="primary" :loading="saving" @click="save">保存</ElButton>
+            <ElButton @click="dialogVisible = false">{{ $t('certd.dns.cancel') }}</ElButton>
+            <ElButton type="primary" :loading="saving" @click="save">{{ $t('certd.dns.save') }}</ElButton>
           </div>
         </div>
       </template>
@@ -165,6 +167,7 @@
     verifyCname,
   } from '@/api/certd'
   import { ElMessage, ElMessageBox } from 'element-plus'
+  import { $t, i18n } from '@/locales'
 
   defineOptions({ name: 'CertdDnsCname' })
 
@@ -173,32 +176,32 @@
     status: undefined,
     source: undefined,
   })
-  const searchItems = [
-    { key: 'keyword', label: '域名', type: 'input', placeholder: '搜索域名 / 记录值 / 流水线' },
+  const searchItems = computed(() => [
+    { key: 'keyword', label: $t('certd.dns.colDomain'), type: 'input', placeholder: $t('certd.dns.keywordPh') },
     {
       key: 'source',
-      label: '来源',
+      label: $t('certd.dns.colSource'),
       type: 'select',
       options: [
-        { label: '手动登记', value: 'manual' },
-        { label: '证书申请', value: 'acme' },
-        { label: '云厂商证书', value: 'cloud' },
+        { label: $t('certd.dns.sourceManual'), value: 'manual' },
+        { label: $t('certd.dns.sourceAcme'), value: 'acme' },
+        { label: $t('certd.dns.sourceCloud'), value: 'cloud' },
       ],
     },
     {
       key: 'status',
-      label: '状态',
+      label: $t('certd.dns.colStatus'),
       type: 'select',
       options: [
-        { label: '待同步', value: 'pending' },
-        { label: '已同步', value: 'synced' },
-        { label: '已生效', value: 'valid' },
-        { label: '已写入', value: 'written' },
-        { label: '已清理', value: 'cleaned' },
-        { label: '异常', value: 'error' },
+        { label: $t('certd.dns.statusPending'), value: 'pending' },
+        { label: $t('certd.dns.statusSynced'), value: 'synced' },
+        { label: $t('certd.dns.statusValid'), value: 'valid' },
+        { label: $t('certd.dns.statusWritten'), value: 'written' },
+        { label: $t('certd.dns.statusCleaned'), value: 'cleaned' },
+        { label: $t('certd.dns.statusError'), value: 'error' },
       ],
     },
-  ]
+  ])
 
   const {
     columns,
@@ -217,38 +220,45 @@
       apiFn: fetchCnameList,
       apiParams: { current: 1, size: 20 },
       columnsFactory: () => [
-        { prop: 'domain', label: '域名', minWidth: 250, useSlot: true },
-        { prop: 'recordValue', label: '记录值', minWidth: 220, useSlot: true },
-        { prop: 'source', label: '来源', width: 120, useSlot: true },
-        { prop: 'accessId', label: 'DNS 授权', minWidth: 150, useSlot: true },
-        { prop: 'status', label: '状态', width: 110, useSlot: true },
-        { prop: 'updateTime', label: '最近活动', width: 180, useSlot: true },
-        { prop: 'remark', label: '备注', minWidth: 130 },
-        { prop: 'operation', label: '操作', width: 210, fixed: 'right', useSlot: true },
+        { prop: 'domain', label: $t('certd.dns.colDomain'), minWidth: 250, useSlot: true },
+        { prop: 'recordValue', label: $t('certd.dns.colRecordValue'), minWidth: 220, useSlot: true },
+        { prop: 'source', label: $t('certd.dns.colSource'), width: 130, useSlot: true },
+        { prop: 'accessId', label: $t('certd.dns.colAccess'), minWidth: 150, useSlot: true },
+        { prop: 'status', label: $t('certd.dns.colStatus'), width: 110, useSlot: true },
+        { prop: 'updateTime', label: $t('certd.dns.colUpdateTime'), width: 200, useSlot: true },
+        { prop: 'remark', label: $t('certd.table.remark'), minWidth: 130 },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 230, fixed: 'right', useSlot: true },
       ],
     },
   })
 
   type TagKind = 'info' | 'primary' | 'success' | 'warning' | 'danger'
 
-  const STATUS_META: Record<string, { text: string; type: TagKind }> = {
+  /**
+   * 状态 / 来源文案一律存 key，渲染时再取词
+   * —— 模块顶层的 $t() 只求值一次，切语言不会跟着变（见 locales/index.ts）
+   */
+  const STATUS_META: Record<string, { textKey: string; type: TagKind }> = {
     // 手动登记的 CNAME
-    pending: { text: '待同步', type: 'info' },
-    synced: { text: '已同步', type: 'primary' },
-    valid: { text: '已生效', type: 'success' },
+    pending: { textKey: 'certd.dns.statusPending', type: 'info' },
+    synced: { textKey: 'certd.dns.statusSynced', type: 'primary' },
+    valid: { textKey: 'certd.dns.statusValid', type: 'success' },
     // 证书申请自动登记的验证记录
-    written: { text: '已写入', type: 'success' },
-    cleaned: { text: '已清理', type: 'info' },
-    error: { text: '异常', type: 'danger' },
+    written: { textKey: 'certd.dns.statusWritten', type: 'success' },
+    cleaned: { textKey: 'certd.dns.statusCleaned', type: 'info' },
+    error: { textKey: 'certd.dns.statusError', type: 'danger' },
   }
 
-  const statusMeta = (status: string) => STATUS_META[status] || { text: status || '未知', type: 'info' as const }
+  const statusMeta = (status: string) => {
+    const meta = STATUS_META[status]
+    return { text: meta ? $t(meta.textKey) : status || $t('certd.common.unknown'), type: meta?.type || ('info' as const) }
+  }
 
   /** 来源：manual 手动登记 / acme 证书申请 / cloud 云厂商免费证书 */
-  const SOURCE_META: Record<string, { text: string; type: TagKind }> = {
-    manual: { text: '手动登记', type: 'primary' },
-    acme: { text: '证书申请', type: 'success' },
-    cloud: { text: '云厂商证书', type: 'warning' },
+  const SOURCE_META: Record<string, { textKey: string; type: TagKind }> = {
+    manual: { textKey: 'certd.dns.sourceManual', type: 'primary' },
+    acme: { textKey: 'certd.dns.sourceAcme', type: 'success' },
+    cloud: { textKey: 'certd.dns.sourceCloud', type: 'warning' },
   }
 
   /** 自动登记的验证记录只读：页面上不给同步 / 编辑 / 校验 */
@@ -256,13 +266,13 @@
 
   const sourceMeta = (row: any) => {
     const key = row?.source || 'manual'
-    const meta = SOURCE_META[key] || { text: key, type: 'info' as TagKind }
+    const meta = SOURCE_META[key]
+    const text = meta ? $t(meta.textKey) : key
+    const type = meta?.type || ('info' as TagKind)
     const hint = isManual(row)
-      ? '手动登记的 CNAME：可同步到对端、校验是否生效'
-      : '证书申请自动写入的验证记录（来源流水线：' +
-        (row?.pipelineTitle || '已删除的流水线') +
-        '），只读'
-    return { ...meta, hint }
+      ? $t('certd.dns.sourceHintManual')
+      : $t('certd.dns.sourceHintAuto', { name: row?.pipelineTitle || $t('certd.dns.pipelineDeleted') })
+    return { text, type, hint }
   }
 
   const dnsAccess = ref<any[]>([])
@@ -272,7 +282,8 @@
     dnsAccess.value = (await fetchAccessOptions({ category: 'dns' })) || []
   }
 
-  const accessName = (id: number) => dnsAccess.value.find((item) => item.id === id)?.name || '授权 ' + id
+  const accessName = (id: number) =>
+    dnsAccess.value.find((item) => item.id === id)?.name || $t('certd.dns.accessName', { id })
 
   const handleSearch = (params: Record<string, any>) => {
     Object.assign(searchParams, params)
@@ -315,7 +326,7 @@
 
   const checkNow = async () => {
     if (!form.domain.trim() || !form.recordValue.trim()) {
-      ElMessage.warning('请先填写域名与记录值')
+      ElMessage.warning($t('certd.dns.needDomainValue'))
       return
     }
     checking.value = true
@@ -324,8 +335,8 @@
         domain: form.domain.trim(),
         expected: form.recordValue.trim(),
       })
-      if (res?.success) ElMessage.success(res.message || 'CNAME 指向正确')
-      else ElMessage.error(res?.message || 'CNAME 尚未生效')
+      if (res?.success) ElMessage.success(res.message || $t('certd.dns.pointOk'))
+      else ElMessage.error(res?.message || $t('certd.dns.pointFail'))
     } finally {
       checking.value = false
     }
@@ -333,11 +344,11 @@
 
   const save = async () => {
     if (!form.domain.trim()) {
-      ElMessage.warning('请填写域名')
+      ElMessage.warning($t('certd.dns.domainRequired'))
       return
     }
     if (!form.recordValue.trim()) {
-      ElMessage.warning('请填写记录值')
+      ElMessage.warning($t('certd.dns.valueRequired'))
       return
     }
     const payload = {
@@ -362,7 +373,7 @@
     busyId.value = row.id
     try {
       const res = await syncCname(row.id)
-      ElMessage.success(res?.status === 'error' ? '同步失败，请查看状态说明' : '已同步到 DNS 服务商')
+      ElMessage.success(res?.status === 'error' ? $t('certd.dns.syncFailed') : $t('certd.dns.syncedOk'))
       refreshData()
     } finally {
       busyId.value = 0
@@ -373,8 +384,8 @@
     busyId.value = row.id
     try {
       const res = await verifyCname(row.id)
-      if (res?.success) ElMessage.success(res.message || 'CNAME 指向正确')
-      else ElMessage.error(res?.message || 'CNAME 尚未生效')
+      if (res?.success) ElMessage.success(res.message || $t('certd.dns.pointOk'))
+      else ElMessage.error(res?.message || $t('certd.dns.pointFail'))
       refreshData()
     } finally {
       busyId.value = 0
@@ -385,10 +396,10 @@
     const manual = isManual(row)
     await ElMessageBox.confirm(
       manual
-        ? '确定删除 CNAME 记录「' + row.domain + '」吗？已同步到 DNS 服务商的记录会一并删除。'
-        : '确定删除这条验证记录留痕「' + row.domain + '」吗？只删本地记录，不影响 DNS 解析。',
-      manual ? '删除 CNAME 记录' : '删除 DNS 记录留痕',
-      { type: 'warning' }
+        ? $t('certd.dns.confirmDeleteManual', { name: row.domain })
+        : $t('certd.dns.confirmDeleteAuto', { name: row.domain }),
+      manual ? $t('certd.dns.deleteTitleManual') : $t('certd.dns.deleteTitleAuto'),
+      { type: 'warning', confirmButtonText: $t('certd.common.confirm'), cancelButtonText: $t('certd.common.cancel') }
     )
     await deleteCname(row.id, manual)
     refreshData()
@@ -411,7 +422,7 @@
   }
 
   .mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     word-break: break-all;
   }

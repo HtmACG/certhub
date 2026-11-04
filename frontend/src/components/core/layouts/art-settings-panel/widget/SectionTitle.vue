@@ -1,10 +1,12 @@
 <template>
-  <p
-    class="relative mt-7.5 mb-5.5 text-sm text-center text-g-800 before:absolute before:top-[10px] before:left-0 before:w-[50px] before:m-auto before:content-[''] before:border-b before:border-[var(--art-gray-300)] after:absolute after:top-[10px] after:right-0 after:w-[50px] after:m-auto after:content-[''] after:border-b after:border-g-300"
-    :style="style"
-  >
-    {{ title }}
-  </p>
+  <!--
+    分组标题：shadcn 的小节标题形态 —— 13px / 500 / foreground，
+    右侧拖一条 1px 分隔线，不做「两条线夹住居中文字」的装饰。
+  -->
+  <div class="section-title" :style="style">
+    <span>{{ title }}</span>
+    <span class="section-title__line" />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -15,3 +17,23 @@
 
   defineProps<Props>()
 </script>
+
+<style scoped>
+  .section-title {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: 24px 0 12px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--foreground);
+  }
+
+  .section-title__line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+</style>

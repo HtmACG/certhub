@@ -7,10 +7,15 @@
 // Element Plus 样式优化
 @use './core/el-ui.scss';
 
-// Element Plus 暗黑主题
+/**
+ * 顺序是「三明治」，不能调：
+ *
+ * el-dark 是 Element 官方的 `html.dark{…}`（权重 0,1,1，比 :root 高），
+ * dark.scss 是模板自己的暗色微调（同样是 html.dark）。
+ * 两份都必须在 shadcn 令牌之前加载，否则会把 shadcn 的暗色令牌盖掉
+ * （表现：切暗色后 --foreground 变近黑，按钮黑底黑字、表格文字看不见）。
+ */
 @use './core/el-dark.scss';
-
-// 暗黑主题样式优化
 @use './core/dark.scss';
 
 // 路由切换动画
@@ -22,8 +27,16 @@
 // 主题切换圆形扩散动画
 @use './core/theme-animation.scss';
 
-// Google 风格设计令牌（--g-*）与 .g-scope 组件覆盖
-@use './core/google.scss';
-
-// Google 风格应用外壳（侧边栏 / 顶栏 / 标签条）
-@use './core/google-shell.scss';
+/* ============================================================
+ * 设计语言：shadcn/ui（默认主题 / neutral 基色）
+ * ------------------------------------------------------------
+ *   shadcn-tokens 语义令牌 + Element Plus 变量重映射（含暗色重映射）
+ *   shadcn-ui     组件形态（按钮/输入框/表格/标签/弹层/开关…）
+ *   shadcn-shell  外壳（侧边栏 / 顶栏 / 标签条 / 页面容器）
+ *
+ * 旧的 google*.scss 已不再加载：--g-* 令牌改由 shadcn-tokens 转指，
+ * 页面里沿用 var(--g-*) 的写法不需要改。
+ * ============================================================ */
+@use './core/shadcn-tokens.scss';
+@use './core/shadcn-ui.scss';
+@use './core/shadcn-shell.scss';

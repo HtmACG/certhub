@@ -16,12 +16,13 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import audit, fail, get_current_user, ok, page_no
+from ..deps import audit, fail, get_current_user, ok, page_no, require_perm
 from ..models import Access, CnameRecord, SubDomain, User, now
 from ..security import decrypt_json
 from ..services import dns as dns_service
 
-router = APIRouter(prefix="/api/dns", tags=["dns"])
+router = APIRouter(prefix="/api/dns", tags=["dns"],
+                   dependencies=[Depends(require_perm("dns"))])
 
 _LABEL_RE = re.compile(r"^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$")
 

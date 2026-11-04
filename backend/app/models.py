@@ -29,9 +29,23 @@ class User(Base, TimestampMixin):
     status: Mapped[int] = mapped_column(Integer, default=1)  # 1 启用 0 禁用
     totp_secret: Mapped[str | None] = mapped_column(String(64), default="")
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 所属用户组（0 = 未分组），只做组织归属，不参与权限判断
+    group_id: Mapped[int] = mapped_column(Integer, default=0)
     login_fail_count: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
     last_login_time: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class UserGroup(Base, TimestampMixin):
+    """用户组：把账号按团队/用途归类，列表页可以按组筛选。"""
+
+    __tablename__ = "sys_user_group"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    remark: Mapped[str | None] = mapped_column(String(255), default="")
+    #: 功能权限键列表（JSON 数组），见 app/permissions.py
+    permissions: Mapped[str] = mapped_column(Text, default="[]")
 
 
 class Pipeline(Base, TimestampMixin):

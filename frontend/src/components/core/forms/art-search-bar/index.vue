@@ -507,7 +507,13 @@
 
 <style lang="scss" scoped>
   .art-search-bar {
-    padding: 15px 20px 0;
+    /* 原来是 15px 20px 0 + 表单项 20px 外边距，一行筛选能撑到 90px 高；
+       收紧到 14/16 与 14px 间距，约 72px，和上下卡片更协调 */
+    padding: 14px 16px 0;
+
+    :deep(.el-form-item) {
+      margin-bottom: 14px;
+    }
 
     .action-column {
       flex: 1;
@@ -524,23 +530,33 @@
       .form-buttons {
         display: flex;
         gap: 8px;
+
+        /* 容器已经有 gap，Element 的「相邻按钮 8px 外边距」会叠成 16px */
+        :deep(.el-button + .el-button) {
+          margin-left: 0;
+        }
       }
 
+      /*
+       * 「展开 / 收起」和按钮在同一行：
+       * 原来用 line-height: 32px 撑高度，而按钮是 36px —— 文字比按钮矮 4px，
+       * 一眼就能看出这一行是歪的。改成显式 36px 高度 + 居中，跟按钮同基线。
+       */
       .filter-toggle {
         display: flex;
         align-items: center;
+        height: 36px;
         margin-left: 10px;
-        line-height: 32px;
-        color: var(--theme-color);
+        color: var(--muted-foreground);
         cursor: pointer;
-        transition: color 0.2s ease;
+        transition: color 0.15s ease;
 
         &:hover {
-          color: var(--ElColor-primary);
+          color: var(--foreground);
         }
 
         span {
-          font-size: 14px;
+          font-size: 13px;
           user-select: none;
         }
 
@@ -548,7 +564,7 @@
           display: flex;
           align-items: center;
           margin-left: 4px;
-          font-size: 14px;
+          font-size: 13px;
           transition: transform 0.2s ease;
         }
       }

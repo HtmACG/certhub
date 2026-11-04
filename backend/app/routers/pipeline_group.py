@@ -13,11 +13,12 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import audit, fail, get_current_user, ok, page_no
+from ..deps import audit, fail, get_current_user, ok, page_no, require_perm
 from ..models import Pipeline, PipelineGroup, PipelineGroupRun, User
 from ..services import group_runner
 
-router = APIRouter(prefix="/api/pipeline-group", tags=["pipeline-group"])
+router = APIRouter(prefix="/api/pipeline-group", tags=["pipeline-group"],
+                   dependencies=[Depends(require_perm("pipelines"))])
 
 
 def _fmt(value) -> str:

@@ -35,7 +35,6 @@ import { ref, computed } from 'vue'
 import { MenuThemeType } from '@/types/store'
 import AppConfig from '@/config'
 import { SystemThemeEnum, MenuThemeEnum, MenuTypeEnum, ContainerWidthEnum } from '@/enums/appEnum'
-import { setElementThemeColor } from '@/utils/ui'
 import { useCeremony } from '@/hooks/core/useCeremony'
 import { StorageConfig } from '@/utils'
 import { SETTING_DEFAULT_CONFIG } from '@/config/setting'
@@ -200,7 +199,18 @@ export const useSettingStore = defineStore(
      */
     const setElementTheme = (theme: string) => {
       systemThemeColor.value = theme
-      setElementThemeColor(theme)
+      // shadcn 规范：颜色一律来自语义令牌（shadcn-tokens.scss）。
+      // 这里不再把用户选的颜色内联写到 <html> 上 —— 内联优先级最高，
+      // 会把 --el-color-primary 钉死成近黑，暗色主题下页签/主色文字直接不可见。
+      const style = document.documentElement.style
+      style.removeProperty('--el-color-primary')
+      for (let i = 1; i <= 9; i++) {
+        style.removeProperty(`--el-color-primary-light-${i}`)
+        style.removeProperty(`--el-color-primary-dark-${i}`)
+      }
+      for (let i = 1; i < 16; i++) {
+        style.removeProperty(`--el-color-primary-custom-${i}`)
+      }
     }
 
     /**
@@ -345,10 +355,16 @@ export const useSettingStore = defineStore(
     /**
      * 设置自定义圆角
      * @param radius 圆角值
+     *
+     * 规范变更：全站设计语言以 shadcn/ui 为准，圆角由 --radius 单一控制
+     * （控件 6px / 卡片 8px），不再允许从设置抽屉里改写，
+     * 否则会出现「按钮 6px、输入框 0px」这种同一页两套圆角。
+     * 这里保留方法签名（历史持久化数据里还有 customRadius 字段），
+     * 但不再写 --custom-radius，统一跟随令牌。
      */
     const setCustomRadius = (radius: string) => {
       customRadius.value = radius
-      document.documentElement.style.setProperty('--custom-radius', `${radius}rem`)
+      document.documentElement.style.removeProperty('--custom-radius')
     }
 
     /**

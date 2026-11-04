@@ -9,30 +9,30 @@
   <div class="certd-setting art-full-height g-scope" v-loading="loading">
     <ElCard class="art-card" shadow="never">
       <ElTabs v-model="activeTab">
-        <ElTabPane v-if="isAdmin" label="站点信息" name="site">
+        <ElTabPane v-if="isAdmin" :label="$t('certd.setting.tabSite')" name="site">
           <ElForm label-position="top" class="setting-form">
             <ElRow :gutter="16">
               <ElCol :xs="24" :sm="12" :md="12" :lg="8">
-                <ElFormItem label="站点名称">
+                <ElFormItem :label="$t('certd.setting.siteName')">
                   <ElInput v-model="site.name" placeholder="CertHub" clearable />
-                  <p class="field-tip">显示在侧边栏 / 顶部栏标题，留空则用内置名称</p>
+                  <p class="field-tip">{{ $t('certd.setting.siteNameTip') }}</p>
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="12" :lg="8">
-                <ElFormItem label="副标题">
+                <ElFormItem :label="$t('certd.setting.subtitle')">
                   <ElInput
                     v-model="site.subtitle"
-                    placeholder="例如：证书自动化管理系统"
+                    :placeholder="$t('certd.setting.subtitlePh')"
                     maxlength="40"
                     show-word-limit
                     clearable
                   />
-                  <p class="field-tip">显示在站点名称下方，留空就不显示这一行</p>
+                  <p class="field-tip">{{ $t('certd.setting.subtitleTip') }}</p>
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="12" :lg="8">
-                <ElFormItem label="浏览器标题">
-                  <ElInput v-model="site.title" placeholder="CertHub 证书管理系统" />
+                <ElFormItem :label="$t('certd.setting.browserTitle')">
+                  <ElInput v-model="site.title" :placeholder="$t('certd.setting.browserTitlePh')" />
                 </ElFormItem>
               </ElCol>
               <ElCol :span="24">
@@ -50,7 +50,7 @@
                     <ElInput
                       v-model="site.logo"
                       class="logo-input"
-                      placeholder="留空用内置图标，也可粘贴图片地址"
+                      :placeholder="$t('certd.setting.logoPh')"
                       clearable
                     />
                     <ElUpload
@@ -59,45 +59,42 @@
                       accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif"
                       :on-change="onLogoChange"
                     >
-                      <ElButton>上传图片</ElButton>
+                      <ElButton>{{ $t('certd.setting.uploadImage') }}</ElButton>
                     </ElUpload>
                     <ElButton link type="danger" :disabled="!site.logo" @click="resetLogo">
-                      恢复默认
+                      {{ $t('certd.setting.resetDefault') }}
                     </ElButton>
                   </div>
-                  <p class="field-tip">
-                    支持 PNG / JPG / SVG / WebP，建议正方形，≤ {{ LOGO_MAX_KB }}KB；
-                    上传的图会转成 data URI 存进站点设置，不依赖外部图床。
-                  </p>
+                  <p class="field-tip">{{ $t('certd.setting.logoTip', { kb: LOGO_MAX_KB }) }}</p>
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="12" :lg="8">
-                <ElFormItem label="版权信息">
+                <ElFormItem :label="$t('certd.setting.copyright')">
                   <ElInput v-model="site.copyright" />
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="12" :lg="8">
-                <ElFormItem label="开放注册">
+                <ElFormItem :label="$t('certd.setting.openRegister')">
                   <ElSwitch v-model="site.registerEnabled" />
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="12" :lg="8">
-                <ElFormItem label="隐藏品牌">
+                <ElFormItem :label="$t('certd.setting.hideBrand')">
                   <ElSwitch v-model="site.hideBrand" />
                 </ElFormItem>
               </ElCol>
               <ElCol :span="24">
-                <ElFormItem label="登录页公告">
+                <ElFormItem :label="$t('certd.setting.loginNotice')">
                   <ElInput v-model="site.loginNotice" type="textarea" :autosize="{ minRows: 2 }" />
                 </ElFormItem>
               </ElCol>
               <ElCol :span="24">
-                <ElFormItem label="工作台公告">
+                <ElFormItem :label="$t('certd.setting.homeNotice')">
                   <ElInput v-model="site.homeNotice" type="textarea" :autosize="{ minRows: 2 }" />
                 </ElFormItem>
               </ElCol>
             </ElRow>
-            <ElButton type="primary" :loading="saving === 'site'" @click="save('site')">保存</ElButton>
+            <ElButton type="primary" :loading="saving === 'site'" @click="save('site')">{{ $t('certd.common.save') }}</ElButton>
           </ElForm>
         </ElTabPane>
 
@@ -106,40 +103,40 @@
           上半部分是自己的账号（原「账号与安全」页，已合并进来），
           下半部分的登录策略只有管理员能改。
         -->
-        <ElTabPane label="安全" name="security">
+        <ElTabPane :label="$t('certd.setting.tabSecurity')" name="security">
           <AccountSecurity />
 
           <ElForm v-if="isAdmin" label-position="top" class="setting-form policy-form">
             <div class="sec-title">
-              登录安全策略
-              <span class="sec-title-tip">对全站所有账号生效</span>
+              {{ $t('certd.setting.policyTitle') }}
+              <span class="sec-title-tip">{{ $t('certd.setting.policyScope') }}</span>
             </div>
             <ElRow :gutter="16">
               <ElCol :xs="24" :sm="12" :md="8">
-                <ElFormItem label="登录失败上限（次）">
+                <ElFormItem :label="$t('certd.setting.loginFailLimit')">
                   <ElInputNumber v-model="security.loginFailLimit" :min="0" :max="50" class="w-full" />
-                  <p class="field-tip">填 0 表示不限制、也不锁定</p>
+                  <p class="field-tip">{{ $t('certd.setting.loginFailLimitTip') }}</p>
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="8">
-                <ElFormItem label="锁定时长（分钟）">
+                <ElFormItem :label="$t('certd.setting.lockMinutes')">
                   <ElInputNumber v-model="security.lockMinutes" :min="1" :max="1440" class="w-full" />
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="8">
-                <ElFormItem label="强制两步验证">
+                <ElFormItem :label="$t('certd.setting.force2fa')">
                   <ElSwitch v-model="security.force2fa" />
-                  <p class="field-tip">开启后未绑定 2FA 的账号登录时必须先绑定</p>
+                  <p class="field-tip">{{ $t('certd.setting.force2faTip') }}</p>
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="8">
-                <ElFormItem label="密码错误后要求图形验证码">
+                <ElFormItem :label="$t('certd.setting.captchaEnabled')">
                   <ElSwitch v-model="security.captchaEnabled" />
-                  <p class="field-tip">关闭后登录只校验密码，不再出验证码</p>
+                  <p class="field-tip">{{ $t('certd.setting.captchaEnabledTip') }}</p>
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="8">
-                <ElFormItem label="连续错误几次后出现验证码">
+                <ElFormItem :label="$t('certd.setting.captchaAfter')">
                   <ElInputNumber
                     v-model="security.captchaAfter"
                     :min="1"
@@ -147,70 +144,63 @@
                     :disabled="!security.captchaEnabled"
                     class="w-full"
                   />
-                  <p class="field-tip">默认 1 次：密码一错，下一次登录就要填验证码</p>
+                  <p class="field-tip">{{ $t('certd.setting.captchaAfterTip') }}</p>
                 </ElFormItem>
               </ElCol>
             </ElRow>
             <ElButton type="primary" :loading="saving === 'security'" @click="save('security')">
-              保存
+              {{ $t('certd.common.save') }}
             </ElButton>
           </ElForm>
         </ElTabPane>
 
-        <ElTabPane v-if="isAdmin" label="到期提醒" name="notify">
+        <ElTabPane v-if="isAdmin" :label="$t('certd.setting.tabNotify')" name="notify">
           <ElForm label-position="top" class="setting-form">
             <ElRow :gutter="16">
               <ElCol :xs="24" :sm="12" :md="8">
-                <ElFormItem label="提前提醒天数">
+                <ElFormItem :label="$t('certd.setting.expireDays')">
                   <ElInputNumber v-model="notify.expireDays" :min="1" :max="90" class="w-full" />
                 </ElFormItem>
               </ElCol>
             </ElRow>
-            <p class="form-tip">
-              证书剩余天数小于该值时，调度器会通过「通知渠道」里设为默认的渠道推送提醒。
-            </p>
-            <ElButton type="primary" :loading="saving === 'notify'" @click="save('notify')">保存</ElButton>
+            <p class="form-tip">{{ $t('certd.setting.expireDaysTip') }}</p>
+            <ElButton type="primary" :loading="saving === 'notify'" @click="save('notify')">{{ $t('certd.common.save') }}</ElButton>
           </ElForm>
         </ElTabPane>
 
-        <ElTabPane v-if="isAdmin" label="网络代理" name="network">
-          <ElAlert type="info" :closable="false" class="mb-3">
-            语义与环境变量一致：httpProxy / httpsProxy / noProxy。填了代理就默认全部出网请求走代理，
-            noProxy 命中的直连（支持 localhost、.example.com、192.168.*、10.0.0.0/8）。
-          </ElAlert>
+        <ElTabPane v-if="isAdmin" :label="$t('certd.setting.tabNetwork')" name="network">
+          <ElAlert type="info" :closable="false" class="mb-3">{{ $t('certd.setting.proxyAlert') }}</ElAlert>
           <ElForm label-position="top" class="setting-form">
             <ElRow :gutter="16">
               <ElCol :xs="24" :sm="12" :md="8">
-                <ElFormItem label="HTTP 代理">
+                <ElFormItem :label="$t('certd.setting.httpProxy')">
                   <ElInput v-model="network.httpProxy" placeholder="http://127.0.0.1:7890" />
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="12" :md="8">
-                <ElFormItem label="HTTPS 代理">
+                <ElFormItem :label="$t('certd.setting.httpsProxy')">
                   <ElInput v-model="network.httpsProxy" placeholder="http://127.0.0.1:7890" />
                 </ElFormItem>
               </ElCol>
               <ElCol :xs="24" :sm="24" :md="8">
-                <ElFormItem label="不走代理（noProxy）">
+                <ElFormItem :label="$t('certd.setting.noProxy')">
                   <ElInput v-model="network.noProxy" placeholder="localhost,127.0.0.1,192.168.*" />
                 </ElFormItem>
               </ElCol>
             </ElRow>
 
-            <ElDivider content-position="left">反向代理域名</ElDivider>
-            <p class="form-tip">
-              只在传输层改地址，ACME 的 JWS 里仍然是原始 URL。留空使用内置默认。
-            </p>
+            <ElDivider content-position="left">{{ $t('certd.setting.reverseProxies') }}</ElDivider>
+            <p class="form-tip">{{ $t('certd.setting.reverseTip') }}</p>
             <div class="proxy-map">
               <div v-for="(row, index) in proxyRows" :key="index" class="proxy-row">
                 <ElInput v-model="row.key" placeholder="acme-v02.api.letsencrypt.org" />
-                <ElInput v-model="row.value" placeholder="反代域名，留空表示禁用" />
-                <ElButton link type="danger" @click="removeProxyRow(index)">删除</ElButton>
+                <ElInput v-model="row.value" :placeholder="$t('certd.setting.reverseValuePh')" />
+                <ElButton link type="danger" @click="removeProxyRow(index)">{{ $t('certd.common.delete') }}</ElButton>
               </div>
-              <ElButton size="small" @click="addProxyRow">新增映射</ElButton>
+              <ElButton size="small" @click="addProxyRow">{{ $t('certd.setting.addMapping') }}</ElButton>
             </div>
 
-            <ElDivider content-position="left">连通性测试</ElDivider>
+            <ElDivider content-position="left">{{ $t('certd.setting.connectivity') }}</ElDivider>
             <div class="test-wrap">
               <ElSelect v-model="testTarget" class="w-64">
                 <ElOption
@@ -220,7 +210,7 @@
                   :value="item.url"
                 />
               </ElSelect>
-              <ElButton :loading="testing" @click="runTest">测试连通性</ElButton>
+              <ElButton :loading="testing" @click="runTest">{{ $t('certd.setting.runTest') }}</ElButton>
             </div>
             <div v-if="testResult" class="test-result">
               <ElTag :type="testResult.verdict ? 'success' : 'warning'" effect="light">
@@ -228,19 +218,19 @@
               </ElTag>
               <div class="probe-list">
                 <div class="probe-item">
-                  <span>直连</span>
+                  <span>{{ $t('certd.setting.direct') }}</span>
                   <ElTag :type="probeType(testResult.direct)" size="small" effect="plain">
                     {{ probeText(testResult.direct) }}
                   </ElTag>
                 </div>
                 <div v-if="testResult.proxied" class="probe-item">
-                  <span>HTTP 代理</span>
+                  <span>{{ $t('certd.setting.viaProxy') }}</span>
                   <ElTag :type="probeType(testResult.proxied)" size="small" effect="plain">
                     {{ probeText(testResult.proxied) }}
                   </ElTag>
                 </div>
                 <div v-if="testResult.reverse" class="probe-item">
-                  <span>反向代理</span>
+                  <span>{{ $t('certd.setting.viaReverse') }}</span>
                   <ElTag :type="probeType(testResult.reverse)" size="small" effect="plain">
                     {{ probeText(testResult.reverse) }}
                   </ElTag>
@@ -248,31 +238,31 @@
               </div>
             </div>
 
-            <ElButton type="primary" :loading="saving === 'network'" @click="save('network')">保存</ElButton>
+            <ElButton type="primary" :loading="saving === 'network'" @click="save('network')">{{ $t('certd.common.save') }}</ElButton>
           </ElForm>
         </ElTabPane>
 
         <!-- 项目信息：只读，内容来自后端 /api/settings 的 about（改后端常量即可，不用动前端） -->
-        <ElTabPane label="项目信息" name="about">
+        <ElTabPane :label="$t('certd.setting.tabAbout')" name="about">
           <div class="about-panel">
             <div class="about-brand">
               <ArtLogo :size="42" />
               <div class="about-brand-text">
                 <div class="about-name">{{ about.name || 'CertHub' }}</div>
                 <div class="about-sub">
-                  版本号 <b>{{ about.version || '-' }}</b>
+                  {{ $t('certd.setting.version') }} <b>{{ about.version || '-' }}</b>
                   <span class="about-dot">·</span>
-                  前端构建 v{{ webVersion }}
+                  {{ $t('certd.setting.webBuild') }} v{{ webVersion }}
                 </div>
               </div>
             </div>
 
             <ElDescriptions :column="1" border class="about-desc">
-              <ElDescriptionsItem label="项目名称">{{ about.name || 'CertHub' }}</ElDescriptionsItem>
-              <ElDescriptionsItem label="版本号">{{ about.version || '-' }}</ElDescriptionsItem>
-              <ElDescriptionsItem label="前端构建">v{{ webVersion }}</ElDescriptionsItem>
-              <ElDescriptionsItem label="开发者">{{ about.developer || '-' }}</ElDescriptionsItem>
-              <ElDescriptionsItem label="邮箱">
+              <ElDescriptionsItem :label="$t('certd.setting.projectName')">{{ about.name || 'CertHub' }}</ElDescriptionsItem>
+              <ElDescriptionsItem :label="$t('certd.setting.version')">{{ about.version || '-' }}</ElDescriptionsItem>
+              <ElDescriptionsItem :label="$t('certd.setting.webBuild')">v{{ webVersion }}</ElDescriptionsItem>
+              <ElDescriptionsItem :label="$t('certd.setting.developer')">{{ about.developer || '-' }}</ElDescriptionsItem>
+              <ElDescriptionsItem :label="$t('certd.setting.email')">
                 <ElLink
                   v-if="about.email"
                   type="primary"
@@ -283,7 +273,7 @@
                 </ElLink>
                 <span v-else>-</span>
               </ElDescriptionsItem>
-              <ElDescriptionsItem label="网站">
+              <ElDescriptionsItem :label="$t('certd.setting.website')">
                 <ElLink
                   v-if="about.website"
                   type="primary"
@@ -296,14 +286,12 @@
                 </ElLink>
                 <span v-else>-</span>
               </ElDescriptionsItem>
-              <ElDescriptionsItem v-if="site.copyright" label="版权">
+              <ElDescriptionsItem v-if="site.copyright" :label="$t('certd.setting.copyright')">
                 {{ site.copyright }}
               </ElDescriptionsItem>
             </ElDescriptions>
 
-            <p class="about-tip">
-              这些信息由服务端的项目配置提供，升级 / 迁移后自动跟随，不需要在页面上重复填写。
-            </p>
+            <p class="about-tip">{{ $t('certd.setting.aboutTip') }}</p>
           </div>
         </ElTabPane>
       </ElTabs>
@@ -319,6 +307,7 @@
   import type { UploadFile } from 'element-plus'
   import ArtLogo from '@/components/core/base/art-logo/index.vue'
   import AccountSecurity from './components/account-security.vue'
+  import { $t } from '@/locales'
 
   defineOptions({ name: 'CertdSystemSetting' })
 
@@ -398,7 +387,7 @@
         // 侧边栏 / 顶部栏的标题与 Logo 立刻跟着变，不用刷新页面
         siteStore.apply(value)
       }
-      ElMessage.success('已保存')
+      ElMessage.success($t('certd.common.saved'))
     } finally {
       saving.value = ''
     }
@@ -412,11 +401,11 @@
     const raw = file.raw as File | undefined
     if (!raw) return
     if (!raw.type.startsWith('image/')) {
-      ElMessage.warning('请选择图片文件')
+      ElMessage.warning($t('certd.setting.pickImage'))
       return
     }
     if (raw.size > LOGO_MAX_KB * 1024) {
-      ElMessage.warning(`图片请小于 ${LOGO_MAX_KB}KB`)
+      ElMessage.warning($t('certd.setting.imageTooLarge', { kb: LOGO_MAX_KB }))
       return
     }
     const reader = new FileReader()
@@ -467,9 +456,9 @@
   const probeType = (probe: any) => (probe?.ok ? 'success' : 'danger')
 
   const probeText = (probe: any) => {
-    if (!probe) return '未测试'
-    if (probe.ok) return '可用 · ' + probe.status + ' · ' + probe.ms + 'ms'
-    return (probe.error || '不可用') + (probe.ms ? ' · ' + probe.ms + 'ms' : '')
+    if (!probe) return $t('certd.setting.probeUntested')
+    if (probe.ok) return $t('certd.setting.probeOk', { status: probe.status, ms: probe.ms })
+    return (probe.error || $t('certd.setting.probeFail')) + (probe.ms ? ' · ' + probe.ms + 'ms' : '')
   }
 
   onMounted(() => {
@@ -501,7 +490,7 @@
     margin-bottom: 12px;
     font-size: 14px;
     font-weight: 600;
-    color: var(--art-text-gray-900, var(--g-text, #1f2937));
+    color: var(--foreground);
   }
 
   .sec-title-tip {
@@ -537,9 +526,9 @@
     align-items: center;
     padding: 14px 16px;
     margin-bottom: 14px;
-    background: var(--art-gray-100);
-    border: 1px solid var(--art-card-border);
-    border-radius: 10px;
+    background: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
   }
 
   .about-brand-text {
@@ -602,9 +591,9 @@
     height: 40px;
     padding: 3px;
     overflow: hidden;
-    background: var(--default-box-color);
-    border: 1px solid var(--art-card-border);
-    border-radius: 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
 
     img {
       width: 100%;

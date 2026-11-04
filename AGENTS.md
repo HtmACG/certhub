@@ -2,6 +2,24 @@
 
 本文件是项目的硬性约定，改代码前先读一遍。**与代码冲突时以本文件为准，并回头把代码改对。**
 
+## 〇、前端只有一份（webui）· 严禁 PowerShell
+
+**这两条是死规定：页面、组件、脚本、文档、启动方式都按它来，不再讨论。**
+
+1. **新前端 = `F:\certdsystem\certd-lite\webui`，唯一一份。**
+   React 19 + Vite 6 + Tailwind v4 + shadcn/ui，源码在 `webui/src`，
+   开发端口 **5174**（`/api` 代理到 `127.0.0.1:8000`），构建产物 `webui/dist`。
+   改前端一律改 `webui/`；技术栈、目录、页面清单见 `webui/README.md`。
+2. **根目录 `frontend/` 是旧版 Vue 3 + Element Plus（Art Design Pro）前端，已停用。**
+   它只剩一个用途：`webui/scripts/deploy.mjs` 把新产物复制到 `frontend/dist`，
+   后端 `app/main.py` 仍从这个目录托管静态资源（`FRONTEND_DIST`）。
+   **不要再用 `frontend/src` 写页面、组件或样式规范**，也不要照着它的 `.vue`、
+   Element Plus 控件去实现新功能 —— 那套约定只对旧代码有效。
+3. **严禁使用 PowerShell。** 启动、构建、部署、排障、写脚本，一律用 `cmd`、`bash`、
+   `npm run xxx`、`.bat` / `.sh`。本文件、README、`start.bat`、CI 里**不许出现
+   `powershell` / `pwsh` / `PowerShell.exe` 命令**，也不许新增「让后端 `subprocess` 调
+   PowerShell」的逻辑。已有的调用见 `backend/app/services/deploy_ext.py`，改动它之前先确认。
+
 ## 一、凭据必须可明文查看（铁律）
 
 1. **接口层禁止打码。** 授权（Access）、通知渠道、证书私钥等所有凭据字段，
@@ -282,12 +300,92 @@
 - 改样式块时用整段替换要小心：先确认区间里没有别的选择器，否则会连带删掉
   兄弟组件的样式（本项目的「选择任务类型」弹窗就因此铺成了一列）。
 
-## 六、前端约定
+## 六、前端约定（旧版 Vue，仅维护 `frontend/` 时参考）
+
+> 新前端是 `webui`（第〇节）。本节的 Element Plus / Art Design Pro 约定**只对旧 `frontend/` 有效**，
+> 不要拿来写新页面、新组件。
 
 - Element Plus 组件 + `<script setup lang="ts">`，Vue API 走自动导入。
-- 样式写在 `<style scoped>` 里，颜色用主题变量（`--default-box-color`、
-  `--art-card-border`、`--art-gray-500` …），**不要写死背景色**，否则暗色模式会白底白字。
+- 样式写在 `<style scoped>` 里，颜色**优先用语义令牌**（`--card`、`--border`、`--muted-foreground`、
+  `--foreground` …）。`--default-box-color` / `--art-card-border` / `--art-gray-*` 这些老名字
+  已在 `shadcn-tokens.scss` 里转指语义令牌，**新代码不要再写**；**不要写死背景色**，否则暗色模式会白底白字。
 - 纯 CSS 块里注释用 `/* */`，不要用 `//`（PostCSS 会报错）。
+
+### 6.0 视觉规范：shadcn/ui 默认设计语言（唯一标准）
+
+交互 UI 的**所有**规范以 shadcn/ui 默认主题为准，不再使用 Google Material / Google Cloud Console 观感。
+落地只有三个文件，改样式先看它们，不要在各页面里另起一套：
+
+| 文件 | 负责内容 |
+| --- | --- |
+| `src/assets/styles/core/shadcn-tokens.scss` | 语义令牌（`:root` / `html.dark` 两套）+ Element `--el-*` 重映射 + 历史令牌别名 |
+| `src/assets/styles/core/shadcn-ui.scss` | 组件形态：按钮 / 输入框 / 表格 / 标签 / 卡片 / 弹层 / 开关 / 分页 / 页签 |
+| `src/assets/styles/core/shadcn-shell.scss` | 外壳：侧边栏 / 顶栏 / 标签条 / 页面容器 |
+
+必须遵守的几条：
+
+- **颜色只写语义令牌**：`--background / --foreground / --card / --popover / --primary / --secondary /
+  --muted / --accent / --destructive / --border / --input / --ring / --sidebar-*`。
+  不要再写 `#1a73e8`、`#fff`、`rgb(...)` 这类字面量。
+- **`--primary` ≠ 品牌强调色**：shadcn 的 primary 浅色是近黑（`#18181b`）、暗色是近白（`#fafafa`），
+  只适合「实心按钮 / 选中态」这类自带前景色的地方。需要「品牌色文字 / 图标」时用
+  `--brand`（暗色 = zinc-300）配 `--brand-foreground`。
+- **圆角只有一个源** `--radius: 0.625rem`，派生 `--radius-sm(6px) / -md(8px) / -lg(10px) / -full`。
+  按钮、输入框 8px，标签 6px，卡片 / 弹窗 10px，胶囊/圆点用 `--radius-full`。
+  不要再写 `border-radius: 12px` / `100px` / `50%`（圆形图标、圆点除外）。
+  卡片圆角也不许再按「盒子模式」加偏移（`calc(var(--custom-radius) + 4px)` 曾经让
+  `.art-card` 变成 12px，和 10px 的弹窗对不上）。
+- **描边 1px `--border`，阴影极浅**（只有 `--shadow-sm/md`，浮层才用）。
+  shadcn 不用渐变、不用发光、不用高饱和色块。**静止卡片 hover 只换描边/底色，不抬阴影**：
+  `border-color: transparent + box-shadow` 会让内容跟着位移，一屏多张卡一起 hover 像在抖。
+  **登录页尤其不许用蓝紫渐变**（`#6b75ff → #3da2fd` 那种）：品牌区用 `--muted` 面板 +
+  1px 描边 + 点阵纹理，颜色全走令牌，深浅色自动跟随，不要第二套 `:global(.dark)` 硬编码。
+- **环节色进令牌**：`--stage-cert / --stage-deploy / --stage-notify`（tokens 里两套：
+  浅色 600/700 档、暗色提亮），`utils/certd.ts` 的 `STAGE_KIND_META` 只引用它们。
+  画布小地图同理，返回 `var(--stage-cert)` 即可，不要再写 `#1a73e8`。
+- **图标与文字基线**：`ArtSvgIcon` 是 `display:inline` 的 svg，默认按**基线**对齐，
+  写在句子/标题里会比文字高半格。`shadcn-ui.scss` 统一给了
+  `.art-svg-icon { vertical-align: -0.125em; flex: 0 0 auto }`，不要逐个页面再调。
+- **同一行里的按钮要同高**：表格操作列是 `ElButton link`（原 28px）+ `ArtButtonTable`（32px）
+  混排，高度不一致底边就错开 —— 已统一到 32px（`html .cell-actions .el-button`）。
+  `ArtIconButton` 也统一成 32px / 8px 圆角 / muted 图标（原来是 34px / 4px）。
+  容器用 `gap` 时，Element 的 `.el-button + .el-button { margin-left: 8px }` 会叠成 16px，
+  `shadcn-ui.scss` 里已对 `.form-buttons` / `.cell-actions` / 弹窗 footer 清零。
+- **标签条的反圆角伪元素必须干掉**：`art-work-tab/index.vue` 里还留着 Chrome 风格的
+  `.google-tab.activ-tab::before/::after`（`box-shadow: 0 0 0 30px` + `clip-path` 画「小翅膀」，
+  权重 0,2,0 + `!important`）。scoped 样式是运行期注入的、会盖过全局，
+  所以 `shadcn-shell.scss` 用 `html .g-tabbar .google-tab::before/::after`（0,2,1）压掉并
+  `content: none`。新增页签样式时别再把这两个伪元素加回来。
+- **页面纵向留白与全高是一套账**：`.layout-content` 的 `padding: 20px 0 8px`（`views/index/style.scss`）
+  必须同时写进 `hooks/core/useLayoutHeight.ts` 的 `CONTENT_PADDING_Y = 28`
+  （`--art-full-height` = 100vh − 头部 − 内容头 − (15 底边留白 + 28 页面内边距)）。
+  页面里直接用 `height/min-height: var(--art-full-height)`，**不要再自己减 28px**；
+  只改一处 = 每个列表页多出 28px 的空白滚动（「页面能滚但没内容」）。
+- **`@apply` 里只能用 `tailwind.css` 注册过的颜色类**：全局 Tailwind 上下文只认
+  `tailwind.css` 的 `@theme`（`g-100…g-900`、`primary / secondary / success / warning /
+  danger / info`、`box / theme / hover-color / active-color`）。
+  `text-muted-foreground`、`bg-accent`、`text-foreground`、`bg-card` 这些 shadcn 语义名
+  只存在于 `shadcn-tokens.scss` 的 `@theme` 里，**不在全局上下文**：
+  写进 `@apply` 会让生产构建直接失败（`Cannot apply unknown utility class`），
+  写在模板 class 里则是**静默不生效**。需要语义色时用 `text-g-600`（= muted-foreground）、
+  `text-g-900`（= foreground）、`hover:bg-hover-color`（= accent），或者直接用 CSS 变量。
+- **Element 的变量常被子选择器覆盖**：`--el-button-*` 定义在 `.el-button{}` 里、
+  `--el-tag-*` 定义在 `.el-tag--primary{}` 里、`--el-input-text-color` 定义在 `.el-input{}` 里。
+  页面 scoped 样式一旦命中这些元素，外层普通选择器压不住 —— 需要接管时统一用 `html .xxx` 抬权重，
+  而不是靠 `!important` 打地鼠。
+- **`el-switch` 结构是兄弟节点**：`<div class="el-switch"><span class="el-switch__core">`，
+  写在 `.el-switch{}` 里的自定义属性传不到 track 上，必须写 `html .el-switch__core`。
+  Element 的小号开关还会用 `.el-switch--small .el-switch__core` 把 `border-radius` 打回 8px，
+  滑块宽高是内联样式（要 `!important` 才改得动）。另外两条容易踩的：
+  `.el-switch` 是 inline-flex，容器高度必须显式 20px + `flex: 0 0 auto`，否则 20px 的轨道被
+  压成 16px、滑块上下被切；选中态 `left` 由 `.el-switch.is-checked .el-switch__action`（0,3,0）
+  给出 `calc(100% - 17px)`，是按 12px 滑块留的 gap，换 16px 后要直接写死 `left: 18px !important`。
+- **不要在 JS 里内联写 primary**：`setElementThemeColor` / `handleElementThemeColor` 会把
+  `--el-color-primary*` setProperty 到 `<html>` 上，内联优先级最高，会把 `:root` / `html.dark`
+  的重映射全部盖掉 —— 典型症状是「暗色下页签选中字变成近黑、看不见」。这两个函数已改为只清空。
+  设置抽屉里的「系统主题色 / 自定义圆角」也已下线，圆角与主色只由 `shadcn-tokens.scss` 决定。
+- **验证**：无头 Edge + CDP（9444 端口）跑浅色 / 暗色各一遍，`_tmp/cdp-audit.mjs` 会输出
+  低对比文本（阈值 2.2）；`_tmp/cdp-crop.mjs` 可以裁剪单个元素放大看细节。
 
 ## 六·补、生产构建看不到 console（排障必读）
 
@@ -335,8 +433,9 @@
   三个必须守住的点：开关**不要塞进 hover 浮层**（它是状态指示）、必须带 `nodrag`
   （否则按住开关会拖动整个阶段框）、`.stage-node-actions` 的 `right` 要给它让位（42px）。
 - **序号徽标是「硬币」样式**：实心圆 + 3px `--g-surface` 白边 + 双层投影（中性灰 + 掺阶段色的光晕）。
-  白边取 `--g-surface` 而不是写死 `#fff`，暗色下才会自动变深；暗色 `--g-blue` 是浅蓝，
-  序号文字要跟着翻成深色。尺寸写死 26px 且 `box-sizing: border-box`（白边算在里面），
+  白边取 `--g-surface` 而不是写死 `#fff`，暗色下才会自动变深；徽标实心色是 `--g-blue`
+  （已转指 `--brand`，暗色 = zinc-300 浅色），序号文字要跟着用 `--brand-foreground` 翻成深色。
+  尺寸写死 26px 且 `box-sizing: border-box`（白边算在里面），
   否则徽标会撑大、把阶段名挤走。
 - **点连线可以删除。** 顺序线删掉 → 目标任务变「未连线」、不再执行；「失败后」线删掉 → 清 `onErrorTaskId`。
   两种都先弹确认框说明后果（`ElMessageBox`，按钮文案分别是「断开」「删除」）。
@@ -428,17 +527,25 @@
 
 ## 七、构建与验证
 
-```bash
-# 前端（先挪走 dist，避免批量删除保护拦截）
-mv frontend/dist _quarantine/dist-old-$(date +%s)
-cd frontend && node node_modules/vite/bin/vite.js build
+**命令一律用 `cmd` / `bash` / `npm run`，不要用 PowerShell（见第〇节）。**
 
-# 后端
-cd backend && ../.venv/Scripts/python.exe run.py      # 或 python run.py
+```bat
+:: 前端（webui，唯一一份）
+cd webui
+npm run dev        :: http://localhost:5174，/api 代理到 8000，改完即时热更新
+npm run build      :: tsc --noEmit + vite build -> webui/dist
+npm run deploy     :: 构建后复制到 frontend/dist（旧产物自动改名备份），刷新 8000 生效
 
-# 冒烟
-cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
+:: 后端（venv 在仓库上一级：F:\certdsystem\.venv）
+cd backend
+..\..\.venv\Scripts\python.exe run.py
+
+:: 冒烟（服务需已启动）
+python tests\smoke.py --base http://127.0.0.1:8000
 ```
+
+> 下面几条里的 `5173`、`sys-v3.0.2-user`、Element Plus 都属于**旧前端 `frontend/`**，
+> `webui` 不适用（新前端是 5174 + React，调试方式见 `webui/README.md`）。
 
 - `index.html` 必须带 `Cache-Control: no-cache, must-revalidate`：
   否则重新构建后浏览器还在跑旧 bundle，表现为「新功能没出现」。
@@ -462,6 +569,10 @@ cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
 
 ## 八、前端：分类、复用与响应式（CertHub 前端约定）
 
+> 8.1 的菜单分类、站点品牌、环节色对两个前端都成立；
+> 8.2 起的 `ArtTable` / `ArtForm` / `ElSwitch` 等是**旧版 Vue 前端的实现**，
+> `webui` 用 shadcn/ui 组件，写法见 `webui/README.md`。
+
 ### 8.1 菜单必须按流程分类，不能平铺
 
 一级菜单固定为四块：**工作台 / 证书流程 / 接入资源 / 站点监控 · 系统管理**。
@@ -482,8 +593,12 @@ cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
   窄屏（≤800px）侧边栏收起时整块 `brand-text` 一起隐藏。
 
 流水线的环节颜色是全局约定，页面里不要各自发明：
-**证书申请 = 蓝(#409eff)、证书部署 = 绿(#67c23a)、发送通知 = 橙(#e6a23c)**，
-取值统一走 `src/utils/certd.ts` 的 `STAGE_KIND_META`。
+**证书申请 = 蓝、证书部署 = 绿、发送通知 = 橙**，
+取值统一走 `src/utils/certd.ts` 的 `STAGE_KIND_META`，而它只引用
+`shadcn-tokens.scss` 里的 `--stage-cert / --stage-deploy / --stage-notify`
+（低饱和的 600/700 档，暗色自动提亮）。
+**不要再写 `#409eff` / `#67c23a` / `#e6a23c`**，也不要在页面里另算一套环节色；
+三个环节色只在图标、小徽标、3px 描边这类点状强调上出现，不铺大色块。
 列表页的「申请 / 部署 / 通知」标签来自后端 `/api/pipeline/list` 的 `kinds` 字段
 （后端解析 content 得出），**前端不要自己按 stepCount 猜**。
 
@@ -595,15 +710,35 @@ cd certd-lite && python tests/smoke.py --base http://127.0.0.1:8000
 
 ### 8.2·补四、工作台的资源仪表（CPU / 内存 / 系统盘）
 
-- 「系统信息」卡片固定三块车速表（`ArtGaugeChart`）：CPU 使用率 / 内存使用率 /
+- 「系统信息」卡片固定三块**环形进度**（`ArtGaugeChart`）：CPU 使用率 / 内存使用率 /
   系统盘使用率，**硬盘只展示系统盘**，数据盘不铺在这里（接口仍返回全部 `disks`）。
+- 仪表形态：**弧线 + 中央大数字 + 细刻度，没有指针、没有刻度数字**。
+  240° 扫角、`radius: 92%`、`center: ['50%','54%']`、弧宽 10px；
+  三个并排时指针和 0/20/…/100 只是三种重复表达，全去掉之后卡片才「安静」。
+  需要指针时把 `pointer` / `anchor` 的 `show` 改回 true。
+- 三列的**状态词（正常 / 偏高 / 告警）紧跟标题**，不要 `margin-left: auto` 推到列尾：
+  列宽 360px 时右对齐会离标题 240px，看起来像别列的标签。
 - 系统盘由后端 `services/system_info.py` 判定：Windows 取 `SystemDrive`（通常是 `C:\`），
   类 Unix 取 `/`，结果放在 `systemDisk`，每块盘同时带 `system` 布尔位；
   前端只在老接口没有这两个字段时才自己兜底（C 盘 → 根目录 → 第一块盘）。
 - 使用率分档（正常 / 偏高 / 告警）走 `utils/certd.ts` 的
   `usageLevel` / `usageColor` / `usageText`，阈值 70% / 90%，**页面里不要各自写一遍**。
-- 仪表是 canvas，读不到 CSS 变量：暗色配色在 `ArtGaugeChart` 内部按 `isDark` 各给一套，
-  换主题时 `useChartComponent` 会自动重绘。
+- 仪表是 canvas，**canvas 里不解析 `var(--x)`**：`ArtGaugeChart` 用
+  `getComputedStyle(document.documentElement).getPropertyValue('--muted')` 把令牌读成实际颜色，
+  并且必须把 `usageColor()` 返回的 `var(--success)` 这类值解析后再交给 ECharts ——
+  直接把 `var(--x)` 传给 zrender，指针和进度弧会画成黑色/透明。
+  换主题时 `useChartComponent` 会自动重绘，读到的就是新令牌。
+- 页面结构固定为「**页头（标题 + 一行数据摘要 + 右侧动作，不做成卡片）→ 系统信息 → 2×2 列表**」：
+  内容区已经是浅灰底，页头再套一个白盒子就是「盒子叠盒子」。
+
+### 8.2·补九、工作台列表卡片的等高
+
+- 四张列表卡（流水线 / 执行记录 / 证书 / 站点）**每张最多 4 条**（`LIST_SIZE = 4`），
+  且 `.simple-list { min-height: 220px }`：条目少的卡（证书 2 条 / 站点 3 条）不会在
+  底部留出一块比旁边短的空洞 —— 网格里两张卡高度一样，但内容一多一少时，短的那张
+  底部会露出明显空白，看起来就是「参差不齐」。
+- 行内摘要只写必要的：**「已停用」才写前缀**（启用状态是常态，不用每行都写「已启用」）；
+  阶段/任务写「3 阶段 · 2 任务」，不要「3 个阶段 · 2 个任务 · 上次 …」连成一长串灰字。
 
 ### 8.2·补五、DNS 记录页（原「CNAME 记录」）
 

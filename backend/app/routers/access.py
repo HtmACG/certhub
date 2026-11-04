@@ -10,14 +10,15 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import audit, fail, get_current_user, ok, page_no
+from ..deps import audit, fail, get_current_user, ok, page_no, require_perm
 from ..models import Access, User
 from ..plugins import ACCESS_CATEGORIES, ACCESS_TYPES
 from ..services import dns as dns_service
 from ..services import net
 from ..security import MASK, decrypt_json, encrypt_json, merge_secret
 
-router = APIRouter(prefix="/api/access", tags=["access"])
+router = APIRouter(prefix="/api/access", tags=["access"],
+                   dependencies=[Depends(require_perm("access"))])
 
 
 def _fmt(dt) -> str:

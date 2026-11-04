@@ -32,6 +32,8 @@ def public_config(db: Session = Depends(get_db)):
         "subtitle": site.get("subtitle") or "",
         "title": site.get("title") or site.get("name") or "CertHub",
         "logo": site.get("logo") or "",
+        # 登录页背景图（data:image/... 内联图）。公开接口只暴露展示类字段。
+        "loginBackground": site.get("loginBackground") or "",
         "loginNotice": site.get("loginNotice") or "",
         "homeNotice": site.get("homeNotice") or "",
         "hideBrand": bool(site.get("hideBrand")),

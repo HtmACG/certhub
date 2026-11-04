@@ -12,7 +12,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import audit, fail, get_current_user, ok, page_no
+from ..deps import audit, fail, get_current_user, ok, page_no, require_perm
 from ..models import Access, Certificate, History, Pipeline, User
 from ..plugins import (ACCESS_CATEGORIES, ACCESS_TYPES, ACME_PROVIDERS, DNS_PROVIDERS,
                        NOTIFY_TYPES, PLUGIN_GROUPS, TASK_PLUGIN_MAP, TASK_PLUGINS)
@@ -21,7 +21,8 @@ from ..services import resources
 from ..services.engine import is_running, run_pipeline_async
 from ..services.scheduler import next_run
 
-router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
+router = APIRouter(prefix="/api/pipeline", tags=["pipeline"],
+                   dependencies=[Depends(require_perm("pipelines"))])
 
 
 def _fmt(dt) -> str:

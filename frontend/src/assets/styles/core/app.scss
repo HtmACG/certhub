@@ -2,7 +2,7 @@
 // 顶部进度条颜色
 #nprogress .bar {
   z-index: 2400;
-  background-color: color-mix(in srgb, var(--theme-color) 70%, white);
+  background-color: var(--theme-color);
 }
 
 #nprogress .peg {
@@ -92,79 +92,59 @@ body,
 }
 
 // 盒子默认边框
-.page-content {
-  border: 1px solid var(--art-card-border) !important;
-}
+// shadcn 的页面是「通栏 + 卡片成块」，不画外框：外框会和内部卡片描边叠成双层线。
+// 所以 .page-content 统一不带边框（由 shadcn-shell.scss 收口），这里不再声明。
 
-@mixin art-card-base($border-color, $shadow: none, $radius-diff: 0px) {
-  background: var(--default-box-color);
+/**
+ * 卡片形态统一到 shadcn card：圆角只有一个来源 --radius-lg（10px）。
+ *
+ * 以前这里按「盒子模式」加 4px / 0 / -4px 的偏移，默认模式（border-mode）下
+ * .art-card 实际是 12px、.art-card-xs 是 4px —— 同一屏能看到 4/6/8/10/12 五种圆角，
+ * 这就是「排版参差不齐」最直观的来源之一。
+ * 现在三种尺寸都用同一个 token，只有密度不同。
+ */
+@mixin art-card-base($border-color, $shadow: none, $radius: var(--radius-lg)) {
+  background: var(--card);
   border: 1px solid #{$border-color} !important;
-  border-radius: calc(var(--custom-radius) + #{$radius-diff}) !important;
+  border-radius: #{$radius} !important;
   box-shadow: #{$shadow} !important;
 
-  --el-card-border-color: var(--default-border) !important;
+  --el-card-border-color: var(--border) !important;
 }
 
 .art-card,
 .art-card-sm,
 .art-card-xs {
-  border: 1px solid var(--art-card-border);
+  border: 1px solid var(--border);
 }
 
 // 盒子边框
 [data-box-mode='border-mode'] {
-  .page-content,
-  .art-table-card {
-    border: 1px solid var(--art-card-border) !important;
-  }
-
   .art-card {
-    @include art-card-base(var(--art-card-border), none, 4px);
+    @include art-card-base(var(--border));
   }
 
   .art-card-sm {
-    @include art-card-base(var(--art-card-border), none, 0px);
+    @include art-card-base(var(--border));
   }
 
   .art-card-xs {
-    @include art-card-base(var(--art-card-border), none, -4px);
+    @include art-card-base(var(--border));
   }
 }
 
 // 盒子阴影
 [data-box-mode='shadow-mode'] {
-  .page-content,
-  .art-table-card {
-    box-shadow: 0px 0px 4px 0px rgba(0, 0, 0, 0.04) !important;
-    border: 1px solid var(--art-gray-200) !important;
-  }
-
-  .layout-sidebar {
-    border-right: 1px solid var(--art-card-border) !important;
-  }
-
   .art-card {
-    @include art-card-base(
-      var(--art-gray-200),
-      (0 1px 3px 0 rgba(0, 0, 0, 0.03), 0 1px 2px -1px rgba(0, 0, 0, 0.08)),
-      4px
-    );
+    @include art-card-base(var(--border), var(--shadow-sm));
   }
 
   .art-card-sm {
-    @include art-card-base(
-      var(--art-gray-200),
-      (0 1px 3px 0 rgba(0, 0, 0, 0.03), 0 1px 2px -1px rgba(0, 0, 0, 0.08)),
-      2px
-    );
+    @include art-card-base(var(--border), var(--shadow-sm));
   }
 
   .art-card-xs {
-    @include art-card-base(
-      var(--art-gray-200),
-      (0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 1px -1px rgba(0, 0, 0, 0.08)),
-      -4px
-    );
+    @include art-card-base(var(--border), var(--shadow-sm));
   }
 }
 
@@ -191,7 +171,7 @@ body,
   display: flex;
   flex-direction: column;
   margin-top: 12px;
-  border-radius: calc(var(--custom-radius) * 0.75) !important;
+  border-radius: var(--radius-lg) !important;
 
   .el-card__body {
     height: 100%;
@@ -199,7 +179,15 @@ body,
   }
 }
 
-// 容器全高
+/**
+ * 容器全高
+ *
+ * `--art-full-height` 由 `hooks/core/useLayoutHeight.ts` 写到 <html> 上，公式是
+ * 「100vh - 头部 - 内容头 - (15px 底部留白 + 28px 页面纵向内边距)」，
+ * 28px 对应 `.layout-content` 的 `padding: 20px 0 8px`（views/index/style.scss）。
+ * 三处是一套账：改内边距就要同步改 hook 里的 CONTENT_PADDING_Y，
+ * 否则每个列表页会多出一条 28px 的空白滚动（「页面能滚但没内容」）。
+ */
 .art-full-height {
   height: var(--art-full-height);
   display: flex;
@@ -219,8 +207,8 @@ body,
   width: 6px;
   height: 6px;
   margin: auto;
-  background: #ff3860;
-  border-radius: 50%;
+  background: var(--destructive);
+  border-radius: var(--radius-full);
   animation: breathe 1.5s ease-in-out infinite;
 
   &.art-badge-horizontal {
@@ -250,10 +238,10 @@ body,
   padding: 0 5px;
   margin: auto;
   font-size: 10px;
-  color: #fff;
+  color: var(--destructive-foreground);
   text-align: center;
-  background: #fd4e4e;
-  border-radius: 4px;
+  background: var(--destructive);
+  border-radius: var(--radius-sm);
 }
 
 @keyframes breathe {

@@ -438,8 +438,8 @@
   }
 
   .bar-active {
-    color: var(--theme-color) !important;
-    border-bottom: 2px solid var(--theme-color);
+    color: var(--foreground) !important;
+    border-bottom: 2px solid var(--foreground);
   }
 
   .scrollbar-thin::-webkit-scrollbar {
@@ -447,10 +447,10 @@
   }
 
   .dark .scrollbar-thin::-webkit-scrollbar-track {
-    background-color: var(--default-box-color);
+    background-color: transparent;
   }
 
   .dark .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #222 !important;
+    background-color: var(--border) !important;
   }
 </style>

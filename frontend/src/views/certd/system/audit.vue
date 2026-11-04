@@ -19,9 +19,9 @@
           <ElSpace wrap>
             <ElButton :disabled="!selectedRows.length" @click="copySelected">
               <ArtSvgIcon icon="ri:file-copy-line" class="mr-1" />
-              复制所选<template v-if="selectedRows.length">（{{ selectedRows.length }}）</template>
+              {{ $t('certd.audit.copySelected') }}<template v-if="selectedRows.length"> ({{ selectedRows.length }})</template>
             </ElButton>
-            <span class="cell-sub">审计日志只读，不能删除</span>
+            <span class="cell-sub">{{ $t('certd.audit.readonly') }}</span>
           </ElSpace>
         </template>
       </ArtTableHeader>
@@ -48,11 +48,14 @@
   import { useTable } from '@/hooks/core/useTable'
   import { fetchAuditList } from '@/api/certd'
   import { ElMessage } from 'element-plus'
+  import { $t } from '@/locales'
 
   defineOptions({ name: 'CertdSystemAudit' })
 
   const searchForm = ref<Record<string, any>>({ keyword: undefined })
-  const searchItems = [{ key: 'keyword', label: '操作', type: 'input', placeholder: '例如：新增授权' }]
+  const searchItems = computed(() => [
+    { key: 'keyword', label: $t('certd.audit.action'), type: 'input', placeholder: $t('certd.audit.actionPh') },
+  ])
 
   const {
     columns,
@@ -72,10 +75,10 @@
       apiParams: { current: 1, size: 20 },
       columnsFactory: () => [
         { type: 'selection', width: 48 },
-        { prop: 'createTime', label: '时间', width: 170 },
-        { prop: 'username', label: '操作人', width: 130 },
-        { prop: 'action', label: '操作', width: 170 },
-        { prop: 'detail', label: '详情', minWidth: 240, useSlot: true },
+        { prop: 'createTime', label: $t('certd.audit.colTime'), width: 190 },
+        { prop: 'username', label: $t('certd.audit.colUser'), width: 140 },
+        { prop: 'action', label: $t('certd.audit.action'), width: 190 },
+        { prop: 'detail', label: $t('certd.common.detail'), minWidth: 240, useSlot: true },
         { prop: 'ip', label: 'IP', width: 150 },
       ],
     },
@@ -98,9 +101,9 @@
       .join('\n')
     try {
       await navigator.clipboard.writeText(text)
-      ElMessage.success(`已复制 ${selectedRows.value.length} 条`)
+      ElMessage.success($t('certd.audit.copied', { n: selectedRows.value.length }))
     } catch {
-      ElMessage.error('复制失败，请手动选择文本')
+      ElMessage.error($t('certd.audit.copyFailed'))
     }
   }
 

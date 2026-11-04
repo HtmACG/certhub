@@ -1,0 +1,342 @@
+/**
+ * shadcn/ui · 应用外壳（侧边栏 / 顶栏 / 标签条）
+ * =========================================================
+ * 对照 shadcn 的 `sidebar` 区块与 dashboard 示例：
+ *
+ *   侧边栏  背景 --sidebar（浅色是 neutral-50 #fafafa，暗色是 zinc-950）
+ *           右侧 1px --sidebar-border
+ *           菜单项 h-8(32px) rounded-md text-sm font-medium，图标 16px
+ *           hover = --sidebar-accent，选中 = --sidebar-accent + foreground 字 + 500 字重
+ *           分组标题 text-xs font-medium text-muted-foreground
+ *   顶栏    h-14(56px) bg-background + 底部 1px 分隔线，右侧图标按钮 32×32 ghost
+ *   标签条  h-10(40px) bg-muted/50，每个 tab 是 rounded-md 小胶囊，选中出白底 + 细描边
+ *
+ * 这里全部覆写模板原来的 Material 观感（40px 行高、蓝色胶囊、抽屉阴影）。
+ * 旧的 google.scss / google-shell.scss 已删除（备份在 certd-lite/_tmp/unused-styles/）。
+ */
+
+/* ==================== 侧边栏 ==================== */
+/**
+ * ⚠️ 这里统一用 `html` 前缀抬一档权重。
+ * art-sidebar-menu/theme.scss 里的 @include menu-active /
+ * `.el-menu-light .el-menu-item.is-active` 是老主题残留，
+ * 后者的选择器同样带 !important，且注入顺序在我们之后 ——
+ * 不加 html 前缀时，选中项会被它改回「主题色文字 + primary-light-9 底」，
+ * 点击一下（加上 .is-active）就出现「浅灰底上一行灰字」的假象。
+ */
+html .layout-sidebar {
+  background: var(--sidebar) !important;
+  border-right: 1px solid var(--sidebar-border) !important;
+
+  /* 品牌区：名字 14px/600，副标题 11px muted —— 对齐 shadcn 团队名 + plan 的层级 */
+  .header {
+    padding: 12px 12px 8px !important;
+  }
+
+  .header .brand-name {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.01em;
+    color: var(--sidebar-foreground) !important;
+  }
+
+  .header .brand-subtitle {
+    margin-top: 2px;
+    font-size: 11.5px !important;
+    font-weight: 400;
+    line-height: 1.3 !important;
+    letter-spacing: 0;
+    color: var(--muted-foreground) !important;
+  }
+
+  .el-scrollbar__thumb {
+    background-color: color-mix(in srgb, var(--foreground) 15%, transparent) !important;
+  }
+
+  /**
+   * 菜单项：h-8 / rounded-md / 16px 图标 / 字重 500
+   * 原来 40px 行高 + 12px 圆角 + 蓝色胶囊，是 Material 3 的导航抽屉；
+   * shadcn 的导航项更紧凑、更中性 —— 选中只换底色，不换品牌色。
+   */
+  .el-menu-design {
+    padding: 4px 8px;
+    background: transparent !important;
+    border-right: 0;
+
+    .el-sub-menu__title,
+    .el-menu-item {
+      height: 32px !important;
+      margin: 0 0 2px !important;
+      padding-left: 8px !important;
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      font-weight: 500;
+      line-height: 32px !important;
+      color: var(--sidebar-foreground) !important;
+      border-radius: var(--radius-md) !important;
+      transition:
+        background-color 0.1s ease,
+        color 0.1s ease;
+    }
+
+    /* 层级缩进：只靠 padding 递进，不画引导线 */
+    .el-menu--inline {
+      > .el-menu-item,
+      > .el-sub-menu > .el-sub-menu__title {
+        padding-left: 28px !important;
+      }
+
+      .el-menu--inline {
+        > .el-menu-item,
+        > .el-sub-menu > .el-sub-menu__title {
+          padding-left: 48px !important;
+        }
+
+        .el-menu--inline {
+          > .el-menu-item,
+          > .el-sub-menu > .el-sub-menu__title {
+            padding-left: 68px !important;
+          }
+        }
+      }
+    }
+
+    .menu-icon {
+      margin-right: 8px !important;
+      margin-left: 0 !important;
+    }
+
+    .el-sub-menu__title span,
+    .el-menu-item span {
+      font-size: 13.5px !important;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    /* 图标：默认 muted，hover/选中才到 foreground —— shadcn 一贯的中性表达 */
+    .menu-icon .art-svg-icon {
+      color: var(--muted-foreground);
+      transition: color 0.1s ease;
+    }
+
+    .el-sub-menu__icon-arrow {
+      color: var(--muted-foreground) !important;
+    }
+
+    .el-sub-menu__title:hover,
+    .el-menu-item:not(.is-active):hover {
+      color: var(--sidebar-foreground) !important;
+      background: var(--sidebar-accent) !important;
+    }
+
+    .el-sub-menu__title:hover .menu-icon .art-svg-icon {
+      color: var(--sidebar-foreground);
+    }
+
+    /* 选中：accent 底 + foreground 字，不再用主题色 */
+    .el-menu-item.is-active {
+      font-weight: 500;
+      color: var(--sidebar-accent-foreground) !important;
+      background: var(--sidebar-accent) !important;
+
+      span {
+        font-weight: 500;
+      }
+
+      .menu-icon .art-svg-icon {
+        color: var(--sidebar-accent-foreground) !important;
+      }
+    }
+
+    /* 折叠：只留 32px 图标格，居中 */
+    &.el-menu--collapse {
+      .el-sub-menu__title,
+      .el-menu-item {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 36px !important;
+        margin: 0 0 2px !important;
+        padding: 0 !important;
+      }
+
+      .menu-icon {
+        margin: 0 !important;
+      }
+    }
+  }
+
+  /* 折叠后浮出的二级菜单 */
+  .el-menu--popup {
+    padding: 4px;
+    background: var(--popover);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+
+    .el-menu-item,
+    .el-sub-menu__title {
+      height: 32px !important;
+      margin: 0 0 2px !important;
+      padding: 0 8px !important;
+      font-size: 13.5px;
+      color: var(--popover-foreground) !important;
+      border-radius: var(--radius-sm) !important;
+
+      &:hover {
+        background: var(--accent) !important;
+      }
+
+      &.is-active {
+        color: var(--foreground) !important;
+        background: var(--accent) !important;
+      }
+    }
+  }
+}
+
+/* ==================== 顶栏 ==================== */
+.g-header {
+  height: 56px !important;
+  background: var(--background) !important;
+  border-bottom: 1px solid var(--border) !important;
+
+  /* 图标按钮：32×32 ghost（ArtIconButton 自身也是这套形态，这里是兜底） */
+  div[class~='size-8'],
+  div[class~='size-8.5'] {
+    width: 32px;
+    height: 32px;
+    color: var(--muted-foreground);
+    border-radius: var(--radius-md);
+    transition:
+      background-color 0.1s ease,
+      color 0.1s ease;
+
+    &:hover {
+      color: var(--foreground);
+      background: var(--accent) !important;
+    }
+  }
+
+  /* 搜索框：shadcn 的 command 触发按钮 = 细描边 + muted 字 + kbd。
+     高度 32px 与右侧图标按钮完全对齐（原来 34px，一行里差 2px 看着就歪）。 */
+  .g-search {
+    height: 32px;
+    padding: 0 8px 0 10px;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: none;
+    transition:
+      background-color 0.1s ease,
+      border-color 0.1s ease;
+
+    &:hover {
+      background: var(--accent);
+      border-color: var(--border);
+    }
+
+    .g-search-text {
+      margin-left: 6px;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--muted-foreground) !important;
+    }
+  }
+
+  .g-kbd {
+    height: 20px;
+    padding: 0 5px;
+    color: var(--muted-foreground);
+    background: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+
+    .art-svg-icon,
+    span {
+      font-size: 10.5px !important;
+      color: var(--muted-foreground) !important;
+    }
+  }
+
+  /* 面包屑：13px，非当前项 muted，当前项 foreground/500 */
+  .g-crumbs span {
+    padding: 0 4px;
+    font-size: 13px;
+    color: var(--muted-foreground) !important;
+  }
+
+  .g-crumbs li > div:last-child:not(:first-child) {
+    margin: 0 2px;
+    color: color-mix(in srgb, var(--muted-foreground) 60%, transparent) !important;
+  }
+
+  .g-crumbs li:last-child span {
+    font-weight: 500;
+    color: var(--foreground) !important;
+  }
+
+  @media only screen and (width <= 640px) {
+    height: 52px !important;
+
+    div[class~='size-8.5'] {
+      width: 30px;
+      height: 30px;
+    }
+  }
+}
+
+/* ==================== 标签条 ==================== */
+/**
+ * 条本身：白底 + 1px 下边框，和顶栏连成一片（内容区是 muted 底，卡片才浮得起来）。
+ * 单个页签胶囊的形态在 `art-work-tab/index.vue` 的 `.work-tab` 里，**只有那一份**。
+ *
+ * 为什么不在全局再写一套：页签元素上原来挂着 Tailwind 的 `!h-8` / `!border-none`
+ * 和内联 `border-radius: … !important`。按 CSS 层叠规则，
+ * utilities 层里的 important 声明会压过无层样式，内联 important 更是最高优先级 ——
+ * 在这里怎么写都打不过，只会变成两套规则互相打架。所以把源头改干净，这里只管条。
+ */
+.g-tabbar {
+  height: 44px !important;
+  padding: 0 16px !important;
+  margin-bottom: 0 !important;
+  background: var(--background) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+/* ==================== 页面容器 ==================== */
+/**
+ * shadcn dashboard 的页面是「通栏 + 卡片成块」，不画外框。
+ * 之前 .page-content 有一个 1px 外框，和内部卡片的描边叠成双层线。
+ */
+.page-content {
+  background: var(--background);
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* 页面级的「卡片块」统一成 shadcn card */
+.art-card,
+.art-card-sm,
+.art-card-xs,
+.art-table-card,
+.art-search-bar {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.art-card,
+.art-table-card {
+  border-radius: var(--radius-lg) !important;
+}
+
+.art-card-sm {
+  border-radius: var(--radius-lg) !important;
+}
+
+.art-card-xs,
+.art-search-bar {
+  border-radius: var(--radius-lg) !important;
+}

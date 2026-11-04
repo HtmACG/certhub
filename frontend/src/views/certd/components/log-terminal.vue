@@ -167,10 +167,37 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    /* 日志恒为黑底：不跟随主题，白底看 PEM / JSON 太累 */
+    /*
+     * 日志恒为黑底：不跟随主题，白底看 PEM / JSON 太累。
+     *
+     * 但终端里还会放 Element 的按钮 / 标签（头部「停止 / 关闭」、状态标签），
+     * 它们取的是全局语义令牌 —— 浅色主题下 --foreground 是近黑，
+     * 放在 #11151c 的黑底上等于看不见（对比度约 1.1:1）。
+     * 这里把语义令牌在终端子树里**就地重映射**成深底版本：
+     * 子树里的按钮、标签、开关自动拿到可读的颜色，页面不用逐个 :deep 覆盖。
+     * 注意：弹层被 teleport 到 body，不在这个子树里，不受影响。
+     */
+    --background: #0b0e14;
+    --card: #11151c;
+    --popover: #11151c;
+    --foreground: #e6edf3;
+    --muted: #1b212b;
+    --muted-foreground: #9aa4b2;
+    --accent: #232b37;
+    --secondary: #1b212b;
+    --secondary-foreground: #c9d1d9;
+    --border: #303a48;
+    --input: #303a48;
+    --ring: #6e7781;
+    --brand: #c9d1d9;
+    --brand-foreground: #0b0e14;
+    --success: hsl(142 60% 65%);
+    --warning: hsl(38 92% 65%);
+    --destructive: hsl(0 84% 70%);
+
     background: #0b0e14;
     border: 1px solid #1f2430;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
   }
 
   /* 传入 accent 时，用阶段色描边 + 标题着色：不同阶段的日志终端长得不一样 */
@@ -215,8 +242,17 @@
     align-items: center;
   }
 
+  /* 深底上的操作按钮：高度 / 字号跟终端标题同一档，颜色走上面重映射的令牌 */
   .log-terminal-actions :deep(.el-button) {
     flex: 0 0 auto;
+    height: 26px;
+    padding: 0 8px;
+    font-size: 12px;
+    border-radius: var(--radius-sm);
+  }
+
+  .log-terminal-actions :deep(.el-tag) {
+    font-size: 11px;
   }
 
   .log-terminal-body {
@@ -224,7 +260,7 @@
     min-height: 80px;
     padding: 8px 12px;
     overflow: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.7;
     background: #0b0e14;

@@ -18,7 +18,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton :disabled="!searchForm.pipelineId" @click="clearAll">
-              清理本流水线历史
+              {{ $t('certd.history.clearPipelineHistory') }}
             </ElButton>
             <ElButton
               type="danger"
@@ -28,7 +28,7 @@
               @click="removeSelected"
             >
               <ArtSvgIcon icon="ri:delete-bin-line" class="mr-1" />
-              批量删除<template v-if="selectedIds.length">（{{ selectedIds.length }}）</template>
+              {{ $t('certd.history.batchDelete') }}<template v-if="selectedIds.length"> ({{ selectedIds.length }})</template>
             </ElButton>
           </ElSpace>
         </template>
@@ -59,20 +59,20 @@
         </template>
         <template #operation="{ row }">
           <div class="cell-actions">
-            <ElButton link type="primary" @click="openLog(row)">日志</ElButton>
+            <ElButton link type="primary" @click="openLog(row)">{{ $t('certd.history.log') }}</ElButton>
             <ElButton v-if="row.status === 'running'" link type="warning" @click="stop(row)">
-              停止
+              {{ $t('certd.history.stop') }}
             </ElButton>
-            <ElButton link type="danger" @click="remove(row)">删除</ElButton>
+            <ElButton link type="danger" @click="remove(row)">{{ $t('certd.history.delete') }}</ElButton>
           </div>
         </template>
       </ArtTable>
     </ElCard>
 
-    <ElDrawer v-model="logVisible" :title="'执行日志 · ' + (current?.pipelineTitle || '')" size="min(880px, 96vw)" destroy-on-close>
+    <ElDrawer v-model="logVisible" :title="logTitle" size="min(880px, 96vw)" destroy-on-close>
       <LogPanel
         :history-id="logHistoryId"
-        :title="'执行日志 · ' + (current?.pipelineTitle || '')"
+        :title="logTitle"
         :closable="true"
         @close="logVisible = false"
         @stop="stop(current)"
@@ -93,6 +93,7 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { useBatchDelete } from '../composables/use-batch-delete'
   import { formatDuration, runStatusMeta, triggerText } from '@/utils/certd'
+  import { $t } from '@/locales'
   import LogPanel from '../components/log-panel.vue'
 
   defineOptions({ name: 'CertdHistory' })
@@ -105,19 +106,20 @@
     status: undefined,
   })
 
-  const searchItems = [
+  /** 搜索项文案随语言变化 */
+  const searchItems = computed(() => [
     {
       key: 'status',
-      label: '执行结果',
+      label: $t('certd.history.result'),
       type: 'select',
       options: [
-        { label: '成功', value: 'success' },
-        { label: '失败', value: 'failed' },
-        { label: '运行中', value: 'running' },
-        { label: '已取消', value: 'canceled' },
+        { label: $t('certd.status.success'), value: 'success' },
+        { label: $t('certd.status.failed'), value: 'failed' },
+        { label: $t('certd.status.running'), value: 'running' },
+        { label: $t('certd.status.canceled'), value: 'canceled' },
       ],
     },
-  ]
+  ])
 
   const {
     columns,
@@ -141,13 +143,13 @@
       },
       columnsFactory: () => [
         { type: 'selection', width: 48 },
-        { prop: 'pipelineTitle', label: '流水线', minWidth: 200, useSlot: true },
-        { prop: 'status', label: '结果', width: 110, useSlot: true },
-        { prop: 'triggerType', label: '触发方式', width: 110, useSlot: true },
-        { prop: 'startTime', label: '开始时间', width: 170 },
-        { prop: 'duration', label: '耗时', width: 100, formatter: (row: HistoryItem) => formatDuration(row.duration) },
-        { prop: 'taskCount', label: '任务数', width: 90 },
-        { prop: 'operation', label: '操作', width: 180, fixed: 'right', useSlot: true },
+        { prop: 'pipelineTitle', label: $t('certd.history.colPipeline'), minWidth: 200, useSlot: true },
+        { prop: 'status', label: $t('certd.history.colResult'), width: 120, useSlot: true },
+        { prop: 'triggerType', label: $t('certd.history.colTrigger'), width: 120, useSlot: true },
+        { prop: 'startTime', label: $t('certd.history.colStartTime'), width: 170 },
+        { prop: 'duration', label: $t('certd.history.colDuration'), width: 100, formatter: (row: HistoryItem) => formatDuration(row.duration) },
+        { prop: 'taskCount', label: $t('certd.history.colTaskCount'), width: 96 },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 190, fixed: 'right', useSlot: true },
       ],
     },
   })
@@ -155,7 +157,7 @@
   /* ---------------- 多选批量删除 ---------------- */
   const { selectedIds, removing, handleSelectionChange, removeSelected } = useBatchDelete(
     deleteHistory,
-    { label: '执行记录', nameOf: (row: any) => row.pipelineTitle || ("#" + row.id), onDone: () => refreshData() }
+    { label: () => $t('certd.history.recordLabel'), nameOf: (row: any) => row.pipelineTitle || ("#" + row.id), onDone: () => refreshData() }
   )
 
   const handleSearch = (params: Record<string, any>) => {
@@ -177,6 +179,11 @@
   const logHistoryId = ref<number | null>(null)
   const current = ref<HistoryItem | null>(null)
 
+  /** 抽屉标题：执行日志 · 流水线名（流水线名是用户数据，不翻译） */
+  const logTitle = computed(
+    () => $t('certd.history.execLogTitle') + (current.value?.pipelineTitle ? ' · ' + current.value.pipelineTitle : '')
+  )
+
   const openLog = (row: HistoryItem) => {
     current.value = row
     logHistoryId.value = row.id
@@ -186,19 +193,25 @@
   const stop = async (row: HistoryItem | null) => {
     if (!row) return
     await stopHistory(row.id)
-    ElMessage.success('已请求停止')
+    $t('certd.history.stopRequested') && ElMessage.success($t('certd.history.stopRequested'))
     refreshData()
   }
 
   const remove = async (row: HistoryItem) => {
-    await ElMessageBox.confirm('确定删除这条执行记录吗？', '删除记录', { type: 'warning' })
+    await ElMessageBox.confirm($t('certd.history.confirmDelete'), $t('certd.history.deleteTitle'), {
+    type: 'warning',
+    confirmButtonText: $t('certd.common.confirm'),
+    cancelButtonText: $t('certd.common.cancel'),
+  })
     await deleteHistory(row.id)
     refreshData()
   }
 
   const clearAll = async () => {
-    await ElMessageBox.confirm('将清空该流水线的全部执行记录，确定吗？', '清理历史', {
+    await ElMessageBox.confirm($t('certd.history.confirmClear'), $t('certd.history.clearTitle'), {
       type: 'warning',
+      confirmButtonText: $t('certd.common.confirm'),
+      cancelButtonText: $t('certd.common.cancel'),
     })
     await clearHistory(Number(searchForm.value.pipelineId))
     refreshData()

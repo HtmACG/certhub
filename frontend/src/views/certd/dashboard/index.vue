@@ -14,44 +14,49 @@
 -->
 <template>
   <div class="certd-dashboard g-scope" v-loading="loading">
-    <!-- ① 简约看板 -->
-    <div class="dash-board">
-      <div class="board-line">
-        <div class="board-greet">
+    <!-- ① 页头：一行标题 + 一行数据摘要 + 右侧动作。
+         不做成卡片：内容区已经是浅灰底，再套一个白盒子会变成「盒子叠盒子」。 -->
+    <div class="dash-head">
+      <div class="dash-head-main">
+        <h1 class="dash-title">
           {{ greeting }}，{{ userName }}
-          <!-- 昵称本身就是「管理员」时不再重复显示角色，避免「管理员 管理员」 -->
-          <span v-if="isAdmin && userName !== '管理员'" class="board-role">管理员</span>
-        </div>
-        <div class="board-stats">
-          <button type="button" class="board-stat" @click="go('/certd/pipeline')">
-            流水线 <b>{{ stats.pipelineTotal || 0 }}</b>
-          </button>
-          <button type="button" class="board-stat" @click="go('/certd/cert')">
-            证书 <b>{{ stats.certTotal || 0 }}</b>
-          </button>
-          <button
-            type="button"
-            class="board-stat"
+          <!-- 昵称本身就是「管理员」时不再重复显示角色 -->
+          <span v-if="isAdmin && userName !== adminLabel" class="dash-role">{{
+            $t('certd.dashboard.admin')
+          }}</span>
+        </h1>
+        <p class="dash-sub">
+          <span class="dash-stat" @click="go('/certd/pipeline')">
+            {{ $t('certd.dashboard.statPipeline') }} <b>{{ stats.pipelineTotal || 0 }}</b>
+          </span>
+          <span class="dash-sep">·</span>
+          <span class="dash-stat" @click="go('/certd/cert')">
+            {{ $t('certd.dashboard.statCert') }} <b>{{ stats.certTotal || 0 }}</b>
+          </span>
+          <span class="dash-sep">·</span>
+          <span
+            class="dash-stat"
             :class="{ 'is-warn': stats.certExpiring > 0 }"
             @click="go('/certd/cert', { expiring: 1 })"
           >
-            30 天内到期 <b>{{ stats.certExpiring || 0 }}</b>
-          </button>
-          <button type="button" class="board-stat" @click="go('/certd/monitor')">
-            监控站点 <b>{{ stats.siteTotal || 0 }}</b>
-          </button>
-        </div>
-        <div class="board-actions">
-          <ElButton type="primary" @click="go('/certd/pipeline', { create: 'template' })">
-            <ArtSvgIcon icon="ri:add-line" class="mr-1" />新建流水线
-          </ElButton>
-          <ElButton @click="go('/certd/cert', { import: 1 })">
-            <ArtSvgIcon icon="ri:upload-2-line" class="mr-1" />导入证书
-          </ElButton>
-          <ElButton @click="go('/certd/access', { create: 1 })">
-            <ArtSvgIcon icon="ri:key-2-line" class="mr-1" />添加授权
-          </ElButton>
-        </div>
+            {{ $t('certd.dashboard.statExpiring') }} <b>{{ stats.certExpiring || 0 }}</b>
+          </span>
+          <span class="dash-sep">·</span>
+          <span class="dash-stat" @click="go('/certd/monitor')">
+            {{ $t('certd.dashboard.statSite') }} <b>{{ stats.siteTotal || 0 }}</b>
+          </span>
+        </p>
+      </div>
+      <div class="dash-actions">
+        <ElButton type="primary" @click="go('/certd/pipeline', { create: 'template' })">
+          <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.dashboard.newPipeline') }}
+        </ElButton>
+        <ElButton @click="go('/certd/cert', { import: 1 })">
+          <ArtSvgIcon icon="ri:upload-2-line" class="mr-1" />{{ $t('certd.dashboard.importCert') }}
+        </ElButton>
+        <ElButton @click="go('/certd/access', { create: 1 })">
+          <ArtSvgIcon icon="ri:key-2-line" class="mr-1" />{{ $t('certd.dashboard.addAccess') }}
+        </ElButton>
       </div>
     </div>
 
@@ -59,9 +64,16 @@
     <ElCard v-if="hasSystemInfo" class="art-card system-card" shadow="never">
       <template #header>
         <div class="card-header">
-          <span class="card-title"><ArtSvgIcon icon="ri:server-line" />系统信息</span>
+          <span class="card-title"
+            ><ArtSvgIcon icon="ri:server-line" />{{ $t('certd.dashboard.systemInfo') }}</span
+          >
           <span class="card-count">{{ sys.hostname }}</span>
-          <ElTooltip :content="systemLoading ? '正在刷新' : '立即刷新系统信息'" placement="top">
+          <ElTooltip
+            :content="
+              systemLoading ? $t('certd.dashboard.refreshing') : $t('certd.dashboard.refreshSystem')
+            "
+            placement="top"
+          >
             <ElButton link :loading="systemLoading" @click="loadSystemInfo">
               <ArtSvgIcon icon="ri:refresh-line" />
             </ElButton>
@@ -75,14 +87,19 @@
         <div class="sys-col">
           <div class="sys-head">
             <ArtSvgIcon icon="ri:cpu-line" class="sys-icon" />
-            <span class="sys-name">CPU 使用率</span>
+            <span class="sys-name">{{ $t('certd.dashboard.cpuUsage') }}</span>
             <span class="sys-state" :style="{ color: usageColor(sys.cpu.percent) }">
               {{ usageText(sys.cpu.percent) }}
             </span>
           </div>
           <ArtGaugeChart :value="Number(sys.cpu.percent) || 0" :height="gaugeHeight" />
           <div class="sys-detail is-center" :title="sys.cpu.name">
-            {{ sys.cpu.coresPhysical }} 核 {{ sys.cpu.coresLogical }} 线程
+            {{
+              $t('certd.dashboard.coresThreads', {
+                cores: sys.cpu.coresPhysical,
+                threads: sys.cpu.coresLogical,
+              })
+            }}
             <template v-if="sys.cpu.freqMhz"> · {{ (sys.cpu.freqMhz / 1000).toFixed(1) }} GHz</template>
           </div>
         </div>
@@ -91,18 +108,28 @@
         <div class="sys-col">
           <div class="sys-head">
             <ArtSvgIcon icon="ri:database-2-line" class="sys-icon" />
-            <span class="sys-name">内存使用率</span>
+            <span class="sys-name">{{ $t('certd.dashboard.memoryUsage') }}</span>
             <span class="sys-state" :style="{ color: usageColor(sys.memory.percent) }">
               {{ usageText(sys.memory.percent) }}
             </span>
           </div>
           <ArtGaugeChart :value="Number(sys.memory.percent) || 0" :height="gaugeHeight" />
           <div class="sys-detail is-center">
-            已用 {{ formatBytes(sys.memory.used) }} / 共 {{ formatBytes(sys.memory.total) }}
+            {{
+              $t('certd.dashboard.memoryDetail', {
+                used: formatBytes(sys.memory.used),
+                total: formatBytes(sys.memory.total),
+              })
+            }}
           </div>
           <div v-if="sys.swap.total" class="sys-detail is-center">
-            交换区 {{ sys.swap.percent }}% · {{ formatBytes(sys.swap.used) }} /
-            {{ formatBytes(sys.swap.total) }}
+            {{
+              $t('certd.dashboard.swapDetail', {
+                percent: sys.swap.percent,
+                used: formatBytes(sys.swap.used),
+                total: formatBytes(sys.swap.total),
+              })
+            }}
           </div>
         </div>
 
@@ -110,7 +137,7 @@
         <div class="sys-col">
           <div class="sys-head">
             <ArtSvgIcon icon="ri:hard-drive-2-line" class="sys-icon" />
-            <span class="sys-name">系统盘使用率</span>
+            <span class="sys-name">{{ $t('certd.dashboard.diskUsage') }}</span>
             <span v-if="systemDisk" class="sys-state" :style="{ color: usageColor(systemDisk.percent) }">
               {{ usageText(systemDisk.percent) }}
             </span>
@@ -118,16 +145,21 @@
           <template v-if="systemDisk">
             <ArtGaugeChart :value="Number(systemDisk.percent) || 0" :height="gaugeHeight" />
             <div class="sys-detail is-center" :title="systemDisk.mount">
-              {{ diskLabel }} 已用 {{ formatBytes(systemDisk.used) }} /
-              {{ formatBytes(systemDisk.total) }}
+              {{
+                $t('certd.dashboard.diskDetail', {
+                  label: diskLabel,
+                  used: formatBytes(systemDisk.used),
+                  total: formatBytes(systemDisk.total),
+                })
+              }}
             </div>
             <div class="sys-detail is-center">
-              剩余 {{ formatBytes(systemDisk.free) }}
+              {{ $t('certd.dashboard.diskFree', { free: formatBytes(systemDisk.free) }) }}
               <template v-if="systemDisk.fstype"> · {{ systemDisk.fstype }}</template>
             </div>
           </template>
           <div v-else class="sys-detail is-center" :style="{ height: gaugeHeight, lineHeight: gaugeHeight }">
-            暂时读不到系统盘信息
+            {{ $t('certd.dashboard.diskUnavailable') }}
           </div>
         </div>
       </div>
@@ -138,10 +170,10 @@
           <ArtSvgIcon icon="ri:computer-line" />{{ sys.os }}
         </span>
         <span class="sys-footer-item">
-          <ArtSvgIcon icon="ri:time-line" />已运行 {{ formatUptime(sys.uptime) }}
+          <ArtSvgIcon icon="ri:time-line" />{{ $t('certd.dashboard.uptime', { time: formatUptime(sys.uptime) }) }}
         </span>
         <span class="sys-footer-item">
-          <ArtSvgIcon icon="ri:calendar-line" />启动于 {{ sys.bootTime }}
+          <ArtSvgIcon icon="ri:calendar-line" />{{ $t('certd.dashboard.bootTime', { time: sys.bootTime }) }}
         </span>
       </div>
     </ElCard>
@@ -152,15 +184,19 @@
       <ElCard class="art-card" shadow="never">
         <template #header>
           <div class="card-header">
-            <span class="card-title"><ArtSvgIcon icon="ri:node-tree" />流水线</span>
-            <span class="card-count">{{ pipelineTotal }} 条</span>
+            <span class="card-title"
+              ><ArtSvgIcon icon="ri:node-tree" />{{ $t('certd.dashboard.cardPipeline') }}</span
+            >
+            <span class="card-count">{{
+              $t('certd.dashboard.countItems', { n: pipelineTotal })
+            }}</span>
             <ElLink type="primary" :underline="false" @click="go('/certd/pipeline')">
-              查看全部
+              {{ $t('certd.common.viewAll') }}
             </ElLink>
           </div>
         </template>
         <div v-if="!pipelines.length" class="empty-line">
-          还没有流水线，点右上角「新建流水线」开始。
+          {{ $t('certd.dashboard.emptyPipeline') }}
         </div>
         <ul v-else class="simple-list">
           <li
@@ -170,13 +206,14 @@
             @click="go('/certd/pipeline/detail/' + item.id)"
           >
             <div class="item-main">
-              <span class="item-title">{{ item.title || '未命名流水线' }}</span>
+              <span class="item-title">{{ item.title || $t('certd.dashboard.unnamedPipeline') }}</span>
               <span class="item-sub">
-                {{ item.disabled ? '已停用' : '已启用' }} · {{ item.stageCount }} 个阶段 ·
-                {{ item.stepCount }} 个任务<template v-if="item.stepDisabledCount"
-                  >（{{ item.stepDisabledCount }} 步已停用）</template
-                >
-                <template v-if="item.lastHistoryTime">· 上次 {{ item.lastHistoryTime }}</template>
+                <template v-if="item.disabled">{{ $t('certd.status.disabled') }} · </template
+                >{{ $t('certd.dashboard.stageCount', { n: item.stageCount }) }} ·
+                {{ $t('certd.dashboard.taskCount', { n: item.stepCount }) }}<template
+                  v-if="item.stepDisabledCount"
+                  >{{ $t('certd.dashboard.stepsDisabled', { n: item.stepDisabledCount }) }}</template
+                ><template v-if="item.lastHistoryTime"> · {{ item.lastHistoryTime }}</template>
               </span>
             </div>
             <ElTag
@@ -186,7 +223,7 @@
               effect="dark"
               class="flex-shrink-0"
             >
-              运行中
+              {{ $t('certd.status.running') }}
             </ElTag>
             <ElTag
               v-else
@@ -195,7 +232,7 @@
               effect="light"
               class="flex-shrink-0"
             >
-              {{ item.lastHistoryTime ? runStatusMeta(item.lastStatus).text : '未运行' }}
+              {{ item.lastHistoryTime ? runStatusMeta(item.lastStatus).text : $t('certd.common.never') }}
             </ElTag>
           </li>
         </ul>
@@ -205,14 +242,20 @@
       <ElCard class="art-card" shadow="never">
         <template #header>
           <div class="card-header">
-            <span class="card-title"><ArtSvgIcon icon="ri:history-line" />执行记录</span>
-            <span class="card-count">{{ historyTotal }} 条</span>
+            <span class="card-title"
+              ><ArtSvgIcon icon="ri:history-line" />{{ $t('certd.dashboard.cardHistory') }}</span
+            >
+            <span class="card-count">{{
+              $t('certd.dashboard.countItems', { n: historyTotal })
+            }}</span>
             <ElLink type="primary" :underline="false" @click="go('/certd/history')">
-              查看全部
+              {{ $t('certd.common.viewAll') }}
             </ElLink>
           </div>
         </template>
-        <div v-if="!histories.length" class="empty-line">还没有执行记录，跑一次流水线就有了。</div>
+        <div v-if="!histories.length" class="empty-line">
+          {{ $t('certd.dashboard.emptyHistory') }}
+        </div>
         <ul v-else class="simple-list">
           <li
             v-for="item in histories"
@@ -221,10 +264,12 @@
             @click="go('/certd/history')"
           >
             <div class="item-main">
-              <span class="item-title">{{ item.pipelineTitle || '已删除的流水线' }}</span>
+              <span class="item-title">{{ item.pipelineTitle || $t('certd.dashboard.deletedPipeline') }}</span>
               <span class="item-sub">
                 {{ triggerText(item.triggerType) }} · {{ item.startTime }}
-                <template v-if="item.duration">· 耗时 {{ item.duration }}s</template>
+                <template v-if="item.duration"
+                  >· {{ $t('certd.dashboard.durationSuffix', { n: item.duration + 's' }) }}</template
+                >
               </span>
             </div>
             <ElTag
@@ -243,14 +288,18 @@
       <ElCard class="art-card" shadow="never">
         <template #header>
           <div class="card-header">
-            <span class="card-title"><ArtSvgIcon icon="ri:award-line" />证书列表</span>
-            <span class="card-count">{{ certTotal }} 张</span>
+            <span class="card-title"
+              ><ArtSvgIcon icon="ri:award-line" />{{ $t('certd.dashboard.cardCert') }}</span
+            >
+            <span class="card-count">{{
+              $t('certd.dashboard.countCerts', { n: certTotal })
+            }}</span>
             <ElLink type="primary" :underline="false" @click="go('/certd/cert')">
-              查看全部
+              {{ $t('certd.common.viewAll') }}
             </ElLink>
           </div>
         </template>
-        <div v-if="!certs.length" class="empty-line">证书库还是空的，申请或导入一张证书后显示在这里。</div>
+        <div v-if="!certs.length" class="empty-line">{{ $t('certd.dashboard.emptyCert') }}</div>
         <ul v-else class="simple-list">
           <li
             v-for="item in certs"
@@ -261,8 +310,10 @@
             <div class="item-main">
               <span class="item-title">{{ item.domain || firstDomain(item.domains) }}</span>
               <span class="item-sub">
-                {{ item.issuer || '未知签发机构' }}
-                <template v-if="item.notAfter">· 到期 {{ item.notAfter }}</template>
+                {{ item.issuer || $t('certd.dashboard.unknownIssuer') }}
+                <template v-if="item.notAfter"
+                  >· {{ $t('certd.dashboard.certExpireSuffix', { date: item.notAfter }) }}</template
+                >
               </span>
             </div>
             <ElTag
@@ -281,14 +332,16 @@
       <ElCard class="art-card" shadow="never">
         <template #header>
           <div class="card-header">
-            <span class="card-title"><ArtSvgIcon icon="ri:radar-line" />被监控的站点</span>
-            <span class="card-count">{{ siteTotal }} 个</span>
+            <span class="card-title"
+              ><ArtSvgIcon icon="ri:radar-line" />{{ $t('certd.dashboard.cardSite') }}</span
+            >
+            <span class="card-count">{{ $t('certd.dashboard.countSites', { n: siteTotal }) }}</span>
             <ElLink type="primary" :underline="false" @click="go('/certd/monitor')">
-              查看全部
+              {{ $t('certd.common.viewAll') }}
             </ElLink>
           </div>
         </template>
-        <div v-if="!sites.length" class="empty-line">还没有被监控的站点，去「站点监控」添加 URL。</div>
+        <div v-if="!sites.length" class="empty-line">{{ $t('certd.dashboard.emptySite') }}</div>
         <ul v-else class="simple-list">
           <li
             v-for="item in sites"
@@ -299,9 +352,13 @@
             <div class="item-main">
               <span class="item-title">{{ item.url }}</span>
               <span class="item-sub">
-                {{ item.issuer || '未获取到证书' }}
-                <template v-if="item.expireTime">· 到期 {{ item.expireTime }}</template>
-                <template v-if="item.lastCheckTime">· 检查于 {{ item.lastCheckTime }}</template>
+                {{ item.issuer || $t('certd.dashboard.noCert') }}
+                <template v-if="item.expireTime"
+                  >· {{ $t('certd.dashboard.certExpireSuffix', { date: item.expireTime }) }}</template
+                >
+                <template v-if="item.lastCheckTime"
+                  >· {{ $t('certd.dashboard.checkedAt', { time: item.lastCheckTime }) }}</template
+                >
               </span>
             </div>
             <ElTag
@@ -310,7 +367,9 @@
               effect="light"
               class="flex-shrink-0"
             >
-              {{ item.enabled === false ? '已停用' : siteStatusMeta(item.status).text }}
+              {{
+                item.enabled === false ? $t('certd.status.disabled') : siteStatusMeta(item.status).text
+              }}
             </ElTag>
           </li>
         </ul>
@@ -338,11 +397,12 @@
     usageColor,
     usageText,
   } from '@/utils/certd'
+  import { $t } from '@/locales'
 
   defineOptions({ name: 'CertdDashboard' })
 
-  /** 每个列表卡片最多展示几条 */
-  const LIST_SIZE = 5
+  /** 每个列表卡片最多展示几条（四张卡统一 4 条，网格里的卡片高度才会一致） */
+  const LIST_SIZE = 4
 
   const router = useRouter()
   const userStore = useUserStore()
@@ -388,11 +448,11 @@
       disks[0]
     )
   })
-  const diskLabel = computed(() => systemDisk.value?.mount || '系统盘')
+  const diskLabel = computed(() => systemDisk.value?.mount || $t('certd.dashboard.systemDisk'))
 
   /** 仪表高度：窄屏压矮一点，免得下面的说明被挤出卡片 */
   const { width: windowWidth } = useWindowSize()
-  const gaugeHeight = computed(() => ((windowWidth.value || 1200) <= 768 ? '150px' : '178px'))
+  const gaugeHeight = computed(() => ((windowWidth.value || 1200) <= 768 ? '132px' : '150px'))
 
   const loadSystemInfo = async () => {
     systemLoading.value = true
@@ -417,27 +477,37 @@
     return (value / Math.pow(1024, index)).toFixed(index ? 1 : 0) + ' ' + units[index]
   }
 
-  /** 运行秒数转「2 天 3 小时 / 5 小时 6 分」 */
+  /** 运行秒数转「2 天 3 小时 / 5 小时 6 分」（文案走词条，中英文案各自决定分隔写法） */
   const formatUptime = (seconds: number) => {
     const value = Number(seconds) || 0
     const days = Math.floor(value / 86400)
     const hours = Math.floor((value % 86400) / 3600)
     const minutes = Math.floor((value % 3600) / 60)
-    if (days) return `${days} 天 ${hours} 小时`
-    if (hours) return `${hours} 小时 ${minutes} 分`
-    return `${minutes} 分钟`
+    if (days) return $t('certd.dashboard.uptimeDays', { d: days, h: hours })
+    if (hours) return $t('certd.dashboard.uptimeHours', { h: hours, m: minutes })
+    return $t('certd.dashboard.uptimeMinutes', { m: minutes })
   }
 
-  const userName = computed(() => userStore.info?.nickname || userStore.info?.userName || '管理员')
+  /**
+   * 昵称兜底
+   *
+   * ⚠️ 「管理员」是默认账号的中文昵称，但它同时也是界面上的角色名。
+   * 英文界面下如果直接把它当数据展示会突兀，所以兜底值本身也走词条。
+   */
+  const adminLabel = computed(() => $t('certd.dashboard.admin'))
+  const userName = computed(
+    () => userStore.info?.nickname || userStore.info?.userName || adminLabel.value
+  )
   const isAdmin = computed(() => userStore.info?.role === 'admin')
 
+  /** 问候语按小时分档；文案走词条，英文用 Good morning / afternoon / evening */
   const greeting = computed(() => {
     const hour = new Date().getHours()
-    if (hour < 6) return '夜间好'
-    if (hour < 12) return '上午好'
-    if (hour < 14) return '中午好'
-    if (hour < 18) return '下午好'
-    return '晚上好'
+    if (hour < 6) return $t('certd.dashboard.greetNight')
+    if (hour < 12) return $t('certd.dashboard.greetMorning')
+    if (hour < 14) return $t('certd.dashboard.greetNoon')
+    if (hour < 18) return $t('certd.dashboard.greetAfternoon')
+    return $t('certd.dashboard.greetEvening')
   })
 
   const firstDomain = (domains: string | string[]) => {
@@ -513,6 +583,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    /* --art-full-height 已经扣掉了头部与页面纵向内边距（见 useLayoutHeight） */
     min-height: var(--art-full-height);
     padding-bottom: 8px;
   }
@@ -522,82 +593,89 @@
     flex: 0 0 auto;
   }
 
-  /* ---------------- 简约看板：一行文字 + 数字 + 动作 ---------------- */
-  .dash-board {
-    padding: 12px 16px;
-    background: var(--default-box-color);
-    border: 1px solid var(--art-card-border);
-    border-radius: calc(var(--custom-radius) + 4px);
-  }
-
-  .board-line {
+  /* ---------------- 页头：标题 + 一行摘要 + 动作 ---------------- */
+  .dash-head {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px 18px;
-    align-items: center;
+    gap: 12px 24px;
+    align-items: flex-end;
     justify-content: space-between;
+    padding: 2px 2px 0;
   }
 
-  .board-greet {
-    display: inline-flex;
-    flex: 0 0 auto;
-    gap: 6px;
+  .dash-head-main {
+    min-width: 0;
+  }
+
+  .dash-title {
+    display: flex;
+    gap: 8px;
     align-items: center;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--g-text, var(--art-gray-800));
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--foreground);
   }
 
   /* 角色只是一行小字，不用 ElTag（会和"管理员"这个名字重复成一个标签） */
-  .board-role {
+  .dash-role {
     padding: 0 6px;
     font-size: 11px;
     font-weight: 400;
-    color: var(--g-text-3, var(--art-gray-500));
-    border: 1px solid var(--g-line, var(--art-card-border));
-    border-radius: var(--custom-radius);
+    line-height: 18px;
+    color: var(--muted-foreground);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
   }
 
-  .board-stats {
+  /*
+   * 数据摘要：一行「标签 + 数字」，用中点分隔。
+   * 原来四个统计项是居中散在一整行里的按钮，离标题很远、也没有分隔，
+   * 看起来像三个不相干的元素；现在它紧跟标题，成为一个可读的句子。
+   */
+  .dash-sub {
     display: flex;
     flex-wrap: wrap;
-    flex: 1 1 auto;
-    gap: 6px 14px;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .board-stat {
-    flex: 0 0 auto;
-    padding: 2px 8px;
+    gap: 0 2px;
+    align-items: baseline;
+    margin: 6px 0 0;
     font-size: 13px;
-    color: var(--g-text-2, var(--art-gray-600));
+    line-height: 1.6;
+    color: var(--muted-foreground);
+  }
+
+  .dash-stat {
+    display: inline-flex;
+    gap: 4px;
+    align-items: baseline;
     cursor: pointer;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--custom-radius);
-    transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+    border-radius: var(--radius-sm);
   }
 
-  .board-stat:hover {
-    color: var(--g-blue, var(--theme-color));
-    background: var(--g-fill-hover, var(--art-gray-200));
-    border-color: var(--g-line, var(--art-card-border));
+  .dash-stat:hover {
+    color: var(--foreground);
   }
 
-  .board-stat b {
-    margin-left: 2px;
-    font-size: 15px;
+  .dash-stat b {
+    font-size: 14px;
     font-weight: 600;
-    color: var(--g-text, var(--art-gray-800));
+    font-variant-numeric: tabular-nums;
+    color: var(--foreground);
   }
 
-  .board-stat.is-warn,
-  .board-stat.is-warn b {
-    color: var(--g-amber, #e37400);
+  .dash-stat.is-warn,
+  .dash-stat.is-warn b {
+    color: var(--warning);
   }
 
-  .board-actions {
+  .dash-sep {
+    padding: 0 6px;
+    color: var(--border);
+  }
+
+  .dash-actions {
     display: flex;
     flex: 0 0 auto;
     flex-wrap: wrap;
@@ -623,17 +701,17 @@
     align-items: center;
     font-size: 14px;
     font-weight: 600;
-    color: var(--g-text, var(--art-gray-800));
+    color: var(--foreground);
   }
 
   .card-title .art-svg-icon {
-    color: var(--g-text-2, var(--art-gray-600));
+    color: var(--muted-foreground);
   }
 
   .card-count {
     font-size: 12px;
     font-weight: 400;
-    color: var(--g-text-3, var(--art-gray-500));
+    color: var(--muted-foreground);
   }
 
   .card-header :deep(.el-link) {
@@ -645,6 +723,12 @@
     margin: 0;
     padding: 0;
     list-style: none;
+    /*
+     * 四张卡统一预留 4 行的高度：条目少的卡（证书 2 条 / 站点 3 条）
+     * 不会在底部留出一块比旁边短的空洞 —— 网格里两张卡高度一样，
+     * 但内容一多一少时，短的那张底部会露出明显空白，看起来就是「参差不齐」。
+     */
+    min-height: 220px;
   }
 
   .simple-item {
@@ -653,7 +737,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 0;
-    border-bottom: 1px solid var(--g-line-2, var(--art-card-border));
+    border-bottom: 1px solid var(--border);
   }
 
   .simple-item:last-child {
@@ -661,11 +745,17 @@
   }
 
   .simple-item.is-clickable {
+    padding-right: 6px;
+    padding-left: 6px;
+    margin: 0 -6px;
     cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background-color 0.12s ease;
   }
 
-  .simple-item.is-clickable:hover .item-title {
-    color: var(--g-blue, var(--theme-color));
+  /* 行 hover 只换底色（shadcn 的列表行交互），不给文字换色 + 下划线 */
+  .simple-item.is-clickable:hover {
+    background: var(--accent);
   }
 
   .item-main {
@@ -677,7 +767,7 @@
     overflow: hidden;
     font-size: 13px;
     font-weight: 500;
-    color: var(--g-text, var(--art-gray-800));
+    color: var(--foreground);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -686,7 +776,7 @@
     display: block;
     overflow: hidden;
     font-size: 12px;
-    color: var(--g-text-3, var(--art-gray-500));
+    color: var(--muted-foreground);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -696,7 +786,7 @@
     font-size: 12.5px;
     line-height: 1.6;
     text-align: center;
-    color: var(--g-text-3, var(--art-gray-500));
+    color: var(--muted-foreground);
   }
 
   /* ---------------- 系统信息看板 ---------------- */
@@ -717,7 +807,7 @@
     gap: 6px;
     min-width: 0;
     padding-left: 18px;
-    border-left: 1px solid var(--g-line-2, var(--art-card-border));
+    border-left: 1px solid var(--border);
   }
 
   .sys-col:first-child {
@@ -727,25 +817,26 @@
 
   .sys-head {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: baseline;
   }
 
   .sys-icon {
     font-size: 16px;
-    color: var(--g-text-2, var(--art-gray-600));
+    color: var(--muted-foreground);
   }
 
   .sys-name {
     font-size: 13px;
     font-weight: 600;
-    color: var(--g-text, var(--art-gray-800));
+    color: var(--foreground);
   }
 
-  /* 状态词（正常 / 偏高 / 告警）：颜色由使用率分档决定，写在行内 style 上 */
+  /* 状态词（正常 / 偏高 / 告警）紧跟标题，不要推到列尾：
+     列宽 360px，右对齐时「正常」离「CPU 使用率」有 240px，
+     看起来像另一列的标签。 */
   .sys-state {
     flex: 0 0 auto;
-    margin-left: auto;
     font-size: 12px;
     font-weight: 500;
   }
@@ -753,7 +844,7 @@
   .sys-detail {
     overflow: hidden;
     font-size: 12px;
-    color: var(--g-text-3, var(--art-gray-500));
+    color: var(--muted-foreground);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -768,7 +859,7 @@
     gap: 8px 20px;
     margin-top: 14px;
     padding-top: 12px;
-    border-top: 1px solid var(--g-line-2, var(--art-card-border));
+    border-top: 1px solid var(--border);
   }
 
   .sys-footer-item {
@@ -776,7 +867,7 @@
     gap: 5px;
     align-items: center;
     font-size: 12px;
-    color: var(--g-text-2, var(--art-gray-600));
+    color: var(--muted-foreground);
   }
 
   .sys-footer-item .art-svg-icon {

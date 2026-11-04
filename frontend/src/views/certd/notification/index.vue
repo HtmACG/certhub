@@ -11,7 +11,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton type="primary" @click="openCreate">
-              <ArtSvgIcon icon="ri:add-line" class="mr-1" />新增通知渠道
+              <ArtSvgIcon icon="ri:add-line" class="mr-1" />{{ $t('certd.notification.create') }}
             </ElButton>
             <ElButton
               type="danger"
@@ -21,7 +21,7 @@
               @click="removeSelected"
             >
               <ArtSvgIcon icon="ri:delete-bin-line" class="mr-1" />
-              批量删除<template v-if="selectedIds.length">（{{ selectedIds.length }}）</template>
+              {{ $t('certd.common.batchDelete') }}<template v-if="selectedIds.length"> ({{ selectedIds.length }})</template>
             </ElButton>
           </ElSpace>
         </template>
@@ -40,23 +40,23 @@
         <template #name="{ row }">
           <div class="cell-name">
             <span class="cell-title">{{ row.name }}</span>
-            <ElTag v-if="row.isDefault" size="small" type="primary" effect="plain">默认</ElTag>
+            <ElTag v-if="row.isDefault" size="small" type="primary" effect="plain">{{ $t('certd.notification.isDefault') }}</ElTag>
           </div>
         </template>
 
         <template #enabled="{ row }">
           <ElTag :type="row.enabled ? 'success' : 'info'" size="small" effect="light">
-            {{ row.enabled ? '已启用' : '已停用' }}
+            {{ row.enabled ? $t('certd.common.enabled') : $t('certd.common.disabled') }}
           </ElTag>
         </template>
 
         <template #operation="{ row }">
           <div class="cell-actions">
             <ElButton link type="primary" :loading="testingId === row.id" @click="test(row)">
-              测试
+              {{ $t('certd.notification.test') }}
             </ElButton>
-            <ElButton link @click="openEdit(row)">编辑</ElButton>
-            <ElButton link type="danger" @click="remove(row)">删除</ElButton>
+            <ElButton link @click="openEdit(row)">{{ $t('certd.common.edit') }}</ElButton>
+            <ElButton link type="danger" @click="remove(row)">{{ $t('certd.common.delete') }}</ElButton>
           </div>
         </template>
       </ArtTable>
@@ -64,13 +64,13 @@
 
     <ElDrawer
       v-model="dialogVisible"
-      :title="editingId ? '编辑通知渠道' : '新增通知渠道'"
+      :title="editingId ? $t('certd.notification.editTitle') : $t('certd.notification.create')"
       size="min(680px, 96vw)"
       destroy-on-close
     >
       <ElForm label-position="top">
-        <ElFormItem label="通知类型">
-          <ElSelect v-model="form.type" placeholder="选择通知类型" class="w-full" @change="onTypeChange">
+        <ElFormItem :label="$t('certd.notification.typeLabel')">
+          <ElSelect v-model="form.type" :placeholder="$t('certd.notification.typePh')" class="w-full" @change="onTypeChange">
             <ElOption
               v-for="(meta, key) in notifyTypes"
               :key="key"
@@ -79,23 +79,23 @@
             />
           </ElSelect>
         </ElFormItem>
-        <ElFormItem label="渠道名称">
-          <ElInput v-model="form.name" placeholder="例如：运维钉钉群" />
+        <ElFormItem :label="$t('certd.notification.nameLabel')">
+          <ElInput v-model="form.name" :placeholder="$t('certd.notification.namePh')" />
         </ElFormItem>
-        <ElFormItem label="启用">
+        <ElFormItem :label="$t('certd.notification.enabledLabel')">
           <ElSwitch v-model="form.enabled" />
-          <span class="form-tip ml-2">停用后流水线不会再用它发通知</span>
+          <span class="form-tip ml-2">{{ $t('certd.notification.disableHint') }}</span>
         </ElFormItem>
-        <ElFormItem label="设为默认">
+        <ElFormItem :label="$t('certd.notification.defaultLabel')">
           <ElSwitch v-model="form.isDefault" />
-          <span class="form-tip ml-2">不指定通知渠道的任务会用它</span>
+          <span class="form-tip ml-2">{{ $t('certd.notification.defaultHint') }}</span>
         </ElFormItem>
         <PluginForm v-if="currentType" v-model="form.config" :fields="currentType.inputs" :span="12" />
       </ElForm>
       <template #footer>
         <div class="dialog-footer">
-          <ElButton @click="dialogVisible = false">取消</ElButton>
-          <ElButton type="primary" :loading="saving" @click="save">保存</ElButton>
+          <ElButton @click="dialogVisible = false">{{ $t('certd.common.cancel') }}</ElButton>
+          <ElButton type="primary" :loading="saving" @click="save">{{ $t('certd.common.save') }}</ElButton>
         </div>
       </template>
     </ElDrawer>
@@ -114,6 +114,7 @@
   import type { NotificationItem } from '@/api/certd'
   import { usePluginStore } from '@/store/modules/certd'
   import { ElMessage, ElMessageBox } from 'element-plus'
+  import { $t } from '@/locales'
   import { useBatchDelete } from '../composables/use-batch-delete'
   import PluginForm from '../components/plugin-form.vue'
 
@@ -137,11 +138,11 @@
       apiParams: { current: 1, size: 20 },
       columnsFactory: () => [
         { type: 'selection', width: 48 },
-        { prop: 'name', label: '渠道名称', minWidth: 200, useSlot: true },
-        { prop: 'typeName', label: '类型', width: 160 },
-        { prop: 'enabled', label: '状态', width: 110, useSlot: true },
-        { prop: 'createTime', label: '创建时间', width: 170 },
-        { prop: 'operation', label: '操作', width: 180, fixed: 'right', useSlot: true },
+        { prop: 'name', label: $t('certd.notification.colName'), minWidth: 200, useSlot: true },
+        { prop: 'typeName', label: $t('certd.notification.colType'), width: 160 },
+        { prop: 'enabled', label: $t('certd.notification.colStatus'), width: 110, useSlot: true },
+        { prop: 'createTime', label: $t('certd.notification.colCreated'), width: 170 },
+        { prop: 'operation', label: $t('certd.common.actions'), width: 190, fixed: 'right', useSlot: true },
       ],
     },
   })
@@ -149,7 +150,7 @@
   /* ---------------- 多选批量删除 ---------------- */
   const { selectedIds, removing, handleSelectionChange, removeSelected } = useBatchDelete(
     deleteNotification,
-    { label: '通知渠道', nameOf: (row: any) => row.name, onDone: () => refreshData() }
+    { label: () => $t('certd.notification.itemLabel'), nameOf: (row: any) => row.name, onDone: () => refreshData() }
   )
 
   const dialogVisible = ref(false)
@@ -208,11 +209,11 @@
 
   const save = async () => {
     if (!form.type) {
-      ElMessage.warning('请选择通知类型')
+      ElMessage.warning($t('certd.notification.typeRequired'))
       return
     }
     if (!form.name.trim()) {
-      ElMessage.warning('请填写渠道名称')
+      ElMessage.warning($t('certd.notification.nameRequired'))
       return
     }
     const config: Record<string, any> = {}
@@ -224,10 +225,10 @@
     try {
       if (editingId.value) {
         await updateNotification(editingId.value, payload)
-        ElMessage.success('已保存')
+        ElMessage.success($t('certd.common.saved'))
       } else {
         await createNotification(payload)
-        ElMessage.success('已添加')
+        ElMessage.success($t('certd.common.added'))
       }
       dialogVisible.value = false
       refreshData()
@@ -240,19 +241,25 @@
     testingId.value = row.id
     try {
       const result = await testNotification(row.id)
-      if (result?.success) ElMessage.success(result.message || '发送成功')
-      else ElMessageBox.alert(result?.message || '发送失败', '测试结果', { type: 'warning' })
+      if (result?.success) ElMessage.success(result.message || $t('certd.notification.sendOk'))
+      else
+        ElMessageBox.alert(result?.message || $t('certd.notification.sendFail'), $t('certd.access.testResult'), {
+          type: 'warning',
+          confirmButtonText: $t('certd.common.confirm'),
+        })
     } finally {
       testingId.value = 0
     }
   }
 
   const remove = async (row: NotificationItem) => {
-    await ElMessageBox.confirm('确定删除「' + row.name + '」吗？', '删除通知渠道', {
+    await ElMessageBox.confirm($t('certd.table.confirmDelete', { name: row.name }), $t('certd.notification.deleteTitle'), {
       type: 'warning',
+      confirmButtonText: $t('certd.common.confirm'),
+      cancelButtonText: $t('certd.common.cancel'),
     })
     await deleteNotification(row.id)
-    ElMessage.success('已删除')
+    ElMessage.success($t('certd.common.deleted'))
     refreshData()
   }
 

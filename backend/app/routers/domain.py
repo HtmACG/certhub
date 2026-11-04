@@ -6,10 +6,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import audit, fail, get_current_user, ok, page_no
+from ..deps import audit, fail, get_current_user, ok, page_no, require_perm
 from ..models import Domain, User
 
-router = APIRouter(prefix="/api/domain", tags=["domain"])
+router = APIRouter(prefix="/api/domain", tags=["domain"],
+                   dependencies=[Depends(require_perm("dns"))])
 
 
 def _fmt(dt) -> str:

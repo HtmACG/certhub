@@ -34,8 +34,8 @@
             :key="index"
           >
             <div
-              class="mt-2 h-12 flex-cb rounded-custom-sm bg-g-200/80 px-4 text-sm text-g-700"
-              :class="isHighlighted(index) ? 'highlighted !bg-theme/70 !text-white' : ''"
+              class="mt-2 h-12 flex-cb rounded-md px-4 text-sm text-g-800 hover:bg-hover-color"
+              :class="isHighlighted(index) ? 'highlighted !bg-active-color' : ''"
               @click="searchGoPage(item)"
               @mouseenter="highlightOnHover(index)"
             >
@@ -49,14 +49,10 @@
           <p class="text-xs text-g-500">{{ $t('search.historyTitle') }}</p>
           <div class="mt-1.5 w-full">
             <div
-              class="box mt-2 h-12 c-p flex-cb rounded-custom-sm bg-g-200/80 px-4 text-sm text-g-800"
+              class="box mt-2 h-12 c-p flex-cb rounded-md px-4 text-sm text-g-800 hover:bg-hover-color"
               v-for="(item, index) in historyResult"
               :key="index"
-              :class="
-                historyHIndex === index
-                  ? 'highlighted !bg-theme/70 !text-white [&_.selected-icon]:!text-white'
-                  : ''
-              "
+              :class="historyHIndex === index ? 'highlighted !bg-active-color' : ''"
               @click="searchGoPage(item)"
               @mouseenter="highlightOnHoverHistory(index)"
             >
@@ -367,12 +363,13 @@
 </script>
 <style lang="scss" scoped>
   .layout-search {
+    /* 遮罩：和全站 .el-overlay 一致（50% 黑），原来是 20%，弹窗像悬在半空 */
     :deep(.search-modal) {
-      background-color: rgb(0 0 0 / 20%);
+      background-color: hsl(0 0% 0% / 50%);
     }
 
     :deep(.el-dialog__body) {
-      padding: 5px 0 0 !important;
+      padding: 16px 0 0 !important;
     }
 
     :deep(.el-dialog__header) {
@@ -382,35 +379,18 @@
     .el-input {
       /* 跟页面里的输入框保持同一套描边（别再画虚线框） */
       :deep(.el-input__wrapper) {
-        background-color: var(--el-fill-color-blank);
-        border: 1px solid var(--el-border-color);
-        border-radius: var(--custom-radius) !important;
-        box-shadow: inset 0 0 0 1px var(--el-border-color);
+        background-color: transparent;
+        border-radius: var(--radius-md) !important;
+        box-shadow: inset 0 0 0 1px var(--input);
       }
 
       :deep(.el-input__inner) {
-        color: var(--art-gray-800) !important;
+        color: var(--foreground) !important;
       }
     }
   }
 
-  .dark .layout-search {
-    .el-input {
-      :deep(.el-input__wrapper) {
-        background-color: #333;
-        border: 1px solid #4c4d50;
-      }
-    }
-
-    :deep(.search-modal) {
-      background-color: rgb(23 23 26 / 60%);
-      backdrop-filter: none;
-    }
-
-    :deep(.el-dialog) {
-      background-color: #252526;
-    }
-  }
+  /* 暗色不需要单独一套色值：输入框、弹窗背景都由语义令牌给 */
 </style>
 
 <style scoped>
