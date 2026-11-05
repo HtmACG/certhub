@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import {
   applyNodeChanges,
@@ -443,10 +443,10 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
         className="!size-0 !border-0 !bg-transparent !opacity-0"
       />
 
-      <span className="pointer-events-none absolute right-1 top-[38%] -translate-y-1/2 rounded-sm bg-card px-1 text-[10px] font-medium leading-tight text-success">
+      <span className="pointer-events-none absolute left-full top-[38%] ml-1.5 -translate-y-1/2 rounded-sm bg-card px-1 text-[10px] font-medium leading-tight text-success">
         成功
       </span>
-      <span className="pointer-events-none absolute right-1 top-[72%] -translate-y-1/2 rounded-sm bg-card px-1 text-[10px] font-medium leading-tight text-warning">
+      <span className="pointer-events-none absolute left-full top-[72%] ml-1.5 -translate-y-1/2 rounded-sm bg-card px-1 text-[10px] font-medium leading-tight text-warning">
         失败
       </span>
     </div>

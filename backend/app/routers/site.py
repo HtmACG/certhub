@@ -39,4 +39,6 @@ def public_config(db: Session = Depends(get_db)):
         "hideBrand": bool(site.get("hideBrand")),
         "registerEnabled": bool(site.get("registerEnabled", False)),
         "copyright": site.get("copyright") or "",
+        # 全局水印（展示类字段；留空则由前端关闭）
+        "watermark": site.get("watermark") or "",
     })

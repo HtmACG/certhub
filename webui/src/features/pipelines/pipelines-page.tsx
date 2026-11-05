@@ -263,10 +263,10 @@ export function PipelinesPage() {
             }
           />
         ) : (
-          <Table>
+          <Table className="min-w-[1020px] table-fixed [&_td]:px-3 [&_th]:px-3">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-8">
+                <TableHead className="w-[40px]">
                   <input
                     type="checkbox"
                     className="size-3.5 cursor-pointer align-middle accent-primary"
@@ -276,13 +276,13 @@ export function PipelinesPage() {
                   />
                 </TableHead>
                 <TableHead>名称</TableHead>
-                <TableHead>分类</TableHead>
-                <TableHead className="text-center">阶段 / 步骤</TableHead>
-                <TableHead>证书</TableHead>
-                <TableHead>最近运行</TableHead>
-                <TableHead>触发方式</TableHead>
-                <TableHead className="text-center">启用</TableHead>
-                <TableHead className="text-right">操作</TableHead>
+                <TableHead className="w-[108px]">分类</TableHead>
+                <TableHead className="w-[76px] text-center">阶段</TableHead>
+                <TableHead className="w-[160px]">证书</TableHead>
+                <TableHead className="w-[140px]">最近运行</TableHead>
+                <TableHead className="w-[120px]">触发方式</TableHead>
+                <TableHead className="w-[64px] text-center">启用</TableHead>
+                <TableHead className="w-[164px] text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -290,7 +290,7 @@ export function PipelinesPage() {
                 const certDays = daysLeftOf(item.certExpiresTime)
                 return (
                 <TableRow key={item.id}>
-                  <TableCell className="w-8">
+                  <TableCell className="w-[40px]">
                     <input
                       type="checkbox"
                       className="size-3.5 cursor-pointer align-middle accent-primary"
@@ -299,20 +299,17 @@ export function PipelinesPage() {
                       aria-label={`选择 ${item.title}`}
                     />
                   </TableCell>
-                  <TableCell className="max-w-[320px]">
+                  <TableCell>
                     <Link to={`/pipelines/${item.id}`} className="block truncate font-medium hover:underline">
                       {item.title}
                     </Link>
                     <p className="truncate text-xs text-muted-foreground">{item.remark || item.certDomains?.join(', ') || '—'}</p>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <KindBadges kinds={item.kinds} />
                   </TableCell>
-                  <TableCell className="text-center text-sm tabular-nums">
-                    {item.stageCount} / {item.stepCount}
-                    {!!item.stepDisabledCount && (
-                      <span className="ml-1 text-xs text-muted-foreground">（停用 {item.stepDisabledCount}）</span>
-                    )}
+                  <TableCell className="whitespace-nowrap text-center text-sm tabular-nums">
+                    {item.stageCount} 阶段
                   </TableCell>
                   <TableCell>
                     {certDays === null ? (
@@ -321,7 +318,7 @@ export function PipelinesPage() {
                       <div className="space-y-1">
                         <Badge variant={daysTone(certDays)}>{certDays <= 0 ? '已过期' : `剩 ${certDays} 天`}</Badge>
                         <p
-                          className="max-w-[180px] truncate text-xs text-muted-foreground"
+                          className="truncate text-xs text-muted-foreground"
                           title={item.certDomains?.join(', ')}
                         >
                           {item.certDomains?.join(', ') || item.certIssuer || '—'}
@@ -330,14 +327,14 @@ export function PipelinesPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 whitespace-nowrap">
                       <StatusBadge status={item.lastStatus} />
                       <span className="text-xs text-muted-foreground">{relativeTime(item.lastHistoryTime)}</span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <p className="text-xs">{item.triggerCount ? `${item.triggerCount} 个触发器` : '仅手动'}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="truncate text-xs">{item.triggerCount ? `${item.triggerCount} 个触发器` : '仅手动'}</p>
+                    <p className="truncate text-xs text-muted-foreground">
                       {item.nextRunTime ? `下次 ${item.nextRunTime}` : '不自动运行'}
                     </p>
                   </TableCell>
@@ -351,7 +348,7 @@ export function PipelinesPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                       <Button
                         variant="ghost"
                         size="icon-sm"

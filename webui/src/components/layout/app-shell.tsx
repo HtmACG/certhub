@@ -4,6 +4,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, CircleX, Info, LayoutDashboard,
 import { toast } from 'sonner'
 import { NAV, findNav } from './nav'
 import { Button } from '@/components/ui/button'
+import { Watermark } from '@/components/watermark'
 import { useAuth } from '@/lib/auth'
 import { useSiteConfig } from '@/lib/site'
 import { useIdleLogout } from '@/lib/use-idle-logout'
@@ -410,11 +411,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             {tabs.map((tab, index) => {
               const active = tab.path === activePath
-              const previousActive = index > 0 && tabs[index - 1].path === activePath
               const Icon = findNav(tab.path)?.icon ?? LayoutDashboard
               return (
                 <Fragment key={tab.path}>
-                  {index > 0 && !active && !previousActive && <span className="mx-0.5 h-3.5 w-px shrink-0 bg-border" />}
+                  {index > 0 && <span className="mx-0.5 h-3.5 w-px shrink-0 bg-border" />}
                   <div
                     data-active-tab={active ? 'true' : undefined}
                     onContextMenu={(event) => {
@@ -501,6 +501,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           )
         })()}
+
+      <Watermark text={site?.watermark} />
     </div>
   )
 }

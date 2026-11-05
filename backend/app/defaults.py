@@ -24,6 +24,8 @@ DEFAULT_SETTINGS: dict[str, dict] = {
         "githubRepo": "HtmACG/certhub",
         "homeNotice": "",
         "hideBrand": False,
+        # 全局水印文字：留空关闭；设置后所有页面铺半透明斜向水印
+        "watermark": "",
     },
     "security": {
         "loginFailLimit": 5,

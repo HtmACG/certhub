@@ -198,6 +198,12 @@ npm run deploy     # 构建后复制到 frontend/dist，刷新 http://127.0.0.1:
 
 ![站点个性化设置](docs/screenshots/settings-brand.png)
 
+### 全局水印
+
+- 系统设置 → 站点信息 → 「全局水印」，写入 `sys_setting.site.watermark`，公开接口 `GET /api/site/config` 一并返回；
+- 留空关闭；填写后所有页面（含登录页）铺一层斜向半透明水印，颜色跟随 `--foreground`，深浅主题都可见；
+- 用 SVG `<pattern>` 平铺，`pointer-events: none`，不挡点击、不影响选中文字。
+
 ## 厂商标识（logo）后端插件元数据里给的是**本地相对路径**（`logoFile`，例如 `/logos/access/aliyun.svg`），
 本仓库的 `public/logos/` 是从旧前端 `frontend/public/logos/` 复制过来的（access 33 个、
 cert 2 个、task 14 个、issuer 6 个）。

@@ -94,6 +94,17 @@ export function SettingsPage() {
                   <Input value={(site.copyright as string) ?? ''} onChange={(event) => set('site', 'copyright', event.target.value)} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
+                  <Label>全局水印</Label>
+                  <Input
+                    value={(site.watermark as string) ?? ''}
+                    onChange={(event) => set('site', 'watermark', event.target.value)}
+                    placeholder="例如：内部资料 · 禁止外传"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    留空关闭；填写后所有页面（含登录页）铺一层半透明斜向水印，不挡点击。
+                  </p>
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
                   <Label>登录页公告</Label>
                   <Textarea
                     value={(site.loginNotice as string) ?? ''}

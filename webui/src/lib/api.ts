@@ -43,6 +43,7 @@ export const fetchSiteConfig = () =>
     loginNotice: string
     homeNotice: string
     copyright: string
+    watermark?: string
   }>('/api/site/config')
 
 export const fetchUserInfo = () => http.get<UserInfo>('/api/user/info')

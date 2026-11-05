@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input, Label } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
 import { useSiteConfig } from '@/lib/site'
+import { Watermark } from '@/components/watermark'
 import { bind2fa, fetch2faSecretForBind, fetchCaptcha, login, type ApiErrorLike } from '@/lib/auth-api'
 import { cn } from '@/lib/utils'
 
@@ -122,6 +123,7 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-screen bg-background lg:grid-cols-[minmax(0,1fr)_460px]">
+      <Watermark text={site?.watermark} />
       <section
         className={cn(
           'relative hidden flex-col justify-between overflow-hidden p-10 lg:flex',
