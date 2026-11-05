@@ -120,13 +120,17 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-# Swagger / OpenAPI JSON 默认关闭：它们把全部接口、参数、模型都摊开，
-# 对公网暴露等于给攻击者一份接口地图。需要时用 CERTD_DOCS=1 打开。
-_docs_enabled = os.getenv("CERTD_DOCS", "0") == "1"
+# Swagger / OpenAPI 默认开启：方便 AI 与脚本直接调研接口；
+# 对外网暴露时可以用 CERTD_DOCS=0 关掉（会同时关闭 /api/skill）。
+_docs_enabled = os.getenv("CERTD_DOCS", "1") != "0"
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
     lifespan=lifespan,
+    description=(
+        "CertHub 接口。AI / 脚本可先读 `/api/skill`（Markdown）或 `/api/skill.json`（结构化），"
+        "里面包含认证方式、响应格式与全部接口清单。"
+    ),
     docs_url="/api/docs" if _docs_enabled else None,
     redoc_url="/api/redoc" if _docs_enabled else None,
     openapi_url="/api/openapi.json" if _docs_enabled else None,
@@ -174,7 +178,7 @@ async def _unhandled(request: Request, exc: Exception):
                                  "data": None})
 
 
-from .routers import access, auth, cert, dashboard, dns_record, domain, history, meta, monitor, notification, openapi, pipeline, pipeline_group, site, settings as settings_router, user  # noqa: E402
+from .routers import access, auth, cert, dashboard, dns_record, domain, history, meta, monitor, notification, openapi, pipeline, pipeline_group, site, skill, settings as settings_router, user  # noqa: E402
 
 app.include_router(auth.router)
 app.include_router(user.router)
@@ -192,6 +196,8 @@ app.include_router(dashboard.router)
 app.include_router(site.router)
 app.include_router(meta.router)
 app.include_router(openapi.router)
+if _docs_enabled:
+    app.include_router(skill.router)
 
 
 #: 请求体上限：证书 PEM 一般几十 KB，20MB 足够富余，超出直接拒绝

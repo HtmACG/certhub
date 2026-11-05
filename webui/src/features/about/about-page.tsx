@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Github, Globe, Info, Mail, RefreshCw, Users } from 'lucide-react'
+import { Code2, Github, Globe, Info, Mail, RefreshCw, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { fetchAbout, fetchUpdates, type UpdatesData } from '@/lib/api'
 import { PageHeader } from '@/components/page-header'
@@ -100,6 +100,23 @@ export function AboutPage() {
               >
                 {info?.repo || 'HtmACG/certhub'}
               </a>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <Code2 className="size-3.5" />
+                开发接口
+              </span>
+              <span className="flex items-center gap-3 text-xs">
+                <a href="/api/docs" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                  Swagger
+                </a>
+                <a href="/api/skill" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                  AI Skill
+                </a>
+                <a href="/api/skill.json" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                  JSON
+                </a>
+              </span>
             </div>
           </CardContent>
         </Card>
