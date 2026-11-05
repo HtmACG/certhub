@@ -280,6 +280,8 @@ export interface UserInfo {
   isAdmin?: boolean
   /** 有效功能权限键（管理员 = 全部） */
   permissions?: string[]
+  /** 闲置多少分钟自动退出（0 = 关闭） */
+  idleTimeoutMinutes?: number
   totpEnabled: boolean
 }
 

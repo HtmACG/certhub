@@ -15,11 +15,27 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import audit, fail, get_current_user, ok, require_admin, page_no, permissions_of, site_name
-from ..models import User, UserGroup
+from ..models import Setting, User, UserGroup
 from ..permissions import PERMISSIONS, normalize
 from ..security import hash_password, validate_password, verify_password
 
 router = APIRouter(prefix="/api/user", tags=["user"])
+
+
+def _idle_timeout_minutes(db: Session) -> int:
+    """系统设置 → 登录安全里的「闲置自动退出」，0 表示关闭。"""
+    from ..defaults import merge_defaults
+
+    row = db.get(Setting, "security")
+    try:
+        stored = json.loads(row.value) if row else {}
+    except Exception:
+        stored = {}
+    value = merge_defaults("security", stored).get("idleTimeoutMinutes", 30)
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 30
 
 
 @router.get("/info")
@@ -38,6 +54,7 @@ def info(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
         # 管理员给全部权限键，前端统一按 permissions 判断
         "permissions": [item["key"] for item in PERMISSIONS] if "*" in effective else sorted(effective),
         "totpEnabled": bool(user.totp_enabled),
+        "idleTimeoutMinutes": _idle_timeout_minutes(db),
     })
 
 

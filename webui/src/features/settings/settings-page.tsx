@@ -243,6 +243,18 @@ export function SettingsPage() {
                     />
                   </div>
                 </div>
+                <div className="max-w-xs space-y-1.5">
+                  <Label>多久无操作自动退出（分钟）</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={(security.idleTimeoutMinutes as number) ?? 30}
+                    onChange={(event) => set('security', 'idleTimeoutMinutes', Number(event.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    超过这个时间没有任何鼠标 / 键盘操作就自动退出登录；填 0 表示关闭。
+                  </p>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   连续输错密码达到次数后，账号锁定对应分钟数；锁定期内即使密码正确也会被拒绝。
                   两步验证码连续输错也按同一套计数。

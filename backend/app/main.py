@@ -148,6 +148,16 @@ else:
     logger.info("未配置 CORS 白名单（同源部署），已关闭跨域请求")
 
 
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    """基础安全响应头：禁止 MIME 嗅探 / 禁止被外站 iframe / 收紧 Referer。"""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    return response
+
+
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception):
     """未预期异常：细节只进服务端日志，不回给客户端。
@@ -282,8 +292,14 @@ def spa(full_path: str):
     if not index.exists():
         return JSONResponse(status_code=503,
                             content={"code": 503, "msg": "前端尚未构建，请先执行 pnpm build", "data": None})
-    file = FRONTEND_DIST / full_path
-    if full_path and file.is_file():
+    # 只允许 dist 目录内的文件：`..` / 编码后的路径穿越一律回退到 index.html
+    root = FRONTEND_DIST.resolve()
+    try:
+        file = (FRONTEND_DIST / full_path).resolve()
+        inside = file == root or root in file.parents
+    except (OSError, ValueError):
+        inside = False
+    if full_path and inside and file.is_file():
         return FileResponse(file)
     # index.html 必须每次回源校验：否则前端重新构建后，浏览器还在跑旧 bundle，
     # 表现成「新功能没出现」，而且刷新也不一定生效（只能硬刷新）。

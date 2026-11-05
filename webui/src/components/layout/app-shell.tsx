@@ -1,10 +1,12 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronLeft, ChevronRight, CircleX, Info, LayoutDashboard, LogOut, Menu, Moon, ShieldCheck, Sun, UserCog, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { NAV, findNav } from './nav'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth'
 import { useSiteConfig } from '@/lib/site'
+import { useIdleLogout } from '@/lib/use-idle-logout'
 import { cn } from '@/lib/utils'
 
 const TAB_KEY = 'certhub.tabs'
@@ -240,6 +242,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
+  const idleMinutes = user?.idleTimeoutMinutes ?? 30
+  const handleIdle = useCallback(() => {
+    toast.info(`已超过 ${idleMinutes} 分钟没有操作，已自动退出登录`)
+    signOut()
+  }, [idleMinutes, signOut])
+  useIdleLogout(idleMinutes, handleIdle)
   const { dark, toggle } = useTheme()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -451,7 +459,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             /^\/pipelines\/\d+/.test(activePath) ? 'w-full max-w-none' : 'mx-auto w-full max-w-[1440px]',
           )}
         >
-          {children}
+          <div key={activePath} className="page-enter">
+            {children}
+          </div>
         </main>
       </div>
 

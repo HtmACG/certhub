@@ -56,7 +56,7 @@ export function DashboardPage() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="流水线"
           value={stats?.pipelineTotal ?? '—'}

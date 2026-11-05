@@ -34,6 +34,8 @@ DEFAULT_SETTINGS: dict[str, dict] = {
         "captchaAfter": 1,
         # 登录成功给用户邮箱发提醒（用户没填邮箱 / 没配邮件渠道时自动跳过）
         "loginNotify": True,
+        # 多少分钟无操作自动退出登录（0 = 关闭）
+        "idleTimeoutMinutes": 30,
     },
     "notify": {
         "expireDays": 15,

@@ -182,14 +182,18 @@ def login(params: LoginParams, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh")
-def refresh(body: dict):
+def refresh(body: dict, db: Session = Depends(get_db)):
     token = body.get("refreshToken") or ""
     payload = decode_token(token)
     if not payload or payload.get("typ") != "refresh":
         return fail("刷新令牌无效，请重新登录", 401)
+    # 刷新也要看账号当前状态：禁用 / 删除后不能靠旧 refreshToken 续命
+    user = db.get(User, int(payload["sub"]))
+    if not user or user.status != 1:
+        return fail("账号已被禁用，请重新登录", 401)
     return ok({
-        "token": create_token(int(payload["sub"]), payload["username"], payload["role"]),
-        "refreshToken": create_token(int(payload["sub"]), payload["username"], payload["role"],
+        "token": create_token(user.id, user.username, user.role),
+        "refreshToken": create_token(user.id, user.username, user.role,
                                      minutes=settings.REFRESH_EXPIRE_MINUTES, typ="refresh"),
     })
 

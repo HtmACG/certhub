@@ -75,7 +75,11 @@ def _auth(db: Session, key: str, secret: str) -> User | None:
         return None
     row.last_used_time = dt.datetime.now()
     db.commit()
-    return db.get(User, row.user_id)
+    user = db.get(User, row.user_id)
+    # 账号被停用 / 删除后，旧 API Key 也必须立刻失效
+    if not user or user.status != 1:
+        return None
+    return user
 
 
 @router.get("/api/open/v1/pipelines")

@@ -17,6 +17,7 @@ export function ApiKeysPage() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [created, setCreated] = useState<{ keyId: string; secret: string } | null>(null)
+  const [keyToDelete, setKeyToDelete] = useState<ApiKeyRow | null>(null)
   const queryClient = useQueryClient()
 
   const list = useQuery({ queryKey: ['api-keys'], queryFn: fetchApiKeys })
@@ -86,9 +87,7 @@ export function ApiKeysPage() {
                       variant="ghost"
                       size="icon-sm"
                       className="text-destructive hover:bg-destructive/10"
-                      onClick={() => {
-                        if (confirm(`删除 Key「${String(item.name)}」？调用方会立刻失效。`)) remove.mutate(Number(item.id))
-                      }}
+                      onClick={() => setKeyToDelete(item)}
                     >
                       <Trash2 />
                     </Button>
@@ -117,7 +116,9 @@ export function ApiKeysPage() {
                   <Label>Secret</Label>
                   <code className="block break-all rounded-md border bg-muted px-3 py-2 font-mono text-xs">{created.secret}</code>
                 </div>
-                <p className="text-xs text-muted-foreground">Secret 只在这里出现一次，关掉就看不到了。放进请求头 Authorization，和登录令牌一样用。</p>
+                <p className="text-xs text-muted-foreground">
+                  Secret 只在这里出现一次，关掉就看不到了。调用时放在请求头 <code>X-Api-Key</code> 和 <code>X-Api-Secret</code> 里。
+                </p>
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -135,6 +136,35 @@ export function ApiKeysPage() {
                 创建
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!keyToDelete} onOpenChange={(next) => !next && setKeyToDelete(null)}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>删除 API Key</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <p className="text-sm leading-relaxed">
+              删除「{String(keyToDelete?.name ?? '')}」后，使用这个 Key 调用开放接口的脚本会立刻收到 401，无法恢复。
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">如果只是临时停用，建议先替换脚本里的 Key 再删。</p>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setKeyToDelete(null)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (keyToDelete) remove.mutate(Number(keyToDelete.id))
+                setKeyToDelete(null)
+              }}
+            >
+              删除
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

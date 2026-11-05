@@ -45,6 +45,7 @@ export function UsersPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [groupsOpen, setGroupsOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<UserRow | null>(null)
   const [groupForm, setGroupForm] = useState<{ id?: number; name: string; remark: string; permissions: string[] }>({
     name: '',
     remark: '',
@@ -238,9 +239,7 @@ export function UsersPage() {
                         variant="ghost"
                         size="xs"
                         className="text-destructive hover:bg-destructive/10"
-                        onClick={() => {
-                          if (confirm(`删除账号「${item.userName}」？`)) remove.mutate(item.id)
-                        }}
+                        onClick={() => setUserToDelete(item)}
                       >
                         删除
                       </Button>
@@ -431,6 +430,35 @@ export function UsersPage() {
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setGroupsOpen(false)}>
               关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!userToDelete} onOpenChange={(next) => !next && setUserToDelete(null)}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>删除账号</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <p className="text-sm leading-relaxed">
+              删除账号「{userToDelete?.userName}」后，该账号将无法登录；它名下的流水线、授权、证书不会自动转移。
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">只是临时不让登录的话，用「停用」更合适。</p>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setUserToDelete(null)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (userToDelete) remove.mutate(userToDelete.id)
+                setUserToDelete(null)
+              }}
+            >
+              删除账号
             </Button>
           </DialogFooter>
         </DialogContent>
