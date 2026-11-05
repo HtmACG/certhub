@@ -24,13 +24,13 @@ export function StatCard({
   }[tone]
 
   return (
-    <div className={cn('rounded-lg border bg-card px-3.5 py-3', className)}>
-      <div className="flex items-center gap-1.5">
-        {Icon && <Icon className="size-3.5 text-muted-foreground/70" />}
-        <p className="truncate text-[11px] font-medium text-muted-foreground">{label}</p>
+    <div className={cn('rounded-xl border bg-card p-4 shadow-xs', className)}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        {Icon && <Icon className="size-4 text-muted-foreground/70" />}
       </div>
-      <p className={cn('mt-1.5 text-xl font-semibold leading-none tabular-nums', toneClass)}>{value}</p>
-      {hint && <p className="mt-1 truncate text-[11px] text-muted-foreground">{hint}</p>}
+      <p className={cn('mt-2 text-2xl font-semibold tabular-nums tracking-tight', toneClass)}>{value}</p>
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </div>
   )
 }

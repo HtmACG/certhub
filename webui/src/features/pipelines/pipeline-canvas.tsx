@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import {
   applyNodeChanges,
@@ -936,7 +936,7 @@ function CanvasInner({
         pannable
         zoomable
         style={{ width: 160, height: 104 }}
-        className="!right-3 !bottom-3 hidden !rounded-md !border !bg-card sm:block"
+        className="!right-3 !bottom-3 !rounded-md !border !bg-card"
         nodeColor={(node) => (node.type === 'stage' ? 'var(--muted-foreground)' : 'var(--primary)')}
         nodeStrokeColor={(node) => (node.type === 'stage' ? 'var(--muted-foreground)' : 'var(--primary)')}
         maskColor="color-mix(in oklab, var(--background) 78%, transparent)"

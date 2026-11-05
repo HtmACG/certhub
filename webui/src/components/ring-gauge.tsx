@@ -34,8 +34,8 @@ export function RingGauge({
   const color = TONE[tone]
 
   return (
-    <div className="flex flex-col items-center gap-1.5 text-center sm:flex-row sm:items-center sm:gap-3 sm:text-left">
-      <div className="relative shrink-0" style={{ width: size, height: size }}>
+    <div className="flex items-center gap-3">
+      <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-[150deg]">
           <circle
             cx={size / 2}
@@ -67,8 +67,8 @@ export function RingGauge({
         </div>
       </div>
       <div className="min-w-0 space-y-0.5">
-        <p className="text-[13px] font-medium sm:text-sm">{label}</p>
-        {caption && <p className={cn('line-clamp-2 text-[11px] text-muted-foreground sm:text-xs')}>{caption}</p>}
+        <p className="text-sm font-medium">{label}</p>
+        {caption && <p className={cn('text-xs text-muted-foreground')}>{caption}</p>}
       </div>
     </div>
   )

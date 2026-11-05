@@ -36,7 +36,7 @@ export function DashboardPage() {
   const disk = sys?.systemDisk ?? sys?.disks?.find((item) => item.system) ?? sys?.disks?.[0]
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="工作台"
         description="证书、流水线与主机的当前状态"
@@ -56,7 +56,7 @@ export function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="流水线"
           value={stats?.pipelineTotal ?? '—'}
@@ -86,7 +86,7 @@ export function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <div>
@@ -99,33 +99,33 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent className="pt-2">
             {system.isLoading ? (
-              <div className="grid grid-cols-3 gap-2 sm:gap-4">
+              <div className="grid gap-4 sm:grid-cols-3">
                 {[0, 1, 2].map((index) => (
-                  <Skeleton key={index} className="h-[112px] w-full" />
+                  <Skeleton key={index} className="h-[132px] w-full" />
                 ))}
               </div>
             ) : sys ? (
-              <div className="grid grid-cols-3 gap-2 sm:gap-4">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <RingGauge
                   value={sys.cpu.percent}
                   label="CPU"
                   caption={`${sys.cpu.coresPhysical} 核 / ${sys.cpu.coresLogical} 线程`}
                   tone={toneFor(sys.cpu.percent)}
-                  size={96}
+                  size={112}
                 />
                 <RingGauge
                   value={sys.memory.percent}
                   label="内存"
                   caption={`${formatBytes(sys.memory.used)} / ${formatBytes(sys.memory.total)}`}
                   tone={toneFor(sys.memory.percent)}
-                  size={96}
+                  size={112}
                 />
                 <RingGauge
                   value={disk?.percent ?? 0}
                   label="系统盘"
                   caption={disk ? `${formatBytes(disk.used)} / ${formatBytes(disk.total)}` : '未获取到磁盘'}
                   tone={toneFor(disk?.percent ?? 0)}
-                  size={96}
+                  size={112}
                 />
               </div>
             ) : (
@@ -217,7 +217,7 @@ export function DashboardPage() {
               ))}
             </div>
           ) : (
-            <p className="py-1 text-sm text-muted-foreground">30 天内没有证书到期</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">30 天内没有证书到期</p>
           )}
         </CardContent>
       </Card>

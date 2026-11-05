@@ -21,7 +21,6 @@ import {
   Settings2,
   Trash2,
   Workflow,
-  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -164,7 +163,6 @@ export function PipelineEditorPage() {
   const [edgeToRemove, setEdgeToRemove] = useState<Edge | null>(null)
   const [logOpen, setLogOpen] = useState(true)
   const [infoOpen, setInfoOpen] = useState(false)
-  const [paletteOpen, setPaletteOpen] = useState(false)
 
   const openTask = (stageId: string, task: PipelineTask) => {
     setEditing({ stageId, task })
@@ -901,8 +899,8 @@ export function PipelineEditorPage() {
         }
       />
 
-      <div className="flex min-h-[calc(100vh-260px)] flex-col gap-3 lg:h-[calc(100vh-270px)] lg:min-h-[540px] lg:flex-row lg:gap-4">
-        <div className="hidden w-[300px] shrink-0 flex-col gap-3 lg:flex">
+      <div className="flex h-[calc(100vh-270px)] min-h-[540px] gap-4">
+        <div className="flex w-[300px] shrink-0 flex-col gap-3">
           <div className="min-h-0 flex-1">
             <TaskPalette
               plugins={plugins}
@@ -924,13 +922,6 @@ export function PipelineEditorPage() {
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-          <div className="flex items-center gap-2 lg:hidden">
-            <Button variant="outline" size="sm" onClick={() => setPaletteOpen(true)}>
-              <Plus />
-              任务库
-            </Button>
-            <span className="text-xs text-muted-foreground">点任务加到第一个阶段</span>
-          </div>
           {content.stages.length === 0 && (
             <Card>
               <EmptyState
@@ -952,7 +943,7 @@ export function PipelineEditorPage() {
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <span className="h-0 w-6 border-t-2 border-border" />
-                  顺序执行
+                  顺序执行（箭头方向）
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="h-0 w-6 border-t-2 border-dashed border-warning" />
@@ -962,11 +953,11 @@ export function PipelineEditorPage() {
                   <span className="size-3 rounded-sm border border-dashed border-muted-foreground" />
                   虚线卡片 = 未接入，不执行
                 </span>
-                <span className="ml-auto hidden sm:inline">
+                <span className="ml-auto">
                   拖右侧圆点连线（上「成功」/ 下「失败」）；拖阶段标题条移动，松手吸网格且不会与其它阶段重叠
                 </span>
               </div>
-              <div className="h-[44vh] min-h-[300px] lg:h-auto lg:min-h-0 lg:flex-1">
+              <div className="min-h-0 flex-1">
                 <PipelineCanvas
                   content={content}
                   plugins={pluginByType}
@@ -1150,7 +1141,7 @@ export function PipelineEditorPage() {
             </div>
           )}
           <div className="shrink-0">
-            <Card className={cn('flex flex-col overflow-hidden', logOpen && 'h-[200px] sm:h-[240px]')}>
+            <Card className={cn('flex flex-col overflow-hidden', logOpen && 'h-[240px]')}>
             <div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium">运行日志</p>
@@ -1174,30 +1165,6 @@ export function PipelineEditorPage() {
           </div>
         </div>
       </div>
-
-      {paletteOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setPaletteOpen(false)} />
-          <div className="absolute inset-x-3 bottom-3 top-16 flex flex-col rounded-xl border bg-background p-3 shadow-lg">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-medium">任务库</p>
-              <Button variant="ghost" size="icon-sm" onClick={() => setPaletteOpen(false)}>
-                <X />
-              </Button>
-            </div>
-            <div className="min-h-0 flex-1">
-              <TaskPalette
-                plugins={plugins}
-                groups={meta.data?.groups ?? []}
-                onAdd={(type) => {
-                  addFromPalette('', type)
-                  setPaletteOpen(false)
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       <Dialog open={!!edgeToRemove} onOpenChange={(open) => !open && setEdgeToRemove(null)}>
         <DialogContent size="sm">
